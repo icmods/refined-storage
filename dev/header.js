@@ -7,53 +7,6 @@ const JavaFONT = WRAP_JAVA('com.zhekasmirnov.innercore.api.mod.ui.types.Font');
 const JavaRect = android.graphics.Rect;
 const _setTip = ModAPI.requireGlobal("MCSystem.setLoadingTip");
 var RSJava = WRAP_JAVA('org.innercore.icmods.refined_storage.RefinedStorage');
-RSJava = new RSJava();
-
-
-//Callback.addCallback('LevelLoaded', function(){
-	/* var hashSet = new java.util.HashSet();
-	WorkbenchRecipes.addRecipesThatContainItem(5, 0, hashSet);
-	var it = hashSet.iterator();
-	while (it.hasNext()) {
-		var jRecipe = it.next();
-		var result = jRecipe.getResult();
-		alert(Item.getName(result.id, result.data) + ' : ' + result.id + ' : ' + RSJava.isDarkenSlot(jRecipe, {5: [0, 1], 158: [0]}, ['5_0', '158_0']));
-	} */
-	/* var container = new ItemContainer();
-	var items = {};
-	var itemsMap = [];
-	var onlyItemsMap = {};
-	for(var i = 1000; i >= 1; i--){
-		var uid = i + '_0';
-		items[uid] = {id: i, data: 0, count: 50, extra: null};
-		itemsMap.push(uid);
-		onlyItemsMap[i] = [0];
-		container.setSlot(uid, i, 10, 0);
-	} */
-	//alert(itemsMap);
-	/* var millis = java.lang.System.currentTimeMillis();
-	var sorted = RSJava.sortCrafts(items, "-1nullfalse", onlyItemsMap);
-	alert('Array sorted on: ' + (java.lang.System.currentTimeMillis() - millis));
-	alert(sorted.length);
-	var array = ScriptableObjectHelper.createArray(sorted); */
-	/* alert(itemsMap);
-	var millis = java.lang.System.currentTimeMillis();
-	RSJava.sortItems(0, false, container, itemsMap);
-	alert('Array sorted on: ' + (java.lang.System.currentTimeMillis() - millis));
-	alert(ScriptableObjectHelper.createArray(itemsMap)); */
-	/* alert(itemsMap.map(function(value){
-		var item_ = container.getSlot(value);
-		return Item.getName(item_.id, item_.data);
-	}));
-	var millis = java.lang.System.currentTimeMillis();
-	var sorted = RSJava.sortItems(0, false, 'a', container, itemsMap);
-	alert('Array sorted on: ' + (java.lang.System.currentTimeMillis() - millis));
-	var array = ScriptableObjectHelper.createArray(sorted);
-	alert(array.map(function(value){
-		var item_ = container.getSlot(value);
-		return Item.getName(item_.id, item_.data);
-	})); */
-//})
 
 IMPORT("EnergyNet");
 IMPORT("StorageInterface");
@@ -90,11 +43,6 @@ const runOnUiThread = function(func_, _interval){
 		run: func_
 	}));
 }
-
-/* var EMPTY_SAVER = Saver.registerObjectSaver('THIS_IS_EMPTY_SAVER', {
-	read: function(){return null},
-	save: function(){return null}
-}); */
 
 const searchController = function (_coords, _self, _blockSource) {
 	if(!_blockSource) _blockSource = _coords.blockSource;
