@@ -17,5 +17,4 @@ blocks/craftBlocks.js
 blocks/interface.js
 
 crafts.js
-modInfo.js
 shared.js

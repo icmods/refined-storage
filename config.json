@@ -1,7 +1,6 @@
 {
 	"enabled":true,
 	"dev":false,
-	"changelogEnabled":true,
 	"controller":{
 		"usesEnergy":true,
 		"energyCapacity":32000,
