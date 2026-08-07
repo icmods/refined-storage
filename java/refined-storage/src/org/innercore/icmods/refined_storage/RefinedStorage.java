@@ -2,125 +2,138 @@ package org.innercore.icmods.refined_storage;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 
+import org.innercore.icstd.inventory.ItemContainer;
+import org.innercore.icstd.inventory.ItemContainerSlot;
+import org.innercore.icstd.inventory.ItemInstance;
+import org.innercore.icstd.modules.ItemModule;
 import org.mozilla.javascript.ScriptableObject;
 
-import com.zhekasmirnov.apparatus.adapter.innercore.PackInfo;
+import com.zhekasmirnov.horizon.runtime.logger.Logger;
 import com.zhekasmirnov.innercore.api.mod.ScriptableObjectHelper;
 import com.zhekasmirnov.innercore.api.mod.recipes.workbench.RecipeEntry;
 import com.zhekasmirnov.innercore.api.mod.recipes.workbench.WorkbenchRecipe;
 import com.zhekasmirnov.innercore.api.mod.recipes.workbench.WorkbenchRecipeRegistry;
 
 public class RefinedStorage {
-    private final IcstdCompat impl;
+    public static boolean isCompatRequired = false;
+    public static boolean isRecipeCompatRequired = true;
 
-    public RefinedStorage() {
-        impl = new IcstdCompat(PackInfo.getPackVersionCode());
+    static {
+        try {
+            WorkbenchRecipeRegistry.class.getMethod("addRecipesThatContainItem", int.class, int.class, Collection.class);
+            isRecipeCompatRequired = false;
+            ItemInstance.class.getField("id");
+            ItemContainer.class.getMethod("getSlot", String.class);
+            ItemModule.class.getMethod("getName", int.class, int.class, long.class);
+        } catch (LinkageError | ReflectiveOperationException | RuntimeException ex) {
+            Logger.info("RefinedStorage", "Faster grid sorting is not supported! Cause: " + ex);
+            Logger.warning("Compat will be used instead to maintain availability.");
+            isCompatRequired = true;
+        }
     }
 
-    public Object[] sortCrafts(List<?> items, String textSearch, ScriptableObject originalOnlyItemsMap,
-            ScriptableObject items2, List<?> bonusItems, ScriptableObject isDarkenMap) {
-        HashSet<WorkbenchRecipe> hashSet = new HashSet<WorkbenchRecipe>();
+    public static Object[] sortCrafts(List<?> items, String textSearch, ScriptableObject originalOnlyItemsMap,
+            ScriptableObject slots, List<?> inventoryItems, ScriptableObject isDarkenMap) {
+        HashSet<WorkbenchRecipe> recipes = new HashSet<>();
         for (int i = 0; i < items.size(); i++) {
-            Object item = ScriptableObjectHelper.getProperty(items2, String.valueOf(items.get(i)), null);
-            WorkbenchRecipeRegistry.addRecipesThatContainItem(impl.getItemId(item), impl.getItemData(item), hashSet);
+            ItemContainerSlot slot = (ItemContainerSlot) ScriptableObjectHelper.getJavaProperty(slots,
+                    String.valueOf(items.get(i)), ItemContainerSlot.class, null);
+            WorkbenchRecipeRegistry.addRecipesThatContainItem(slot.id, slot.data, recipes);
         }
-        for (int k = 0; k < bonusItems.size(); k++) {
-            ScriptableObject item = (ScriptableObject) bonusItems.get(k);
-            WorkbenchRecipeRegistry.addRecipesThatContainItem(impl.getItemId(item), impl.getItemData(item), hashSet);
+        for (int k = 0; k < inventoryItems.size(); k++) {
+            ScriptableObject item = (ScriptableObject) inventoryItems.get(k);
+            WorkbenchRecipeRegistry.addRecipesThatContainItem(ScriptableObjectHelper.getIntProperty(item, "id", 0),
+                    ScriptableObjectHelper.getIntProperty(item, "data", 0), recipes);
         }
-        ArrayList<WorkbenchRecipe> newArray = new ArrayList<WorkbenchRecipe>();
-        ArrayList<WorkbenchRecipe> posArray = new ArrayList<WorkbenchRecipe>();
-        Iterator<WorkbenchRecipe> it = hashSet.iterator();
+
+        ArrayList<WorkbenchRecipe> darkenRecipes = new ArrayList<WorkbenchRecipe>();
+        ArrayList<WorkbenchRecipe> sortedRecipes = new ArrayList<WorkbenchRecipe>();
+        Iterator<WorkbenchRecipe> it = recipes.iterator();
         while (it.hasNext()) {
-            WorkbenchRecipe jRecipe = it.next();
+            WorkbenchRecipe recipe = it.next();
             if (textSearch != null) {
-                Object result = impl.getRecipeResult(jRecipe);
-                String name = impl.getItemName(result);
-                if (!name.toLowerCase().contains(textSearch.toLowerCase()))
+                ItemInstance result = recipe.getResult();
+                String name = ItemModule.getName(result.id, result.data != -1 ? result.data : 0);
+                if (name.toLowerCase().indexOf(textSearch.toLowerCase()) == -1)
                     continue;
             }
-            boolean isDarken = isDarkenSlot(jRecipe, originalOnlyItemsMap);
-            isDarkenMap.put("e" + jRecipe.getRecipeUid(), isDarkenMap, Boolean.valueOf(isDarken));
+
+            boolean isDarken = isDarkenSlot(recipe, originalOnlyItemsMap);
+            isDarkenMap.put("e" + recipe.getRecipeUid(), isDarkenMap, Boolean.valueOf(isDarken));
             if (isDarken) {
-                newArray.add(jRecipe);
+                darkenRecipes.add(recipe);
             } else {
-                posArray.add(jRecipe);
+                sortedRecipes.add(recipe);
             }
         }
-        posArray.addAll(newArray);
-        return posArray.toArray();
+        sortedRecipes.addAll(darkenRecipes);
+        return sortedRecipes.toArray();
     }
 
-    private boolean isDarkenSlot(WorkbenchRecipe javaRecipe, ScriptableObject originalOnlyItemsMap) {
-        Iterator<RecipeEntry> values = javaRecipe.getEntryCollection().iterator();
-        while (values.hasNext()) {
-            RecipeEntry item = values.next();
-            if (item == null || item.id == 0)
+    private static boolean isDarkenSlot(Object recipeObj, ScriptableObject originalOnlyItemsMap) {
+        Iterator<RecipeEntry> entries = ((WorkbenchRecipe) recipeObj).getEntryCollection().iterator();
+        while (entries.hasNext()) {
+            RecipeEntry entry = entries.next();
+            if (entry == null || entry.id == 0)
                 continue;
-            List<?> items = (List<?>) originalOnlyItemsMap.get((item != null ? item.id : 0));
-            if (items == null || (item.data != -1 && !items.contains(item.data))) {
+            List<?> items = (List<?>) originalOnlyItemsMap.get((entry != null ? entry.id : 0));
+            if (items == null || (entry.data != -1 && !items.contains(entry.data))) {
                 return true;
             }
         }
         return false;
     }
 
-    public Object[] sortItems(int sortType, boolean isReverse, String textSearch, Object container,
-            List<Object> array) {
-        Object[] newArray;
+    public static Object[] sortItems(int sortType, boolean isReverse, String textSearch, Object containerObj, List<?> items) {
+        ItemContainer container = (ItemContainer) ScriptableObjectHelper.unwrap(containerObj);
+
+        Object[] sortedItems;
         if (textSearch != null) {
-            ArrayList<Object> newArray2 = new ArrayList<>();
-            for (int i = 0; i < array.size(); i++) {
-                Object slot = impl.getItemContainerSlot(container, array.get(i).toString());
-                String name = impl.getItemName(slot);
-                if (name.toLowerCase().contains(textSearch.toLowerCase()))
-                    newArray2.add(array.get(i));
+            ArrayList<Object> filteredItems = new ArrayList<>();
+            for (int i = 0; i < items.size(); i++) {
+                ItemContainerSlot slot = container.getSlot(items.get(i).toString());
+                String name = ItemModule.getName(slot.id, slot.data, slot.extra != null ? slot.extra.getValue() : 0);
+                if (name.toLowerCase().indexOf(textSearch.toLowerCase()) != -1)
+                    filteredItems.add(items.get(i));
             }
-            newArray = newArray2.toArray();
+            sortedItems = filteredItems.toArray();
         } else {
-            newArray = array.toArray();
+            sortedItems = items.toArray();
         }
-        Comparator<Object> comparator = new Comparator<Object>() {
-            public int compare(Object a, Object b) {
-                return 0;
-            }
-        };
+
+        Comparator<Object> comparator = null;
         if (isReverse) {
             if (sortType == 2) {
                 comparator = new Comparator<Object>() {
                     public int compare(Object a, Object b) {
-                        return impl.getItemId(
-                            impl.getItemContainerSlot(container, b.toString())
-                        ) - impl.getItemId(
-                            impl.getItemContainerSlot(container, a.toString())
-                        );
+                        return container.getSlot(b.toString()).id - container.getSlot(a.toString()).id;
                     }
                 };
             } else if (sortType == 0) {
                 comparator = new Comparator<Object>() {
                     public int compare(Object a, Object b) {
-                        Object slot1 = impl.getItemContainerSlot(container, a.toString());
-                        Object slot2 = impl.getItemContainerSlot(container, b.toString());
-                        int count1 = impl.getItemCount(slot1);
-                        int count2 = impl.getItemCount(slot2);
-                        return (count1 == 0 || count2 == 0) ? count2 - count1 : count1 - count2;
+                        ItemContainerSlot slot1 = container.getSlot(a.toString());
+                        ItemContainerSlot slot2 = container.getSlot(b.toString());
+                        return (slot1.count == 0 || slot2.count == 0)
+                                ? slot2.count - slot1.count
+                                : slot1.count - slot2.count;
                     }
                 };
             } else if (sortType == 1) {
                 comparator = new Comparator<Object>() {
                     public int compare(Object a, Object b) {
-                        Object slot1 = impl.getItemContainerSlot(container, a.toString());
-                        Object slot2 = impl.getItemContainerSlot(container, b.toString());
-                        int id1 = impl.getItemId(slot1);
-                        int id2 = impl.getItemId(slot2);
-                        if (id1 == 0 || id2 == 0) return id2 - id1;
-                        String name1 = impl.getItemName(slot1);
-                        String name2 = impl.getItemName(slot2);
+                        ItemContainerSlot slot1 = container.getSlot(a.toString());
+                        ItemContainerSlot slot2 = container.getSlot(b.toString());
+                        if (slot1.id == 0 || slot2.id == 0)
+                            return slot2.id - slot1.id;
+                        String name1 = ItemModule.getName(slot1.id, slot1.data, slot1.extra != null ? slot1.extra.getValue() : 0);
+                        String name2 = ItemModule.getName(slot2.id, slot2.data, slot2.extra != null ? slot2.extra.getValue() : 0);
                         return name2.compareToIgnoreCase(name1);
                     }
                 };
@@ -129,39 +142,36 @@ public class RefinedStorage {
             if (sortType == 2) {
                 comparator = new Comparator<Object>() {
                     public int compare(Object a, Object b) {
-                        Object slot1 = impl.getItemContainerSlot(container, a.toString());
-                        Object slot2 = impl.getItemContainerSlot(container, b.toString());
-                        int id1 = impl.getItemId(slot1);
-                        int id2 = impl.getItemId(slot2);
-                        return (id1 == 0 || id2 == 0) ? id2 - id1 : id1 - id2;
+                        ItemContainerSlot slot1 = container.getSlot(a.toString());
+                        ItemContainerSlot slot2 = container.getSlot(b.toString());
+                        return (slot1.id == 0 || slot2.id == 0)
+                                ? slot2.id - slot1.id
+                                : slot1.id - slot2.id;
                     }
                 };
             } else if (sortType == 0) {
                 comparator = new Comparator<Object>() {
                     public int compare(Object a, Object b) {
-                        return impl.getItemCount(
-                            impl.getItemContainerSlot(container, b.toString())
-                        ) - impl.getItemCount(
-                            impl.getItemContainerSlot(container, a.toString())
-                        );
+                        return container.getSlot(b.toString()).count - container.getSlot(a.toString()).count;
                     }
                 };
             } else if (sortType == 1) {
                 comparator = new Comparator<Object>() {
                     public int compare(Object a, Object b) {
-                        Object slot1 = impl.getItemContainerSlot(container, a.toString());
-                        Object slot2 = impl.getItemContainerSlot(container, b.toString());
-                        int id1 = impl.getItemId(slot1);
-                        int id2 = impl.getItemId(slot2);
-                        if (id1 == 0 || id2 == 0) return id2 - id1;
-                        String name1 = impl.getItemName(slot1);
-                        String name2 = impl.getItemName(slot2);
+                        ItemContainerSlot slot1 = container.getSlot(a.toString());
+                        ItemContainerSlot slot2 = container.getSlot(b.toString());
+                        if (slot1.id == 0 || slot2.id == 0)
+                            return slot2.id - slot1.id;
+                        String name1 = ItemModule.getName(slot1.id, slot1.data, slot1.extra != null ? slot1.extra.getValue() : 0);
+                        String name2 = ItemModule.getName(slot2.id, slot2.data, slot2.extra != null ? slot2.extra.getValue() : 0);
                         return name1.compareToIgnoreCase(name2);
                     }
                 };
             }
         }
-        Arrays.sort(newArray, comparator);
-        return newArray;
+        if (comparator != null) {
+            Arrays.sort(sortedItems, comparator);
+        }
+        return sortedItems;
     }
 }
