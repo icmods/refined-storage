@@ -492,7 +492,8 @@ const numberWithCommas = function(_num) {
 }
 
 function getItemUid(item){
-	return item.id + '_' + item.data + (item.extra && item.extra.getValue() != 0 ? '_' + item.extra.getValue() : '');
+	var extra = item.extra ? item.extra.getValue() : 0;
+	return item.id + '_' + item.data + (extra ? '_' + extra : '');
 }
 
 function parseItemUid(itemUid){
