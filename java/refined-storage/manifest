@@ -1,0 +1,10 @@
+{
+	"source-dirs": [
+		"src"
+	],
+	"library-dirs": [],
+	"boot-classes": [],
+	"classpath": [
+		"C:\\Users\\RislaeD\\AppData\\Local\\icmtoolchain\\Cache\\build\\refined-storage-d921e\\gradle\\classes\\refined-storage-legacy\\libs\\refined-storage-legacy-all.jar"
+	]
+}

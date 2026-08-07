@@ -1,0 +1,11 @@
+{
+	"source-dirs": [
+		"src"
+	],
+	"library-dirs": [],
+	"boot-classes": [],
+	"classpath": [
+		"!innercore-test.jar",
+		"innercore-arm32.jar"
+	]
+}

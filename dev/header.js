@@ -6,7 +6,7 @@ const ScriptableObjectHelper = WRAP_JAVA('com.zhekasmirnov.innercore.api.mod.Scr
 const JavaFONT = WRAP_JAVA('com.zhekasmirnov.innercore.api.mod.ui.types.Font');
 const JavaRect = android.graphics.Rect;
 const _setTip = ModAPI.requireGlobal("MCSystem.setLoadingTip");
-var RSJava = WRAP_JAVA('com.bot12381.refined.Main');
+var RSJava = WRAP_JAVA('org.innercore.icmods.refined_storage.RefinedStorage');
 RSJava = new RSJava();
 
 
