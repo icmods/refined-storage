@@ -717,59 +717,6 @@ var gridFuncs = {
 		if (page < 1) page = 1;
 		return __getY(page - 1);
 	},
-	sort: function (type, reverse, slots) {
-		if (reverse) {
-			if (type == 2) {
-				return function (a, b) { 
-					return slots[b].id - slots[a].id 
-				};
-			} else if (type == 0) {
-				return function (a, b) {
-					var slot1 = slots[a], slot2 = slots[b];
-					return slot1.count == 0 || slot2.count == 0 ? slot2.count - slot1.count : slot1.count - slot2.count;
-				};
-			} else if (type == 1) {
-				return function (a, b) {
-					var slot1 = slots[a], slot2 = slots[b];
-					if(slot1.id == 0 || slot2.id == 0) return slot2.id - slot1.id;
-					var name1 = getItemName(slot1.id, slot1.data, slot1.extra);
-					var name2 = getItemName(slot2.id, slot2.data, slot2.extra);
-					if (name1 > name2) {
-						return 1;
-					}
-					if (name1 < name2) {
-						return -1;
-					}
-					return 0;
-				};
-			}
-		} else {
-			if (type == 2) {
-				return function (a, b) {
-					var slot1 = slots[a], slot2 = slots[b];
-					return slot1.id == 0 || slot2.id == 0 ? slot2.id - slot1.id : slot1.id - slot2.id 
-				};
-			} else if (type == 0) {
-				return function (a, b) { 
-					return slots[b].count - slots[a].count 
-				};
-			} else if (type == 1) {
-				return function (a, b) {
-					var slot1 = slots[a], slot2 = slots[b];
-					if(slot1.id == 0 || slot2.id == 0) return slot2.id - slot1.id;
-					var name1 = getItemName(slot1.id, slot1.data, slot1.extra);
-					var name2 = getItemName(slot2.id, slot2.data, slot2.extra);
-					if (name2 > name1) {
-						return 1;
-					}
-					if (name2 < name1) {
-						return -1;
-					}
-					return 0;
-				};
-			}
-		}
-	}
 }
 
 RefinedStorage.createTile(BlockID.RS_grid, {
