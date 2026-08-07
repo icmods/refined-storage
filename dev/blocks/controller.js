@@ -29,7 +29,6 @@ RefinedStorage.createMapBlock("RS_controller", [
 		inCreative: false
 	}
 ]);
-mod_tip(BlockID['RS_controller']);
 RS_blocks.push(BlockID.RS_controller);
 ICRender.getGroup("ic-wire").add(BlockID.RS_controller, -1);
 

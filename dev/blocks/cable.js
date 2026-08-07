@@ -10,7 +10,6 @@ Block.createBlock("RS_cable", [
 ], {
 	renderlayer: 1
 })
-mod_tip(BlockID['RS_cable']);
 RS_blocks.push(BlockID['RS_cable']);
 EnergyUse[BlockID['RS_cable']] = Config.energy_uses.cable;
 

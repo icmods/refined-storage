@@ -13,7 +13,6 @@ Block.createBlockWithRotation("diskDrive", [
 		inCreative: true
 	}
 ]);
-mod_tip(BlockID['diskDrive']);
 RS_blocks.push(BlockID.diskDrive);
 EnergyUse[BlockID['diskDrive']] = Config.energy_uses.diskDrive;
 

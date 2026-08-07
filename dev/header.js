@@ -351,7 +351,6 @@ const Disk = {
 				//isTech: true,
 				stack: 1
 			});
-			mod_tip(ItemID[itemIDName]);
 		}
 		Item.registerNameOverrideFunction(ItemID[itemIDName], function (item, name) {
 			var disk_data = DiskData[item.data];
@@ -404,7 +403,6 @@ const UpgradeRegistry = {
 				//isTech: true,
 				stack: 64
 			});
-			mod_tip(ItemID[itemIDName]);
 		}
 		params.nameID = itemIDName;
 		params.usage = usage || 0;

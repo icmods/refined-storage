@@ -8,4 +8,3 @@ Block.createBlock("RSmachine_casing", [
 		inCreative: true
 	}
 ], 'opaque');
-mod_tip(BlockID['RSmachine_casing']);

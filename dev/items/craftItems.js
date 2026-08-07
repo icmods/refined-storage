@@ -4,7 +4,6 @@ Item.createItem("1k_storage_part", '1k Storage Part', {
 }, {
 	stack: 64
 });
-mod_tip(ItemID["1k_storage_part"]);
 
 IDRegistry.genItemID("4k_storage_part");
 Item.createItem("4k_storage_part", '4k Storage Part', {
@@ -12,7 +11,6 @@ Item.createItem("4k_storage_part", '4k Storage Part', {
 }, {
 	stack: 64
 });
-mod_tip(ItemID["4k_storage_part"]);
 
 IDRegistry.genItemID("16k_storage_part");
 Item.createItem("16k_storage_part", '16k Storage Part', {
@@ -20,7 +18,6 @@ Item.createItem("16k_storage_part", '16k Storage Part', {
 }, {
 	stack: 64
 });
-mod_tip(ItemID["16k_storage_part"]);
 
 IDRegistry.genItemID("64k_storage_part");
 Item.createItem("64k_storage_part", '64k Storage Part', {
@@ -28,7 +25,6 @@ Item.createItem("64k_storage_part", '64k Storage Part', {
 }, {
 	stack: 64
 });
-mod_tip(ItemID["64k_storage_part"]);
 
 IDRegistry.genItemID("silicon");
 Item.createItem("silicon", 'Silicon', {
@@ -36,7 +32,6 @@ Item.createItem("silicon", 'Silicon', {
 }, {
 	stack: 64
 });
-mod_tip(ItemID["silicon"]);
 
 IDRegistry.genItemID("processor_binding");
 Item.createItem("processor_binding", 'Processor Binding', {
@@ -44,7 +39,6 @@ Item.createItem("processor_binding", 'Processor Binding', {
 }, {
 	stack: 64
 });
-mod_tip(ItemID["processor_binding"]);
 
 IDRegistry.genItemID("quartz_enriched_iron");
 Item.createItem("quartz_enriched_iron", 'Quartz Enriched Iron', {
@@ -52,7 +46,6 @@ Item.createItem("quartz_enriched_iron", 'Quartz Enriched Iron', {
 }, {
 	stack: 64
 });
-mod_tip(ItemID["quartz_enriched_iron"]);
 
 IDRegistry.genItemID("raw_basic_processor");
 Item.createItem("raw_basic_processor", 'Raw Basic Processor', {
@@ -60,7 +53,6 @@ Item.createItem("raw_basic_processor", 'Raw Basic Processor', {
 }, {
 	stack: 64
 });
-mod_tip(ItemID["raw_basic_processor"]);
 
 IDRegistry.genItemID("raw_improved_processor");
 Item.createItem("raw_improved_processor", 'Raw Improved Processor', {
@@ -68,7 +60,6 @@ Item.createItem("raw_improved_processor", 'Raw Improved Processor', {
 }, {
 	stack: 64
 });
-mod_tip(ItemID["raw_improved_processor"]);
 
 IDRegistry.genItemID("raw_advanced_processor");
 Item.createItem("raw_advanced_processor", 'Raw Advanced Processor', {
@@ -76,7 +67,6 @@ Item.createItem("raw_advanced_processor", 'Raw Advanced Processor', {
 }, {
 	stack: 64
 });
-mod_tip(ItemID["raw_advanced_processor"]);
 
 IDRegistry.genItemID("basic_processor");
 Item.createItem("basic_processor", 'Basic Processor', {
@@ -84,7 +74,6 @@ Item.createItem("basic_processor", 'Basic Processor', {
 }, {
 	stack: 64
 });
-mod_tip(ItemID["basic_processor"]);
 
 IDRegistry.genItemID("improved_processor");
 Item.createItem("improved_processor", 'Improved Processor', {
@@ -92,7 +81,6 @@ Item.createItem("improved_processor", 'Improved Processor', {
 }, {
 	stack: 64
 });
-mod_tip(ItemID["improved_processor"]);
 
 IDRegistry.genItemID("advanced_processor");
 Item.createItem("advanced_processor", 'Advanced Processor', {
@@ -100,7 +88,6 @@ Item.createItem("advanced_processor", 'Advanced Processor', {
 }, {
 	stack: 64
 });
-mod_tip(ItemID["advanced_processor"]);
 
 IDRegistry.genItemID("construction_core");
 Item.createItem("construction_core", 'Construction Core', {
@@ -108,7 +95,6 @@ Item.createItem("construction_core", 'Construction Core', {
 }, {
 	stack: 64
 });
-mod_tip(ItemID["construction_core"]);
 
 IDRegistry.genItemID("destruction_core");
 Item.createItem("destruction_core", 'Destruction Core', {
@@ -116,7 +102,6 @@ Item.createItem("destruction_core", 'Destruction Core', {
 }, {
 	stack: 64
 });
-mod_tip(ItemID["destruction_core"]);
 
 IDRegistry.genItemID("storage_housing");
 Item.createItem("storage_housing", 'Storage Housing', {
@@ -124,7 +109,6 @@ Item.createItem("storage_housing", 'Storage Housing', {
 }, {
 	stack: 64
 });
-mod_tip(ItemID["storage_housing"]);
 
 IDRegistry.genItemID("rs_upgrade");
 Item.createItem("rs_upgrade", 'Upgrade', {
@@ -132,4 +116,3 @@ Item.createItem("rs_upgrade", 'Upgrade', {
 }, {
 	stack: 64
 });
-mod_tip(ItemID["rs_upgrade"]);

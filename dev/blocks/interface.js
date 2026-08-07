@@ -8,7 +8,6 @@ RefinedStorage.createMapBlock("RS_interface", [
 		inCreative: true
 	}
 ]);
-mod_tip(BlockID['RS_interface']);
 RS_blocks.push(BlockID.RS_interface);
 EnergyUse[BlockID['RS_interface']] = Config.energy_uses.interface;
 

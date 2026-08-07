@@ -23,7 +23,6 @@ Block.createBlockWithRotation("RS_grid", [
 		inCreative: true
 	}
 ]);
-mod_tip(BlockID['RS_grid']);
 RS_blocks.push(BlockID['RS_grid']);
 EnergyUse[BlockID['RS_grid']] = Config.energy_uses.grid;
 
