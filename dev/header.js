@@ -810,6 +810,106 @@ const RefinedStorage = {
 			ItemModel.getFor(BlockID[name], i).setModel(render);
 			BlockRenderer.enableCoordMapping(BlockID[name], i, render);
 		}
+	},
+	sortItems: function (type, reverse, textSearch, container, keys) {
+		if (RSJava && !RSJava.isCompatRequired)
+			return ScriptableObjectHelper.createArray(RSJava.sortItems(type, reverse, textSearch || null, container, keys));
+
+		var slots = container.slots;
+		var result = textSearch ? keys.filter(function(key) {
+			var slot = slots[key];
+			return slot && slot.id !== 0 && getItemName(slot.id, slot.data, slot.extra).toLowerCase().indexOf(textSearch.toLowerCase()) !== -1;
+		}) : keys.slice();
+
+		var comparator;
+		if (reverse) {
+			if (type == 2) {
+				comparator = function(a, b) { return slots[b].id - slots[a].id; };
+			} else if (type == 0) {
+				comparator = function(a, b) {
+					var slot1 = slots[a], slot2 = slots[b];
+					return slot1.count == 0 || slot2.count == 0 ? slot2.count - slot1.count : slot1.count - slot2.count;
+				};
+			} else if (type == 1) {
+				comparator = function(a, b) {
+					var slot1 = slots[a], slot2 = slots[b];
+					if (slot1.id == 0 || slot2.id == 0) return slot2.id - slot1.id;
+					var name1 = getItemName(slot1.id, slot1.data, slot1.extra), name2 = getItemName(slot2.id, slot2.data, slot2.extra);
+					return name1 > name2 ? 1 : name1 < name2 ? -1 : 0;
+				};
+			}
+		} else {
+			if (type == 2) {
+				comparator = function(a, b) {
+					var slot1 = slots[a], slot2 = slots[b];
+					return slot1.id == 0 || slot2.id == 0 ? slot2.id - slot1.id : slot1.id - slot2.id;
+				};
+			} else if (type == 0) {
+				comparator = function(a, b) { return slots[b].count - slots[a].count; };
+			} else if (type == 1) {
+				comparator = function(a, b) {
+					var slot1 = slots[a], slot2 = slots[b];
+					if (slot1.id == 0 || slot2.id == 0) return slot2.id - slot1.id;
+					var name1 = getItemName(slot1.id, slot1.data, slot1.extra), name2 = getItemName(slot2.id, slot2.data, slot2.extra);
+					return name2 > name1 ? 1 : name2 < name1 ? -1 : 0;
+				};
+			}
+		}
+		if (comparator) result.sort(comparator);
+		return result;
+	},
+	sortCrafts: function (items, textSearch, onlyItemsMap, slots, inventoryItems, isDarkenMap) {
+		if (RSJava && !RSJava.isCompatRequired)
+			return ScriptableObjectHelper.createArray(RSJava.sortCrafts(items, textSearch || null, onlyItemsMap, slots, inventoryItems, isDarkenMap));
+
+		var recipes = new java.util.HashSet();
+		if (!RSJava || !RSJava.isRecipeCompatRequired) {
+			for (var i = 0; i < items.length; i++) {
+				var slot = slots[items[i]];
+				if (slot && slot.id) WorkbenchRecipes.addRecipesThatContainItem(slot.id, slot.data, recipes);
+			}
+			for (var k = 0; k < inventoryItems.length; k++) {
+				if (inventoryItems[k].id) WorkbenchRecipes.addRecipesThatContainItem(inventoryItems[k].id, inventoryItems[k].data, recipes);
+			}
+		} else {
+			for (var i = 0; i < items.length; i++) {
+				var slot = slots[items[i]];
+				if (slot && slot.id) {
+					var it = Recipes.getWorkbenchRecipesByIngredient(slot.id, slot.data).iterator();
+					while (it.hasNext()) recipes.add(it.next());
+				}
+			}
+			for (var k = 0; k < inventoryItems.length; k++) {
+				if (inventoryItems[k].id) {
+					var it = Recipes.getWorkbenchRecipesByIngredient(inventoryItems[k].id, inventoryItems[k].data).iterator();
+					while (it.hasNext()) recipes.add(it.next());
+				}
+			}
+		}
+
+		var darkenRecipes = [], sortedRecipes = [];
+		var it = recipes.iterator();
+		while (it.hasNext()) {
+			var recipe = it.next();
+			if (textSearch) {
+				var result = recipe.getResult();
+				if (getItemName(result.id, result.data != -1 ? result.data : 0, null).toLowerCase().indexOf(textSearch.toLowerCase()) == -1) continue;
+			}
+			var isDarken = false;
+			var entries = recipe.getEntryCollection().iterator();
+			while (entries.hasNext()) {
+				var entry = entries.next();
+				if (!entry || entry.id == 0) continue;
+				var dataList = onlyItemsMap[entry.id];
+				if (!dataList || (entry.data != -1 && dataList.indexOf(entry.data) == -1)) {
+					isDarken = true;
+					break;
+				}
+			}
+			isDarkenMap['e' + recipe.getRecipeUid()] = isDarken;
+			if (isDarken) darkenRecipes.push(recipe); else sortedRecipes.push(recipe);
+		}
+		return sortedRecipes.concat(darkenRecipes);
 	}
 }
 

@@ -649,7 +649,7 @@ var craftingGridFuncs = {
 			else
 				inventoryOnlyItemsMap[inventoryItems[i].id] = [inventoryItems[i].data];
 		}
-		var sorted = ScriptableObjectHelper.createArray(RSJava.sortCrafts(items, craftsTextSearch ? craftsTextSearch : null, Object.assign(inventoryOnlyItemsMap, onlyItemsMap), _object, inventoryItems, craftingGridData.isDarkenMap));
+		var sorted = RefinedStorage.sortCrafts(items, craftsTextSearch || null, Object.assign(inventoryOnlyItemsMap, onlyItemsMap), _object, inventoryItems, craftingGridData.isDarkenMap);
 		if(Config.dev)Logger.Log('Crafts array sorted on: ' + (java.lang.System.currentTimeMillis() - millis), "RefinedStorageDebug");
 		return sorted;
 	},
@@ -974,7 +974,7 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_crafting_grid, {
 						if(!refresh)craftingGridData.textSearch = false;
 						var millis = 0;
 						if(Config.dev)millis = java.lang.System.currentTimeMillis();
-						craftingGridData.slotsKeys = ScriptableObjectHelper.createArray(RSJava.sortItems(eventData.sort, eventData.reverse_filter, craftingGridData.textSearch ? craftingGridData.textSearch : null, container, craftingGridData.slotsKeys));
+						craftingGridData.slotsKeys = RefinedStorage.sortItems(eventData.sort, eventData.reverse_filter, craftingGridData.textSearch || null, container, craftingGridData.slotsKeys);
 						if(Config.dev)Logger.Log('Items array sorted on: ' + (java.lang.System.currentTimeMillis() - millis), "RefinedStorageDebug");
 						var originalItemsMap = craftingGridData.slotsKeys.map(function(__slot) {
 							return getItemUid(container.slots[__slot]);

@@ -1074,7 +1074,7 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 						if(!refresh)gridData.textSearch = false;
 						var millis = 0;
 						if(Config.dev)millis = java.lang.System.currentTimeMillis();
-						gridData.slotsKeys = ScriptableObjectHelper.createArray(RSJava.sortItems(eventData.sort, eventData.reverse_filter, gridData.textSearch ? gridData.textSearch : null, container, gridData.slotsKeys));
+						gridData.slotsKeys = RefinedStorage.sortItems(eventData.sort, eventData.reverse_filter, gridData.textSearch || null, container, gridData.slotsKeys);
 						if(Config.dev)Logger.Log('Items array sorted on: ' + (java.lang.System.currentTimeMillis() - millis), "RefinedStorageDebug");
 						if(gridData.selectedItemInfoSlot)gridData.setItemInfoSlot(gridData.selectedItemInfoSlot, container);
 					}
