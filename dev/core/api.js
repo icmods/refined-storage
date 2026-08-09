@@ -23,6 +23,9 @@ var _RS = {
 		deleteItem: function(netId, item, count) { return RSNetworks[netId] && RSNetworks[netId].info.deleteItem(item, count); },
 		searchController: function(coords, self) { return searchController(coords, self); },
 		searchBlocks: function(netId, blockId) { return searchBlocksInNetwork(netId, blockId); },
+		constructCraft: function(netId, item, count) { return RSNetworks[netId] && RSNetworks[netId].info.constructCraft(item, count || 1); },
+		provideCraft: function(netId, tree) { var info = RSNetworks[netId] && RSNetworks[netId].info; if (info) info.provideCraft(tree); },
+		getCrafts: function(netId) { return RSNetworks[netId] && RSNetworks[netId].info.providingCrafts; },
 		on: function(netId, event, callback) { return _RS.on(event, callback); }
 	},
 

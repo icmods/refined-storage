@@ -2,6 +2,8 @@ var NetworkInfo = {
 	create: function(_data, controllerTile, netId) {
 		return {
 			net_id: netId,
+			craftsIDS: {},
+			crafts: {},
 			disk_map: [],
 			just_items_map: {},
 			just_items_map_extra: {},
@@ -10,6 +12,35 @@ var NetworkInfo = {
 			openedGrids: [],
 			storage: 0,
 			stored: 0,
+			itemAddListeners: [],
+			itemRemoveListeners: [],
+			providingCrafts: [],
+			addItemAddedListener: function(func, priority){
+				if(typeof func != 'function') return false;
+				priority = priority || 0;
+				func.priority = priority;
+				for(var i in this.itemAddListeners){
+					if(this.itemAddListeners[i].priority < priority){
+						this.itemAddListeners.splice(i,0,func);
+						return true;
+					}
+				}
+				this.itemAddListeners.push(func);
+				return true;
+			},
+			addItemRemovedListener: function(func, priority){
+				if(typeof func != 'function') return false;
+				priority = priority || 0;
+				func.priority = priority;
+				for(var i in this.itemRemoveListeners){
+					if(this.itemRemoveListeners[i].priority < priority){
+						this.itemRemoveListeners.splice(i,0,func);
+						return true;
+					}
+				}
+				this.itemRemoveListeners.push(func);
+				return true;
+			},
 			refreshOpenedGrids: function(_full){
 				for(var i in this.openedGrids){
 					var __coords = this.openedGrids[i];
@@ -79,7 +110,7 @@ var NetworkInfo = {
 			itemCanBePushed: function(item, count){
 				return Math.min(this.storage - this.stored, count || item.count);
 			},
-			pushItem: function(item, count, nonUpdate){
+			pushItem: function(item, count, nonUpdate, tags){
 				count = count || item.count;
 				if(RSbannedItems.indexOf(item.id) != -1){
 					if(Config.dev)Logger.Log('Hey you shouldn t push this item:   id: ' + item.id + ', count: ' + count + ' (' + item.count + '), data: ' + item.data + (item.extra ? ', extra: ' + item.extra.getValue() : '') + ', uid: ' + itemUid + ', storage: ' + this.storage + ', stored: ' + this.stored + ' (' + (this.stored + count) + ')' + ', freespace: ' + (this.storage - this.stored) + ' (' + ((this.storage - this.stored) - count) + ')', 'RefinedStorageDebug');
@@ -92,6 +123,15 @@ var NetworkInfo = {
 					if(_data[i].pushItemFunc)count = ((__answ = _data[i].pushItemFunc(item, count)) != undefined ? __answ : count);
 					if(count <= 0) return 0;
 				}
+				var deleteListeners = [];
+				for(var i in this.itemAddListeners){
+					if(!this.itemAddListeners[i]) continue;
+					var __answ = this.itemAddListeners[i](item, count, tags);
+					if(typeof(__answ) == "boolean" && __answ) deleteListeners.push(i);
+					if(typeof(__answ) == "number") count = __answ;
+				}
+				for(var i in deleteListeners) this.itemAddListeners.splice(deleteListeners[i], 1);
+				if(count <= 0) return 0;
 				var index = this.items_map.indexOf(itemUid);
 				var itemUidExtra = item.id+'_'+item.data;
 				if(item.extra && index == -1 && this.just_items_map_extra[itemUidExtra])for(var iasd in this.just_items_map_extra[itemUidExtra]){
@@ -196,7 +236,7 @@ var NetworkInfo = {
 					return false;
 				}
 			},
-			deleteItem: function(item, count, nonUpdate){
+			deleteItem: function(item, count, nonUpdate, tags){
 				count = count || item.count;
 				if(!this.itemCanBeDeleted(item, count)) return count;
 				if((!item.data && item.data != 0) || item.data == -1) item.data = this.just_items_map[item.id][0];
@@ -208,6 +248,15 @@ var NetworkInfo = {
 					if(_data[i].deleteItemFunc)count = _data[i].deleteItemFunc(item, count) || count;
 					if(count <= 0) return 0;
 				}
+				var deleteListeners = [];
+				for(var i in this.itemRemoveListeners){
+					if(!this.itemRemoveListeners[i]) continue;
+					var __answ = this.itemRemoveListeners[i](item, count, tags);
+					if(typeof(__answ) == "boolean" && __answ) deleteListeners.push(i);
+					if(typeof(__answ) == "number") count = __answ;
+				}
+				for(var i in deleteListeners) this.itemRemoveListeners.splice(deleteListeners[i], 1);
+				if(count <= 0) return 0;
 				var num = this.items_map.indexOf(itemUid);
 				var itemUidExtra = item.id+'_'+item.data;
 				if(item.extra && num == -1 && this.just_items_map_extra[itemUidExtra])for(var iasd in this.just_items_map_extra[itemUidExtra]){
@@ -275,7 +324,322 @@ var NetworkInfo = {
 					return count;
 				}
 				if(!nonUpdate)this.refreshOpenedGrids();
+			},
+			getCraft: function(item, _craft_, multiplier_) {
+				multiplier_ = multiplier_ || 1;
+				if (item.data == -1 && this.craftsIDS[item.id]) item.data = this.craftsIDS[item.id][0];
+				var itemUid = item.id + '_' + item.data;
+				if (!this.crafts[itemUid]) return false;
+				var completedIngridients = [];
+				var taked = (_craft_ && _craft_.taked) || {};
+				if (!taked.taked) {
+					taked.taked = function(item) {
+						var uid = getItemUid(item);
+						return taked[uid];
+					};
+					taked.has = function(item) {
+						var uid = getItemUid(item);
+						return !!taked[uid] && taked[uid].count > 0;
+					};
+				}
+				var craftable = true;
+				var needCrafts = [];
+				var allIngridients = [];
+				var __craft = undefined;
+				craftsIterator:
+				for (var ci = 0; ci < this.crafts[itemUid].length; ci++) {
+					var craft = this.crafts[itemUid][ci];
+					var liteIngridientsMap = {};
+					var replaceMap = {};
+					for (var ii = 0; ii < craft.ingridients.length; ii++) {
+						var ingr = craft.ingridients[ii];
+						if (!ingr || !ingr.id) continue;
+						var uid = getItemUid(ingr);
+						if (!liteIngridientsMap[uid]) {
+							liteIngridientsMap[uid] = copyItem(ingr);
+						} else {
+							liteIngridientsMap[uid].count += ingr.count;
+						}
+					}
+					craftable = true;
+					iIterator:
+					for (var uid in liteIngridientsMap) {
+						var iitem = liteIngridientsMap[uid];
+						iitem.count *= multiplier_;
+						replaceMap[uid] = [];
+						var sumCount = 0;
+						if (!this.just_items_map[iitem.id]) {
+							if (_craft_) {
+								var _craft_2 = JSON.parse(JSON.stringify(_craft_));
+								_craft_2.taked = taked;
+								var constructedCraft = this.constructCraft({id: iitem.id, data: iitem.data, count: iitem.count}, iitem.count, _craft_2);
+								if (constructedCraft) {
+									for (var k in constructedCraft) {
+										if (k !== 'taked' && constructedCraft.hasOwnProperty(k)) _craft_[k] = constructedCraft[k];
+									}
+									if (constructedCraft.craftable) {
+										replaceMap[uid].push({id: iitem.id, data: iitem.data, count: iitem.count});
+										needCrafts.push(constructedCraft);
+									} else {
+										craftable = false;
+										replaceMap[uid].push({id: iitem.id, data: iitem.data, count: 0, need: iitem.count});
+									}
+								}
+								continue iIterator;
+							}
+							craftable = false;
+							continue craftsIterator;
+						}
+						var itemUidExtra = iitem.id + '_' + iitem.data;
+						if (iitem.extra) itemUidExtra += '_' + (iitem.extra.getValue ? iitem.extra.getValue() : iitem.extra);
+						var index = -1;
+						if (this.just_items_map_extra[itemUidExtra]) {
+							var extraList = this.just_items_map_extra[itemUidExtra];
+							for (var ei = 0; ei < extraList.length; ei++) {
+								var extraUid = iitem.id + '_' + iitem.data;
+								if (extraList[ei] && extraList[ei].getValue) extraUid += '_' + extraList[ei].getValue();
+								else extraUid += '_' + extraList[ei];
+								index = this.items_map.indexOf(extraUid);
+								if (index != -1) break;
+							}
+						} else {
+							index = this.items_map.indexOf(iitem.id + '_' + iitem.data);
+						}
+						if (index != -1) {
+							var storedItem = this.items[index];
+							var available = storedItem.count;
+							var takenCount = taked[itemUid] ? taked[itemUid].count : 0;
+							available -= takenCount;
+							if (iitem.count <= available) {
+								replaceMap[uid].push({id: iitem.id, data: iitem.data, count: iitem.count});
+								sumCount = iitem.count;
+							} else if (available > 0) {
+								replaceMap[uid].push({id: iitem.id, data: iitem.data, count: available, need: iitem.count - available});
+								sumCount = available;
+								craftable = false;
+							} else {
+								replaceMap[uid].push({id: iitem.id, data: iitem.data, count: 0, need: iitem.count});
+								craftable = false;
+							}
+						} else {
+							replaceMap[uid].push({id: iitem.id, data: iitem.data, count: 0, need: iitem.count});
+							craftable = false;
+						}
+					}
+					for (var uid in replaceMap) {
+						for (var ri = 0; ri < replaceMap[uid].length; ri++) {
+							completedIngridients.push(replaceMap[uid][ri]);
+						}
+					}
+					if (!craftable) continue craftsIterator;
+					__craft = craft;
+					break craftsIterator;
+				}
+				if (!__craft) {
+					__craft = this.crafts[itemUid][0];
+					craftable = false;
+				}
+				for (var ii = 0; ii < __craft.ingridients.length; ii++) {
+					var ingr = __craft.ingridients[ii];
+					if (!ingr || !ingr.id) continue;
+					var itemIngr = copyItem(ingr);
+					itemIngr.count *= multiplier_;
+					allIngridients.push(itemIngr);
+				}
+				var result = null;
+				for (var ri = 0; ri < __craft.result.length; ri++) {
+					var r = __craft.result[ri];
+					if (r.id == item.id && (r.data == item.data || r.data == -1)) {
+						result = copyItem(r);
+						break;
+					}
+				}
+				if (!result) result = copyItem(__craft.result[0]);
+				result.count *= multiplier_;
+				if (!craftable) result.need = result.count;
+				if (_craft_) {
+					assignIngridients(_craft_.ingridients, allIngridients);
+					assignIngridients(_craft_.results, [result]);
+				}
+				var withoutMachine = false;
+				if (__craft.isProcessed) {
+					var coordsId = __craft.coordsId;
+					var machineTile = null;
+					if (typeof coordsId == 'string') {
+						var networkEntry = RSNetworks[this.net_id] && RSNetworks[this.net_id][coordsId];
+						if (networkEntry && networkEntry.coords) {
+							machineTile = World.getTileEntity(networkEntry.coords.x, networkEntry.coords.y, networkEntry.coords.z, controllerTile.blockSource);
+						}
+					} else if (coordsId && coordsId.x != null) {
+						machineTile = World.getTileEntity(coordsId.x, coordsId.y, coordsId.z, controllerTile.blockSource);
+					}
+					if (!machineTile) {
+						craftable = false;
+						withoutMachine = true;
+					}
+					if (_craft_) _craft_.withoutMachineChecked[__craft.coordsId] = withoutMachine;
+				}
+				var oneCountIngridients = [];
+				for (var ai = 0; ai < allIngridients.length; ai++) {
+					var itemIngr = copyItem(allIngridients[ai]);
+					itemIngr.count /= multiplier_;
+					oneCountIngridients.push(itemIngr);
+				}
+				var _craft2 = {
+					craftable: craftable,
+					withoutMachine: withoutMachine,
+					result: result,
+					result2: copyItem(result),
+					count: multiplier_,
+					allIngridients: allIngridients,
+					oneCountIngridients: oneCountIngridients,
+					completedIngridients: completedIngridients,
+					craft: __craft,
+					_craft_: _craft_,
+					needCrafts: needCrafts
+				};
+				if (_craft_) _craft_.crafts.push(_craft2);
+				return _craft2;
+			},
+			constructCraft: function(item, count, _craft_) {
+				if (item.data == -1 && this.craftsIDS[item.id]) item.data = this.craftsIDS[item.id][0];
+				var itemUid = item.id + '_' + item.data;
+				if (!this.crafts[itemUid]) return false;
+				var fullCrafts = _craft_ || {
+					craftable: true,
+					withoutMachine: false,
+					results: [],
+					ingridients: [],
+					crafts: [],
+					currentCrafts: [],
+					providedCrafts: [],
+					completedCrafts: [],
+					withoutMachineChecked: {},
+					taked: {}
+				};
+				var craft = this.getCraft(item, fullCrafts);
+				if (!craft || !craft.craftable) {
+					fullCrafts.craftable = false;
+					return fullCrafts;
+				}
+				for (var ri = 0; ri < craft.craft.result.length; ri++) {
+					var r = craft.craft.result[ri];
+					if (r.id == item.id && (r.data == item.data || r.data == -1)) {
+						fullCrafts.result = copyItem(r);
+						break;
+					}
+				}
+				if (!fullCrafts.result) fullCrafts.result = copyItem(craft.craft.result[0]);
+				if (count > fullCrafts.result.count) {
+					var multiplier_ = Math.ceil(count / fullCrafts.result.count);
+					this.getCraft(item, fullCrafts, multiplier_);
+				}
+				return fullCrafts;
+			},
+			provideCraft: function(_craft_) {
+				this.providingCrafts.push(_craft_);
+				this.startCrafting(_craft_);
+			},
+			startCrafting: function(_craft_) {
+				if (!_craft_ || !_craft_.crafts) return;
+				for (var ci = 0; ci < _craft_.crafts.length; ci++) {
+					var cra = _craft_.crafts[ci];
+					if (!cra || !cra.craft) continue;
+					if (!cra.craft.isProcessed) {
+						var listener = function(item, count, tags) {
+							var match = getIngridientItem(cra.completedIngridients, item);
+							if (!match || !match.need) return;
+							var consumed = Math.min(count, match.need);
+							match.need -= consumed;
+							if (match.need <= 0) {
+								_craft_.providedCrafts.push(cra);
+								var idx = _craft_.currentCrafts.indexOf(cra);
+								if (idx != -1) _craft_.currentCrafts.splice(idx, 1);
+								return true;
+							}
+							return count - consumed;
+						};
+						this.addItemAddedListener(listener, 0);
+						_craft_.currentCrafts.push(cra);
+					}
+				}
+			},
+			updateCrafts_: function(_craft_) {
+				if (!_craft_ || !_craft_.crafts) return;
+				for (var ci = 0; ci < _craft_.crafts.length; ci++) {
+					var cra = _craft_.crafts[ci];
+					if (!cra) continue;
+					var inCurrent = _craft_.currentCrafts.indexOf(cra) != -1;
+					if (inCurrent) {
+						if (cra.craft && cra.craft.isProcessed) {
+							var coords = cra.craft.coordsId;
+							if (coords && RSNetworks[this.net_id] && RSNetworks[this.net_id][coords]) {
+								if (RSNetworks[this.net_id][coords].isWorking === false) {
+									for (var ii = 0; ii < cra.completedIngridients.length; ii++) {
+										this.pushItem(copyItem(cra.completedIngridients[ii]), 1, false, ['autocraft', false]);
+									}
+									_craft_.currentCrafts.splice(ci, 1);
+								}
+							}
+						}
+					} else if (_craft_.providedCrafts.indexOf(cra) != -1) {
+						for (var si = 0; si < cra.allIngridients.length; si++) {
+							consumeIngridients(_craft_.ingridients, [cra.allIngridients[si]]);
+						}
+						_craft_.completedCrafts.push(cra);
+						var idx = _craft_.providedCrafts.indexOf(cra);
+						if (idx != -1) _craft_.providedCrafts.splice(idx, 1);
+					}
+				}
+				for (var ni = 0; ni < _craft_.crafts.length; ni++) {
+					var need = _craft_.crafts[ni].needCrafts;
+					if (need) for (var nj = 0; nj < need.length; nj++) this.updateCrafts_(need[nj]);
+				}
+				this.refreshOpenedGrids();
 			}
 		};
 	}
 };
+
+function copyItem(item) {
+	return {id: item.id, count: item.count, data: item.data, extra: item.extra || null};
+}
+
+function getIngridientItem(ingridients, item) {
+	for (var i in ingridients) {
+		if (ingridients[i].id == item.id && ingridients[i].data == item.data) return ingridients[i];
+	}
+	return null;
+}
+
+function assignIngridients(ingr1, ingr2) {
+	for (var i in ingr2) {
+		var item2 = ingr2[i];
+		var found = false;
+		for (var j in ingr1) {
+			if (compareSlots(ingr1[j], item2, false, true)) {
+				ingr1[j].count += item2.count;
+				if (item2.need != null) ingr1[j].need = (ingr1[j].need || 0) + item2.need;
+				found = true;
+			}
+		}
+		if (!found) {
+			ingr1.push(copyItem(item2));
+			if (item2.need != null) ingr1[ingr1.length - 1].need = item2.need || 0;
+		}
+	}
+	return ingr1;
+}
+
+function consumeIngridients(ingr1, ingr2) {
+	for (var i = ingr1.length - 1; i >= 0; i--) {
+		for (var j = 0; j < ingr2.length; j++) {
+			if (compareSlots(ingr1[i], ingr2[j], false, true)) {
+				ingr1[i].count -= ingr2[j].count;
+				if (ingr2[j].need != null && ingr1[i].need != null) ingr1[i].need -= ingr2[j].need;
+				if (ingr1[i].count <= 0 && (!ingr1[i].need || ingr1[i].need <= 0)) ingr1.splice(i, 1);
+				break;
+			}
+		}
+	}
+}

@@ -419,6 +419,14 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			if(this.data.lastTexture != (this.data.lastTexture = texture)) this.refreshModel();
 			this.data.updateModel = false;
 		}
+		if (this.data.NETWORK_ID != 'f' && RSNetworks[this.data.NETWORK_ID]) {
+			var info = RSNetworks[this.data.NETWORK_ID].info;
+			if (info && info.providingCrafts) {
+				for (var i = info.providingCrafts.length - 1; i >= 0; i--) {
+					info.updateCrafts_(info.providingCrafts[i]);
+				}
+			}
+		}
 	},
 	refreshModel: function(){
 		if(!this.networkEntity) return Logger.Log(Item.getName(this.blockInfo.id, this.blockInfo.data) + ' model on: ' + cts(this) + ' cannot be displayed');
@@ -475,6 +483,22 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			if(this.data.redstone_mode == undefined) this.data.redstone_mode = 0;
 			this.data.redstone_mode = this.data.redstone_mode >= 2 ? 0 : this.data.redstone_mode + 1;
 			if(!this.refreshRedstoneMode()) this.refreshGui();
+		},
+		craftPreview: function(eventData, connectedClient) {
+			if (this.data.NETWORK_ID == 'f') return;
+			var info = RSNetworks[this.data.NETWORK_ID].info;
+			var result = info.constructCraft(eventData.item, eventData.count || 1);
+			this.container.sendEvent(connectedClient, "openCraftPreview", {
+				results: result.results,
+				ingridients: result.ingridients,
+				craftable: result.craftable
+			});
+		},
+		provideConstructedCraft: function(eventData, connectedClient) {
+			if (this.data.NETWORK_ID == 'f') return;
+			var info = RSNetworks[this.data.NETWORK_ID].info;
+			var result = info.constructCraft(eventData.item, eventData.count || 1);
+			if (result.craftable) info.provideCraft(result);
 		}
 	}
 })
