@@ -5,6 +5,7 @@ network/topology.js
 network/info.js
 storage/disks.js
 upgrade/registry.js
+core/api.js
 gui/layout.js
 debugWindow.js
 translate.js

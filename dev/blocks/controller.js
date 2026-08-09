@@ -541,6 +541,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			this.networkData.sendChanges();
 			this.data.ticks = 0;
 			this.data.timer = 20;
+			_RS._emit("networkCreated", {netId: this.data.NETWORK_ID, tile: this});
 		//}
 	},
 	updateItems: function(){
@@ -705,6 +706,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		this.sendPacket("refreshModel", {energy: this.data.energy, isActive: this.data.isActive, coords: {x: this.x, y: this.y, z: this.z}});
 	},
 	destroy: function (param1, isDropAllowed) {
+		_RS._emit("networkDestroyed", {netId: this.data.NETWORK_ID, tile: this});
 		if (this.data.NETWORK_ID != "f" && RSNetworks[this.data.NETWORK_ID]) {
 			set_net_for_blocks(this, 'f');
 			delete RSNetworks[this.data.NETWORK_ID];

@@ -17,6 +17,7 @@ var NetworkInfo = {
 					tile.data.fullRefreshPage = _full;
 					tile.data.refreshCurPage = true;
 				}
+				_RS._emit("storageUpdated", {netId: this.net_id});
 			},
 			updateItems: function(){
 				if(Config.dev)Logger.Log('Updating items', 'RefinedStorageDebug');
