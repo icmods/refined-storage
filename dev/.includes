@@ -1,5 +1,10 @@
 other.js
 header.js
+network/state.js
+network/topology.js
+network/info.js
+storage/disks.js
+upgrade/registry.js
 debugWindow.js
 translate.js
 
