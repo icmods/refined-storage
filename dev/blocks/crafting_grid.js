@@ -132,11 +132,17 @@ function craftingGridSwitchCraftsPage(page, container, ignore, dontMoveSlider){
 }
 
 testButtons(craftingGridGUI.getWindow('header').getContent().elements, function(){
-	grid_set_elements(360 + 109, 70, CgridConsPercents*(UI.getScreenHeight() - 60), 0, _elementsGUI_craftingGrid, craftingGridData, craftingGridGUI, craftingGridSwitchPage);
+	grid_set_elements(360 + 109, 70, CgridConsPercents*(UI.getScreenHeight() - 60), 0, _elementsGUI_craftingGrid, craftingGridData, craftingGridGUI, craftingGridSwitchPage, null);
 });
 
 var CgridConsPercents = 49/(575.5 - 60);
-grid_set_elements(360 + 109, 70, CgridConsPercents*(UI.getScreenHeight() - 60), 0, _elementsGUI_craftingGrid, craftingGridData, craftingGridGUI, craftingGridSwitchPage);
+grid_set_elements(360 + 109, 70, CgridConsPercents*(UI.getScreenHeight() - 60), 0, _elementsGUI_craftingGrid, craftingGridData, craftingGridGUI, craftingGridSwitchPage, null);
+
+var craftingGridFuncs = makePageHelpers(_elementsGUI_craftingGrid, {countX: "x_count", countY: "y_count", maxY: "max_y", slider: "slider_button"});
+var craftsPageHelpers = makePageHelpers(_elementsGUI_craftingGrid, {countX: "crafts_x_count", countY: "crafts_y_count", maxY: "crafts_max_y", slider: "crafts_slider"});
+craftingGridFuncs.craftsPages = craftsPageHelpers.getPages;
+craftingGridFuncs.getCraftsPageFromCoords = craftsPageHelpers.getPageFromCoords;
+craftingGridFuncs.getCraftsCoordsFromPage = craftsPageHelpers.getCoordsFromPage;
 
 (function(){
 	_elementsGUI_craftingGrid["reverse_filter_button"].y = _elementsGUI_craftingGrid["search_frame"].y;
@@ -240,191 +246,32 @@ grid_set_elements(360 + 109, 70, CgridConsPercents*(UI.getScreenHeight() - 60), 
 		start: 245 + craftingPadding,
 		end: _elementsGUI_craftingGrid['x_start'] - craftingPadding - 20
 	}
-	var craftsSlotsCons = (craftsSlotsXSettings.end - craftsSlotsXSettings.start)/craftsSlotsXSettings.count;
-	var craftsSlotsYSettings = {
-		start: craftSlotsEnd + 30,
-		end: windowHeight - 20 - craftsSlotsCons
-	}
 
-	_elementsGUI_craftingGrid["search_frame_crafts"] = {
-		type: "frame",
-		x: craftsSlotsXSettings.start,
-		y: craftSlotsEnd + 5,
-		width: craftsSlotsXSettings.end - craftsSlotsXSettings.start,
-		height: 20,
-		bitmap: "search_bar",
-		scale: 0.8,
-		clicker: {
-			onClick: function (itemContainerUiHandler, itemContainer, element) {
-				UI.getContext().runOnUiThread(new java.lang.Runnable({// I take this from Recipe Viewer https://icmods.mineprogramming.org/mod?id=455 :D
-					run: function () {
-						try {
-							var editText = new android.widget.EditText(UI.getContext());
-							new android.app.AlertDialog.Builder(UI.getContext())
-								.setTitle(Translation.translate("Please type the keywords"))
-								.setView(editText)
-								.setPositiveButton(Translation.translate("Search"), {
-									onClick: function () {
-										var keyword = editText.getText() + "";
-										craftingGridData.craftsTextSearch = keyword.length ? keyword : false;
-										itemContainerUiHandler.setBinding('search_text_crafts', 'text', keyword.length ? keyword : Translation.translate('Search'));
-										craftingGridData.crafts = craftingGridFuncs.updateCrafts(craftingGridData.slotsKeys, craftingGridData.craftsTextSearch, craftingGridData.originalOnlyItemsMap, itemContainer.slots);
-										craftingGridData.darkenSlots = {};
-										craftingGridSwitchCraftsPage(1, itemContainer, true);
-									}
-								}).show();
-						} catch (e) {
-							alert(e);
-						}
-					}
-				}));
-			}
+	var craftsCtx = {
+		elements: _elementsGUI_craftingGrid,
+		gridData: craftingGridData,
+		drawing: _drawingGUI_craftingGrid,
+		xStart: craftsSlotsXSettings.start,
+		xEnd: craftsSlotsXSettings.end,
+		yStart: craftSlotsEnd + 30,
+		columns: 5,
+		windowHeight: windowHeight,
+		switchPage: craftingGridSwitchCraftsPage,
+		getPages: craftingGridFuncs.craftsPages,
+		getPageFromCoords: craftingGridFuncs.getCraftsPageFromCoords,
+		getCoordsFromPage: craftingGridFuncs.getCraftsCoordsFromPage,
+		onSearch: function(keyword, container, uiHandler) {
+			craftingGridData.craftsTextSearch = keyword.length ? keyword : false;
+			uiHandler.setBinding('search_text_crafts', 'text', keyword.length ? keyword : Translation.translate('Search'));
+			craftingGridData.crafts = craftingGridFuncs.updateCrafts(craftingGridData.slotsKeys, craftingGridData.craftsTextSearch, craftingGridData.originalOnlyItemsMap, container.slots);
+			craftingGridData.darkenSlots = {};
+			craftingGridSwitchCraftsPage(1, container, true);
+		},
+		onSelectCraft: function(craft, container) {
+			craftingGridFuncs.selectRecipe(craft, container, craftingGridData.originalOnlyItemsExtraMap, craftingGridData.originalOnlyItemsMap, craftingGridData.originalItemsMap);
 		}
-	}
-
-	_elementsGUI_craftingGrid["search_text_crafts"] = {
-		type: "text",
-		x: _elementsGUI_craftingGrid["search_frame_crafts"].x + 10,
-		y: _elementsGUI_craftingGrid["search_frame_crafts"].y + 1,
-		z: 100,
-		text: Translation.translate('Search')/*'Search'*/,
-		font: {
-			color: android.graphics.Color.WHITE,
-			shadow: 0.5,
-			size: _elementsGUI_craftingGrid["search_frame_crafts"].height - 8
-		}
-	}
-	
-	var asdd = 0;
-	for(var y = craftsSlotsYSettings.start; y < craftsSlotsYSettings.end; y += craftsSlotsCons){
-		for(var x = craftsSlotsXSettings.start; x < craftsSlotsXSettings.end; x += craftsSlotsCons){
-			_elementsGUI_craftingGrid['item_craft_slot' + asdd] = {
-				type: "slot",
-				num: asdd,
-				x: x,
-				y: y,
-				clicker: {
-					onClick: function (itemContainerUiHandler, itemContainer, element) {
-						try{
-						var craft_ident = this.num + ((craftingGridData.lastCraftsPage || 1) - 1) * _elementsGUI_craftingGrid['crafts_x_count'];
-						var craft = craftingGridData.crafts[craft_ident];
-						craftingGridFuncs.selectRecipe(craft, itemContainer, craftingGridData.originalOnlyItemsExtraMap, craftingGridData.originalOnlyItemsMap, craftingGridData.originalItemsMap);
-						}catch(eer){alert(JSON.stringify(eer))};
-					},
-					onLongClick: function (itemContainerUiHandler, itemContainer, element) {
-						
-					}
-				},
-				size: craftsSlotsCons
-			}
-			asdd++;
-		}
-	}
-	craftingGridData.crafts_slots_count = _elementsGUI_craftingGrid['crafts_slots_count'] = asdd;
-	craftingGridData.crafts_x_count = _elementsGUI_craftingGrid['crafts_x_count'] = Math.ceil((craftsSlotsXSettings.end - craftsSlotsXSettings.start)/craftsSlotsCons);
-	craftingGridData.crafts_y_count = _elementsGUI_craftingGrid['crafts_y_count'] = Math.ceil((craftsSlotsYSettings.end - craftsSlotsYSettings.start)/craftsSlotsCons);
-	
-	craftingGridData.crafts_x_start = _elementsGUI_craftingGrid['crafts_x_start'] = craftsSlotsXSettings.start;
-	craftingGridData.crafts_y_start = _elementsGUI_craftingGrid['crafts_y_start'] = craftsSlotsYSettings.start;
-	craftingGridData.crafts_x_end = _elementsGUI_craftingGrid['crafts_x_end'] = craftsSlotsXSettings.end;
-	craftingGridData.crafts_y_end = _elementsGUI_craftingGrid['crafts_y_end'] = y - 1;
-
-	_drawingGUI_craftingGrid.push({
-		type: "line", 
-		x1: craftsSlotsXSettings.end + 30/2, 
-		y1: craftsSlotsYSettings.start, 
-		x2: craftsSlotsXSettings.end + 30/2, 
-		y2: y - 1, 
-		width: 3, 
-		color: android.graphics.Color.BLACK
-	})
-
-	var moving = false;
-	var max_y = 0;
-	var swipe_y;
-	var swipe_sum = 0;
-
-	_elementsGUI_craftingGrid.clickFrameTouchEvents.push(function (element, event) {
-		var content = {elements:_elementsGUI_craftingGrid};/* element.window.getContent(); *///getContainer().getGuiContent();
-		var itemContainerUiHandler = element.window.getContainer();
-		var itemContainer = itemContainerUiHandler.getParent();
-		if (event.type == "DOWN" && !swipe_y && event.x > _elementsGUI_craftingGrid["crafts_x_start"] && event.x < _elementsGUI_craftingGrid["crafts_x_end"] && event.y > _elementsGUI_craftingGrid["crafts_y_start"] && event.y < _elementsGUI_craftingGrid["crafts_y_end"]) {
-			swipe_y = event.y;
-		} else if (swipe_y && event.type == "MOVE") {
-			var distance = Math.abs(event.y - swipe_y);
-			function moveSwitchPage_(_n){
-				_n = (_n ? 1 : -1);
-				craftingGridSwitchCraftsPage(craftingGridData.lastCraftsPage + _n, itemContainer);
-			}
-			if (distance > 7) {
-				if (event.y > swipe_y) moveSwitchPage_(false);
-				if (event.y < swipe_y) moveSwitchPage_(true);
-				swipe_sum = 0;
-			} else {
-				swipe_sum += distance;
-				if (swipe_sum > 15) {
-					if (event.y > swipe_y) moveSwitchPage_(false);
-					if (event.y < swipe_y) moveSwitchPage_(true);
-					swipe_sum = 0;
-				}
-			}
-			swipe_y = event.y;
-		} else if (swipe_y && (event.type == "UP" || event.type == "CLICK")) {
-			swipe_y = false;
-		}
-		if (!moving) return;
-		event.y -= content.elements["crafts_slider"].scale * 15 / 2;
-		if (event.type != 'UP' && event.type != "CLICK") {
-			var page = craftingGridFuncs.getCraftsPageFromCoords(event, craftingGridFuncs.craftsPages(craftingGridData.crafts.length));
-			itemContainerUiHandler.getElement("crafts_slider").setPosition(content.elements['crafts_slider'].x, Math.max(Math.min(event.y, max_y), content.elements["crafts_slider"].start_y));
-			craftingGridSwitchCraftsPage(page, itemContainer, false, true);
-		}
-		if (event.type == "UP" || event.type == "CLICK") {
-			moving = false;
-			var pages = craftingGridFuncs.craftsPages(craftingGridData.crafts.length);
-			var page = craftingGridFuncs.getCraftsPageFromCoords(event, pages);
-			craftingGridSwitchCraftsPage(page, itemContainer);
-			var ___y = craftingGridFuncs.getCraftsCoordsFromPage(page, pages);
-			itemContainerUiHandler.getElement("crafts_slider").setPosition(_elementsGUI_craftingGrid['crafts_slider'].x, ___y);
-		}
-	})
-
-	_elementsGUI_craftingGrid["crafts_slider"] = {
-		type: "button",
-		start_y: craftsSlotsYSettings.start,
-		x: craftsSlotsXSettings.end + 30/2,
-		y: craftsSlotsYSettings.start,
-		z: 1,
-		scale: 2,
-		bitmap: 'craftsSlider',
-		bitmap2: 'craftsSliderOn'
-	}
-
-	_elementsGUI_craftingGrid["crafts_slider_frame"] = {
-		type: "frame",
-		x: craftsSlotsXSettings.end,
-		y: craftsSlotsYSettings.start - 10,
-		width: 30,
-		height: y - 1 - craftsSlotsYSettings.start + 20,
-		z: -1,
-		bitmap: 'empty1',
-		onTouchEvent: function (element, event) {
-			if (event.type == 'DOWN') {
-				moving = true;
-			}
-			if (event.type == 'CLICK') {
-				var itemContainerUiHandler = element.window.getContainer();
-				var itemContainer = itemContainerUiHandler.getParent();
-				var pages = craftingGridFuncs.craftsPages(craftingGridData.crafts.length);
-				var page = craftingGridFuncs.getCraftsPageFromCoords(event, pages);
-				craftingGridSwitchCraftsPage(page, itemContainer);
-			}
-		}
-	}
-
-	_elementsGUI_craftingGrid["crafts_slider"].x -= _elementsGUI_craftingGrid["crafts_slider"].scale*10/2;
-	max_y = y - 1 - _elementsGUI_craftingGrid["crafts_slider"].scale*15;
-	_elementsGUI_craftingGrid.crafts_max_y = max_y;
+	};
+	var craftsPageConfig = buildCraftsSection(craftsCtx);
 })();
 
 var craftsInv_elements = craftingGridGUI.getWindow('inventory').getContent();
@@ -448,11 +295,6 @@ for (var izxc = 0; izxc < 4; izxc++) {
 	BlockRenderer.enableCoordMapping(BlockID["RS_crafting_grid"], izxc, render);
 }
 
-var craftingGridFuncs = makePageHelpers(_elementsGUI_craftingGrid, {countX: "x_count", countY: "y_count", maxY: "max_y", slider: "slider_button"});
-var craftsPageHelpers = makePageHelpers(_elementsGUI_craftingGrid, {countX: "crafts_x_count", countY: "crafts_y_count", maxY: "crafts_max_y", slider: "crafts_slider"});
-craftingGridFuncs.craftsPages = craftsPageHelpers.getPages;
-craftingGridFuncs.getCraftsPageFromCoords = craftsPageHelpers.getPageFromCoords;
-craftingGridFuncs.getCraftsCoordsFromPage = craftsPageHelpers.getCoordsFromPage;
 craftingGridFuncs.isDarkenSlot = function(javaRecipe, originalOnlyItemsMap, originalItemsMap, slot){
 		if(!javaRecipe) return true;
 		if(slot && craftingGridData.darkenSlots[slot] != null) return craftingGridData.darkenSlots[slot];

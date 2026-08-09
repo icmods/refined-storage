@@ -105,11 +105,11 @@ var gridGUI = new UI.StandartWindow({
 GUIs.push(gridGUI);
 
 var gridConsPercents = 50/(575.5 - 60);
-grid_set_elements(315, 70, gridConsPercents*(UI.getScreenHeight() - 60), 0, _elementsGUI_grid, gridData, gridGUI);
+grid_set_elements(315, 70, gridConsPercents*(UI.getScreenHeight() - 60), 0, _elementsGUI_grid, gridData, gridGUI, null, gridFuncs);
 gridGUI.getWindow('main').forceRefresh();
 
 testButtons(gridGUI.getWindow('header').getContent().elements, function(){
-	grid_set_elements(315, 70, gridConsPercents*(UI.getScreenHeight() - 60), 0, _elementsGUI_grid, gridData);
+	grid_set_elements(315, 70, gridConsPercents*(UI.getScreenHeight() - 60), 0, _elementsGUI_grid, gridData, null, null, gridFuncs);
 });
 
 var inv_elements = gridGUI.getWindow('inventory').getContent();

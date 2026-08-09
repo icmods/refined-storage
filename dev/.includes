@@ -7,6 +7,9 @@ storage/disks.js
 upgrade/registry.js
 core/api.js
 gui/layout.js
+gui/pagination.js
+gui/transfer.js
+gui/crafts.js
 debugWindow.js
 translate.js
 
