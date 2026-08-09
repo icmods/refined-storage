@@ -126,253 +126,7 @@ var controllerSwitchPage = function(num, container, data, ignore){
 	}
 	return true;
 }
-function initControllerElements() {
-	var moving = false;
-	var swipe_y;
-	var swipe_sum = 0;
-	var max_y = 0;
-
-	elementsGUI_controller["click_frame"] = {
-		type: "frame",
-		x: 0,
-		y: 0,
-		z: -50,
-		width: 1000,
-		height: UI.getScreenHeight(),
-		bitmap: "empty",
-		scale: 1,
-		onTouchEvent: function (element, event) {
-			var content = {elements:elementsGUI_controller};/* element.window.getContent(); *///getContainer().getGuiContent();
-			var itemContainer = element.window.getContainer().getParent();
-			if (event.type == "DOWN" && !swipe_y && event.x > content.elements["mesh"].x && event.x < (content.elements["mesh"].x + content.elements["mesh"].width) && event.y > content.elements["mesh"].y && event.y < (content.elements["mesh"].y + content.elements["mesh"].height)) {
-				swipe_y = event.y;
-			} else if (swipe_y && event.type == "MOVE") {
-				var distance = Math.abs(event.y - swipe_y);
-				function moveSwitchPage_(_n){
-					_n = (_n ? 1 : -1);
-					var pages = controllerFuncs.getPages(Object.keys(controller_other_data.net_map).length);
-					if(!controllerSwitchPage(controller_other_data.lastPage + _n, itemContainer, controller_other_data)) return;
-					var ___y = controllerFuncs.getCoordsFromPage(controller_other_data.lastPage + _n, pages);
-					element.window.getContentProvider().elementMap.get("slider_button").setPosition(elementsGUI_controller['slider_button'].x, ___y);
-				}
-				if (distance > 7) {
-					if (event.y > swipe_y) moveSwitchPage_(false);
-					if (event.y < swipe_y) moveSwitchPage_(true);
-					swipe_sum = 0;
-				} else {
-					swipe_sum += distance;
-					if (swipe_sum > 15) {
-						if (event.y > swipe_y) moveSwitchPage_(false);
-						if (event.y < swipe_y) moveSwitchPage_(true);
-						swipe_sum = 0;
-					}
-				}
-				swipe_y = event.y;
-			} else if (swipe_y && (event.type == "UP" || event.type == "CLICK")) {
-				swipe_y = false;
-			}
-			if (!moving) return;
-			event.y -= content.elements["slider_button"].scale * 15 / 2;
-			if (event.type != 'UP' && event.type != "CLICK") {
-				var page = controllerFuncs.getPageFromCoords(event, controllerFuncs.getPages(Object.keys(controller_other_data.net_map).length));
-				controllerSwitchPage(page, itemContainer, controller_other_data);
-				element.window.getContentProvider().elementMap.get("slider_button").setPosition(content.elements['slider_button'].x, Math.max(Math.min(event.y, max_y), content.elements["slider_button"].start_y));
-			}
-			if (event.type == "UP" || event.type == "CLICK") {
-				moving = false;
-				var pages = controllerFuncs.getPages(Object.keys(controller_other_data.net_map).length);
-				var page = controllerFuncs.getPageFromCoords(event, pages);
-				controllerSwitchPage(page, itemContainer, controller_other_data);
-				var ___y = controllerFuncs.getCoordsFromPage(page, pages);
-				element.window.getContentProvider().elementMap.get("slider_button").setPosition(elementsGUI_controller['slider_button'].x, ___y);
-			}
-		}
-	}
-
-	var y = 110;
-	var percents = 0.5;
-
-	elementsGUI_controller["scale"] = {
-		type: "scale",
-		x: 50,
-		y: y,
-		direction: 1,
-		bitmap: "storage_scale_full",
-		overlay: "storage_scale_empty",
-		value: 0,
-		scale: Math.min(UI.getScreenHeight()*percents/72, 4.5),
-		overlayScale: 0
-	};
-	elementsGUI_controller["scale"].overlayScale = elementsGUI_controller["scale"].scale;
-	elementsGUI_controller['usage'] = {
-		type: "text",
-		x: 50,
-		y: elementsGUI_controller["scale"].y - 40,
-		text: Translation.translate('Usage')+": 0 FE/t",
-		font: {
-			color: android.graphics.Color.WHITE,
-			shadow: 0.5,
-			size: 20
-		}
-	}
-	elementsGUI_controller['storage'] = {
-		type: "text",
-		x: 50,
-		y: elementsGUI_controller["scale"].y + elementsGUI_controller["scale"].scale*72 + 20,
-		text: "0/0 FE",
-		font: {
-			color: android.graphics.Color.WHITE,
-			shadow: 0.5,
-			size: 18
-		}
-	}
-	elementsGUI_controller['mesh'] = {
-		type: "image", 
-		x: 0, 
-		y: y,
-		scale: elementsGUI_controller["scale"].scale*72/61,
-		bitmap: "controllerMesh"
-	}
-	elementsGUI_controller['mesh'].x = 900 - elementsGUI_controller['mesh'].scale*123;
-	
-	elementsGUI_controller['mesh'].height = elementsGUI_controller['mesh'].scale*61;
-	elementsGUI_controller['mesh'].width = elementsGUI_controller['mesh'].scale*123;
-
-	var mesh_width = Math.floor(elementsGUI_controller['mesh'].width);
-	var mesh_height = Math.floor(elementsGUI_controller['mesh'].height);
-	var slot_padding = mesh_height/2*0.1;
-	var slot_size = (mesh_height/2-slot_padding*2)*0.6;
-	var asd = 0;
-	for(var h = elementsGUI_controller['mesh'].y; h < elementsGUI_controller['mesh'].y + mesh_height; h += mesh_height/2){
-		for(var w = elementsGUI_controller['mesh'].x; w < elementsGUI_controller['mesh'].x + mesh_width; w += mesh_width/2){
-			elementsGUI_controller['block_info' + asd] = {
-				type: "text",
-				num: asd,
-				x: w + slot_padding,
-				y: h + slot_padding/2 + ((mesh_height/2-slot_padding*2)*0.4)/2,
-				z: 10,
-				text: "This is block " + mesh_width + ' : ' + mesh_height,
-				font: {
-					color: android.graphics.Color.DKGRAY,
-					shadow: 0.15,
-					size: Math.ceil((mesh_height/2-slot_padding*2)*0.2)
-				}
-			}
-			elementsGUI_controller['block_info' + asd].y -= elementsGUI_controller['block_info' + asd].font.size/2
-			elementsGUI_controller['block_count' + asd] = {
-				type: "text",
-				num: asd,
-				x: w + slot_padding*2 + slot_size,
-				y: h + (mesh_height/2 - slot_padding - slot_size/2),
-				z: 10,
-				text: "1x",
-				font: {
-					color: android.graphics.Color.DKGRAY,
-					shadow: 0.15,
-					size: Math.ceil(slot_size*0.25)
-				}
-			}
-			elementsGUI_controller['block_count' + asd].y -= elementsGUI_controller['block_count' + asd].font.size/2
-			elementsGUI_controller['block_energy_use' + asd] = {
-				type: "text",
-				num: asd,
-				x: w + slot_padding*2 + slot_size*2,
-				y: h + (mesh_height/2 - slot_padding - slot_size/2),
-				z: 10,
-				text: "0 FE/t",
-				font: {
-					color: android.graphics.Color.DKGRAY,
-					shadow: 0.15,
-					size: Math.ceil(slot_size*0.3)
-				}
-			}
-			elementsGUI_controller['block_energy_use' + asd].y -= elementsGUI_controller['block_energy_use' + asd].font.size/2
-			elementsGUI_controller['slot' + asd] = {
-				type: "slot",
-				num: asd,
-				x: w + slot_padding,
-				y: h + (mesh_height/2 - slot_padding - slot_size),
-				z: 10,
-				bitmap: "empty",
-				isTransparentBackground: true,
-				needClean: true,
-				clicker: {
-					onClick: function (position, container, tileEntity, window, canvas, scale) {
-					},
-					onLongClick: function (position, container, tileEntity, window, canvas, scale) {
-						
-					}
-				},
-				size: Math.ceil(slot_size)
-			}
-			asd++;
-		}
-	}
-	controller_other_data['max_sym'] = Math.round((mesh_width/2 - slot_padding*2)/(elementsGUI_controller['block_info0'].font.size*(5/7)));
-
-	var slider_frame_cons = 25;
-	var slider_frame_border = 7;
-	elementsGUI_controller["slider_frame"] = {
-		type: "frame",
-		x: 900 + slider_frame_cons,
-		y: y,
-		width: (1000 - (900 + slider_frame_cons) - slider_frame_cons),
-		height: elementsGUI_controller["scale"].scale*72,
-		bitmap: "slider",
-		scale: 1,
-		onTouchEvent: function (element, event) {
-			//var itemContainer = element.window.getContainer().getParent();
-			if (event.type == 'DOWN') {
-				moving = true;
-			}
-			if (event.type == 'CLICK') {
-				var pages = controllerFuncs.getPages(Object.keys(controller_other_data.net_map).length);
-				var page = controllerFuncs.getPageFromCoords(event, pages);
-				var ___y = controllerFuncs.getCoordsFromPage(page, pages);
-				element.window.getContentProvider().elementMap.get("slider_button").setPosition(elementsGUI_controller['slider_button'].x, ___y);
-			}
-		}
-	}
-
-	elementsGUI_controller["slider_button"] = {
-		type: "button",
-		x: elementsGUI_controller["slider_frame"].x + slider_frame_border,
-		start_y: elementsGUI_controller["slider_frame"].y + slider_frame_border,
-		y: elementsGUI_controller["slider_frame"].y + slider_frame_border,
-		z: 10,
-		bitmap: 'slider_buttonOff',
-		scale: (elementsGUI_controller["slider_frame"].width - slider_frame_border * 2) / 12
-	}
-	max_y = (elementsGUI_controller["slider_frame"].y + elementsGUI_controller["slider_frame"].height) - 7 - elementsGUI_controller["slider_button"].scale * 15;
-	var settings_cons = 10;
-	elementsGUI_controller["redstone_button"] = {
-		type: "button",
-		x: 0,
-		y: elementsGUI_controller['mesh'].y,
-		bitmap: 'RS_empty_button',
-		bitmap2: 'RS_empty_button_pressed',
-		scale: mesh_height*0.17/20,
-		clicker: {
-			onClick: function (itemContainerUiHandler, container, element) {
-				container.sendEvent("updateRedstoneMode", {});
-			},
-			onLongClick: function (itemContainerUiHandler, container, element) {
-			}
-		}
-	}
-	elementsGUI_controller["redstone_button"].x = elementsGUI_controller['mesh'].x - settings_cons - (20 * elementsGUI_controller["redstone_button"].scale);
-
-	elementsGUI_controller["image_redstone"] = {
-		type: "image",
-		x: elementsGUI_controller["redstone_button"].x,
-		y: elementsGUI_controller["redstone_button"].y,
-		z: 1000,
-		bitmap: "redstone_GUI_0",
-		scale: elementsGUI_controller["redstone_button"].scale*20/16,
-	}
-	controller_other_data.max_y = max_y;
-};
-initControllerElements();
+buildControllerElements(elementsGUI_controller, controller_other_data, controllerFuncs, controllerSwitchPage);
 
 const CONTROLLER_GUI = new UI.StandartWindow({
 	standart: {
@@ -391,24 +145,11 @@ const CONTROLLER_GUI = new UI.StandartWindow({
 	elements: elementsGUI_controller
 });
 GUIs.push(CONTROLLER_GUI);
-testButtons(CONTROLLER_GUI.getWindow('header').getContent().elements, initControllerElements);
+testButtons(CONTROLLER_GUI.getWindow('header').getContent().elements, function(){
+	buildControllerElements(elementsGUI_controller, controller_other_data, controllerFuncs, controllerSwitchPage);
+});
 
 var controllerFuncs = {
-	getNewTexture: function (energyScaled, isActive) {
-		if (energyScaled <= 0 || !isActive) {
-			return 'controller_off';
-		} else if (energyScaled <= 20) {
-			return 'controller_nearly_off';
-		}
-		return 'controller_on';
-	},
-	getEnergyScaled: function (scale, energy) {
-		if(!energy && energy != 0){
-			var energy = scale;
-			var scale = 100;
-		}
-		return Math.floor(energy / Config.controller.energyCapacity * scale);
-	},
 	getPages: function(_length){
 		if(_length == 0) return 1;
 		_length = Math.ceil(_length / 2);
@@ -607,31 +348,9 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		return true;
 	},
 	updateNetMap: function(_ignoreIsActive){
-		var usage = 0;
-		var net_map = {};
-		for (var i in RSNetworks[this.data.NETWORK_ID]) {
-			if (!RSNetworks[this.data.NETWORK_ID][i] || i == "info" || RSNetworks[this.data.NETWORK_ID][i].id == BlockID.RS_controller || (!RSNetworks[this.data.NETWORK_ID][i].isActive && !_ignoreIsActive)) continue;
-			var networkTile = RSNetworks[this.data.NETWORK_ID][i];
-			var id_ = networkTile.id;
-			if(!net_map[String(id_)])
-				net_map[String(id_)] = {id: id_, energy_use: 0, count: 1};
-			else
-				net_map[String(id_)].count++;
-			if (id_ == BlockID.diskDrive) {
-				var tile = World.getTileEntity(networkTile.coords.x, networkTile.coords.y, networkTile.coords.z, this.blockSource);
-				if (!tile) continue;
-				var __usage = EnergyUse['disk']*tile.data.disks;
-				usage += __usage;
-				net_map[String(id_)].energy_use += __usage;
-			} else {
-				var __usage = EnergyUse[id_] || 0;
-				for(var j in networkTile.upgrades)__usage += UpgradeRegistry.getEnergyUsage(j)*networkTile.upgrades[j];
-				usage += __usage;
-				net_map[String(id_)].energy_use += __usage;
-			}
-		}
-		this.data.net_map = net_map;
-		this.data.usage = usage;
+		var result = computeNetMap(this.data.NETWORK_ID, this.blockSource, _ignoreIsActive);
+		this.data.net_map = result.net_map;
+		this.data.usage = result.usage;
 	},
 	energyReceive: function (type, amount, voltage) {
 		amount = Math.min(amount * EnergyTypeRegistry.getValueRatio(type, 'FE'), Config.controller.controllerMaxReceive);
@@ -696,7 +415,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			this.data.containerUpdate = false;
 		}
 		if(this.data.updateModel){
-			var texture = controllerFuncs.getNewTexture(controllerFuncs.getEnergyScaled(this.data.energy), this.data.isActive);
+			var texture = getControllerTexture(getEnergyScaled(this.data.energy), this.data.isActive);
 			if(this.data.lastTexture != (this.data.lastTexture = texture)) this.refreshModel();
 			this.data.updateModel = false;
 		}
@@ -724,7 +443,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			extra.putInt('energy', this.data.energy);
 		}
 		var block_data = 0;
-		var energyScaled = controllerFuncs.getEnergyScaled(100, this.data.energy);
+		var energyScaled = getEnergyScaled(100, this.data.energy);
 		if (energyScaled <= 0) {
 			block_data = 0;
 		} else if (energyScaled <= 20) {
@@ -741,44 +460,14 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		this.container.sendEvent("refreshGui", {isActive: this.data.isActive, capacity: this.getCapacity(), redstone_mode: this.data.redstone_mode, usage: this.data.usage, energy: this.data.energy, isCreative: this.data.isCreative, net_map: this.data.net_map});
 	},
 	client: {
-		load: function(){
-			if(Config.dev)Logger.Log('Loaded Controller client tile: energy: ' + this.networkData.getInt('energy') + ' ; isActive: ' + this.networkData.getBoolean('isActive'), 'RefinedStorageDebug');
-			if(this.refreshModel)this.refreshModel();
-		},
-		refreshModel: function(eventData, connectedClient){
-			if(Config.dev)Logger.Log('Local refreshing Controller model: energy: ' + this.networkData.getInt('energy') + ' ; isActive: ' + this.networkData.getBoolean('isActive'), 'RefinedStorageDebug');
-			var newTexture = controllerFuncs.getNewTexture(controllerFuncs.getEnergyScaled(100, this.networkData.getInt('energy')), this.networkData.getBoolean('isActive'));
-			RefinedStorage.mapTexture(this, newTexture);
-		},
+		load: function(){ loadControllerClient(this); },
+		refreshModel: function(eventData, connectedClient){ refreshControllerModel(this); },
 		events: {
-			refreshModel: function(eventData, connectedClient){
-				if(Config.dev)Logger.Log('Event refreshing Controller model: energy: ' + eventData.energy + ' ; isActive: ' + eventData.isActive, 'RefinedStorageDebug');
-				var newTexture = controllerFuncs.getNewTexture(controllerFuncs.getEnergyScaled(100, eventData.energy), eventData.isActive);
-				RefinedStorage.mapTexture(eventData.coords, newTexture);
-			}
+			refreshModel: function(eventData, connectedClient){ handleControllerModelEvent(this, eventData); }
 		},
 		containerEvents: {
-			openGui: function(container, window, windowContent, eventData){
-				if(!windowContent || !window || !window.isOpened()) return;
-				var networkData = SyncedNetworkData.getClientSyncedData(eventData.name);
-				controller_other_data.networkData = networkData;
-				controller_other_data.net_map = eventData.net_map;
-				controller_other_data.isActive = eventData.isActive;
-				var headerWindow = window.getWindow('header')
-				headerWindow.getContent().drawing[2].text = eventData.isCreative ? Translation.translate("Creative Controller") : Translation.translate("Controller");
-				headerWindow.forceRefresh();
-				windowContent.elements["slider_button"].y = windowContent.elements["slider_button"].start_y;
-				windowContent.elements["image_redstone"].bitmap = 'redstone_GUI_' + (eventData.redstone_mode || 0);
-				controllerSwitchPage(1, container, controller_other_data, true);
-			},
-			refreshGui:function(container, window, windowContent, eventData){
-				if(!windowContent || !window || !window.isOpened()) return;
-				controller_other_data.net_map = eventData.net_map;
-				controller_other_data.isActive = eventData.isActive;
-				windowContent.elements["image_redstone"].bitmap = 'redstone_GUI_' + (eventData.redstone_mode || 0);
-				controllerSwitchPage(controller_other_data.lastPage, container, controller_other_data, true);
-
-			}
+			openGui: function(container, window, windowContent, eventData){ openControllerGui(this, container, window, windowContent, eventData); },
+			refreshGui:function(container, window, windowContent, eventData){ refreshControllerGui(this, container, window, windowContent, eventData); }
 		}
 	},
 	containerEvents: {

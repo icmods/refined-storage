@@ -1,15 +1,27 @@
 other.js
 header.js
+
 network/state.js
 network/topology.js
 network/info.js
+
 storage/disks.js
+
 upgrade/registry.js
+
+energy/usage.js
+energy/texture.js
+
 core/api.js
+
 gui/layout.js
 gui/pagination.js
 gui/transfer.js
 gui/crafts.js
+gui/controller_layout.js
+
+client/controller.js
+
 debugWindow.js
 translate.js
 
