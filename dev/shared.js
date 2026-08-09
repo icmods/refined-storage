@@ -14,6 +14,7 @@ ModAPI.registerAPI("RefinedStorageAPI", {
     upgrades: _RS.upgrades,
     energy: _RS.energy,
     config: _RS.config,
+    ui: _RS.ui,
     getBlocks: function() { return RS_blocks; },
     getNetworks: function() { return RSNetworks; },
     on: function(event, callback) { return _RS.on(event, callback); }
