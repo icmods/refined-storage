@@ -122,61 +122,7 @@ inv_elements.elements["_CLICKFRAME_"] = {
 	height: 251*9,
 	bitmap: "empty",
 	scale: 1,
-	onTouchEvent: function(element, event){
-		if(event.type == 'CLICK' || event.type == 'LONG_CLICK'){
-			if (!gridData.isWorkAllowed) return;
-			var itemContainerUiHandler = element.window.getContainer();
-			var itemContainer = itemContainerUiHandler.getParent();
-			var slot_id = Math.floor(event.x/251)+Math.floor(event.y/250)*4;
-			var updateFull = false;
-			var item = Player.getInventorySlot(slot_id);
-			if(item.id == 0)return;
-			//alert(JSON.stringify(item));
-			if(gridData.disksStored >= gridData.disksStorage) return
-			if(event.type == 'CLICK'){
-				var count = 1;
-			} else {
-				var count = Math.min(Item.getMaxStack(item.id), gridData.disksStorage - gridData.disksStored, item.count);
-			}
-			if(Config.dev)Logger.Log('Grid local pushing item: ' + getItemUid(item) + ' ; count: ' + count + ' ; slot: ' + slot_id + " ; extra: " + fullExtraToString(item.extra), 'RefinedStorageDebug');
-			var slotFounded = false;
-			for(var i in gridData.slotsKeys){
-				var _slotName = gridData.slotsKeys[i];
-				var _slot = itemContainer.slots[_slotName];
-				//if(Config.dev)Logger.Log('Checking item: ' + getItemUid(_slot) + " ; extra: " + fullExtraToString(_slot.extra), 'RefinedStorageDebug');
-				if(_slot && (_slot.id == 0 || (_slot.id == item.id && _slot.data == item.data && (item.extra == _slot.extra || (item.extra && _slot.extra && fullExtraToString(item.extra) == fullExtraToString(_slot.extra)))))){
-					item.extra = _slot.extra;
-					if(Config.dev)Logger.Log('Founded slot: ' + _slotName + ' : ' + JSON.stringify(_slot.asScriptable()), 'RefinedStorageDebug');
-					slotFounded = true;
-					itemContainer.setSlot(_slotName, item.id, _slot.count + count, item.data, item.extra || null);
-					gridData.setItemInfoSlot(_slotName, itemContainer);
-					if(gridData.sort == 0) updateFull = true;
-					gridData.updateGui(true, updateFull);
-					gridData.lowPriority = true;
-					break
-				}
-			}
-			if(!slotFounded){
-				var _slotName = gridData.slotsKeys.length + 'slot';
-				if(Config.dev)Logger.Log('Slot not founded, new slot name: ' + _slotName, 'RefinedStorageDebug');
-				gridData.slotsKeys.push(_slotName);
-				itemContainer.setSlot(_slotName, item.id, count, item.data, item.extra || null);
-				gridData.setItemInfoSlot(_slotName, itemContainer);
-				updateFull = true;
-				gridData.updateGui(true, updateFull);
-				gridData.lowPriority = true;
-			}
-			var map = (asdgfasdasddsad = gridData.networkData.getString('pushItemsMap', 'null')) != 'null' ? JSON.parse(asdgfasdasddsad) : [];
-			if(map.indexOf(slot_id) == -1){
-				map.push(slot_id);
-				gridData.networkData.putString('pushItemsMap', JSON.stringify(map));
-			}
-			var currentCount = gridData.networkData.getInt(slot_id, 0);
-			gridData.networkData.putInt(slot_id, currentCount + count);
-			gridData.networkData.putBoolean('update', true);
-			gridData.networkData.putBoolean('updateFull'+slot_id, updateFull);
-		}
-	}
+	onTouchEvent: createInventoryPushHandler(gridData)
 }
 function least_sort(a, b) { return a - b; };
 
@@ -185,41 +131,7 @@ function error(message) {
 	return false;
 }
 
-var gridFuncs = {
-	getPages: function(_length){
-		if(_length == 0) return 1;
-		_length = Math.ceil(_length / _elementsGUI_grid["x_count"]);
-		return _length;
-	},
-	getPageFromCoords: function(_coords, pages){
-		pages -= _elementsGUI_craftingGrid['y_count'] - 1;
-		var interval = (pages - 1) > 0 ? (_elementsGUI_grid["max_y"] - _elementsGUI_grid["slider_button"].start_y) / (pages - 1) : 0;
-		function __getY(i) {
-			return ((interval * i) + _elementsGUI_grid["slider_button"].start_y);
-		}
-		var least_dec = 10001;
-		var finish_i = 0;
-		for (var i = 0; i < pages; i++) {
-			var dec = Math.abs(Math.round(_coords.y - __getY(i)));
-			if (dec < least_dec) {
-				least_dec = dec;
-				finish_i = i;
-			}
-		};
-		var page = finish_i;
-		return page + 1;
-	},
-	getCoordsFromPage: function(page, pages){
-		pages -= _elementsGUI_craftingGrid['y_count'] - 1;
-		var interval = (pages - 1) > 0 ? (_elementsGUI_grid["max_y"] - _elementsGUI_grid["slider_button"].start_y) / (pages - 1) : 0;
-		function __getY(i) {
-			return ((interval * i) + _elementsGUI_grid["slider_button"].start_y);
-		}
-		if (page > pages) page = pages;
-		if (page < 1) page = 1;
-		return __getY(page - 1);
-	},
-}
+var gridFuncs = makePageHelpers(_elementsGUI_grid, {countX: "x_count", countY: "y_count", maxY: "max_y", slider: "slider_button"});
 
 RefinedStorage.createTile(BlockID.RS_grid, {
 	defaultValues: {
@@ -471,28 +383,7 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		tick: function(){
 			if(this.networkData.getBoolean('update', false)){
 				this.networkData.putBoolean('update', false);
-				var pushDeleteEvents = {};
-				var map = (asdgfasdasddsad = this.networkData.getString('deleteItemsMap', 'null')) != 'null' ? JSON.parse(asdgfasdasddsad) : [];
-				for(var i in map){
-					pushDeleteEvents[map[i]] = {
-						type: 'delete',
-						count: Number(this.networkData.getInt(map[i], 0)),
-						updateFull: this.networkData.getBoolean('updateFull'+map[i], false)
-					}
-					this.networkData.putInt(map[i], 0);
-				}
-				this.networkData.putString('deleteItemsMap', 'null');
-				var map = (asdgfasdasddsad = this.networkData.getString('pushItemsMap', 'null')) != 'null' ? JSON.parse(asdgfasdasddsad) : [];
-				for(var i in map){
-					pushDeleteEvents[map[i]] = {
-						type: 'push',
-						count: Number(this.networkData.getInt(map[i], 0)),
-						slot: map[i],
-						updateFull: this.networkData.getBoolean('updateFull'+map[i], false)
-					}
-					this.networkData.putInt(map[i], 0);
-				}
-				this.networkData.putString('pushItemsMap', 'null');
+				var pushDeleteEvents = buildPushDeleteEvents(this.networkData);
 				this.sendPacket("pushDeleteEvents", {pushDeleteEvents: pushDeleteEvents})
 			}
 		},

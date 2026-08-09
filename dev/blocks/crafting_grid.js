@@ -437,61 +437,7 @@ craftsInv_elements.elements["_CLICKFRAME_"] = {
 	height: 251*9,
 	bitmap: "empty",
 	scale: 1,
-	onTouchEvent: function(element, event){
-		if(event.type == 'CLICK' || event.type == 'LONG_CLICK'){
-			if (!craftingGridData.isWorkAllowed) return;
-			var itemContainerUiHandler = element.window.getContainer();
-			var itemContainer = itemContainerUiHandler.getParent();
-			var slot_id = Math.floor(event.x/251)+Math.floor(event.y/250)*4;
-			var updateFull = false;
-			var item = Player.getInventorySlot(slot_id);
-			if(item.id == 0)return;
-			//alert(JSON.stringify(item));
-			if(craftingGridData.disksStored >= craftingGridData.disksStorage) return
-			if(event.type == 'CLICK'){
-				var count = 1;
-			} else {
-				var count = Math.min(Item.getMaxStack(item.id), craftingGridData.disksStorage - craftingGridData.disksStored, item.count);
-			}
-			if(Config.dev)Logger.Log('Grid local pushing item: ' + getItemUid(item) + ' ; count: ' + count + ' ; slot: ' + slot_id + " ; extra: " + fullExtraToString(item.extra), 'RefinedStorageDebug');
-			var slotFounded = false;
-			for(var i in craftingGridData.slotsKeys){
-				var _slotName = craftingGridData.slotsKeys[i];
-				var _slot = itemContainer.slots[_slotName];
-				//if(Config.dev)Logger.Log('Checking item: ' + _slotName + " ; UID: " + getItemUid(_slot) + " ; extra: " + fullExtraToString(_slot.extra), 'RefinedStorageDebug');
-				if(_slot && (_slot.id == 0 || (_slot.id == item.id && _slot.data == item.data && (item.extra == _slot.extra || (item.extra && _slot.extra && fullExtraToString(item.extra) == fullExtraToString(_slot.extra)))))){
-					item.extra = _slot.extra;
-					if(Config.dev)Logger.Log('Founded slot: ' + _slotName + ' : ' + JSON.stringify(_slot.asScriptable()), 'RefinedStorageDebug');
-					slotFounded = true;
-					itemContainer.setSlot(_slotName, item.id, _slot.count + count, item.data, item.extra || null);
-					craftingGridData.setItemInfoSlot(_slotName, itemContainer);
-					if(craftingGridData.sort == 0) updateFull = true;
-					craftingGridData.updateGui(true, updateFull);
-					craftingGridData.lowPriority = true;
-					break
-				}
-			}
-			if(!slotFounded){
-				var _slotName = craftingGridData.slotsKeys.length + 'slot';
-				if(Config.dev)Logger.Log('Slot not founded, new slot name: ' + _slotName, 'RefinedStorageDebug');
-				craftingGridData.slotsKeys.push(_slotName);
-				itemContainer.setSlot(_slotName, item.id, count, item.data, item.extra || null);
-				craftingGridData.setItemInfoSlot(_slotName, itemContainer);
-				updateFull = true;
-				craftingGridData.updateGui(true, updateFull);
-				craftingGridData.lowPriority = true;
-			}
-			var map = (asdgfasdasddsad = craftingGridData.networkData.getString('pushItemsMap', 'null')) != 'null' ? JSON.parse(asdgfasdasddsad) : [];
-			if(map.indexOf(slot_id) == -1){
-				map.push(slot_id);
-				craftingGridData.networkData.putString('pushItemsMap', JSON.stringify(map));
-			}
-			var currentCount = craftingGridData.networkData.getInt(slot_id, 0);
-			craftingGridData.networkData.putInt(slot_id, currentCount + count);
-			craftingGridData.networkData.putBoolean('update', true);
-			craftingGridData.networkData.putBoolean('updateFull'+slot_id, updateFull);
-		}
-	}
+	onTouchEvent: createInventoryPushHandler(craftingGridData)
 };
 craftingGridGUI.getWindow('main').forceRefresh();
 
@@ -502,76 +448,12 @@ for (var izxc = 0; izxc < 4; izxc++) {
 	BlockRenderer.enableCoordMapping(BlockID["RS_crafting_grid"], izxc, render);
 }
 
-var craftingGridFuncs = {
-	getPages: function(_length){
-		if(_length == 0) return 1;
-		_length = Math.ceil(_length / _elementsGUI_craftingGrid["x_count"]);
-		return _length;
-	},
-	getPageFromCoords: function(_coords, pages){
-		pages -= _elementsGUI_craftingGrid['y_count'] - 1;
-		var interval = (pages - 1) > 0 ? (_elementsGUI_craftingGrid["max_y"] - _elementsGUI_craftingGrid["slider_button"].start_y) / (pages - 1) : 0;
-		function __getY(i) {
-			return ((interval * i) + _elementsGUI_craftingGrid["slider_button"].start_y);
-		}
-		var least_dec = 10001;
-		var finish_i = 0;
-		for (var i = 0; i < pages; i++) {
-			var dec = Math.abs(Math.round(_coords.y - __getY(i)));
-			if (dec < least_dec) {
-				least_dec = dec;
-				finish_i = i;
-			}
-		};
-		var page = finish_i;
-		return page + 1;
-	},
-	getCoordsFromPage: function(page, pages){
-		pages -= _elementsGUI_craftingGrid['y_count'] - 1;
-		var interval = (pages - 1) > 0 ? (_elementsGUI_craftingGrid["max_y"] - _elementsGUI_craftingGrid["slider_button"].start_y) / (pages - 1) : 0;
-		function __getY(i) {
-			return ((interval * i) + _elementsGUI_craftingGrid["slider_button"].start_y);
-		}
-		if (page > pages) page = pages;
-		if (page < 1) page = 1;
-		return __getY(page - 1);
-	},
-	craftsPages: function(_length){
-		if(_length == 0) return 1;
-		_length = Math.ceil(_length / _elementsGUI_craftingGrid["crafts_x_count"]);
-		return _length;
-	},
-	getCraftsPageFromCoords: function(_coords, pages){
-		pages -= _elementsGUI_craftingGrid['crafts_y_count'] - 1;
-		var interval = (pages - 1) > 0 ? (_elementsGUI_craftingGrid["crafts_max_y"] - _elementsGUI_craftingGrid["crafts_slider"].start_y) / (pages - 1) : 0;
-		if(Config.dev)Logger.Log('interval: ' + interval + ' ; pages: ' + pages + ' ; _coords_y: ' + _coords.y + ' ; crafts_slider_start_y: ' + _elementsGUI_craftingGrid["crafts_slider"].start_y + ' ; crafts_max_y: ' + _elementsGUI_craftingGrid["crafts_max_y"] + ' ; crafts_x_count: ' + _elementsGUI_craftingGrid["crafts_x_count"], 'RefinedStorageDebug');
-		function __getY(i) {
-			return ((interval * i) + _elementsGUI_craftingGrid["crafts_slider"].start_y);
-		}
-		var least_dec = 10001;
-		var finish_i = 0;
-		for (var i = 0; i < pages; i++) {
-			var dec = Math.abs(Math.round(_coords.y - __getY(i)));
-			if (dec < least_dec) {
-				least_dec = dec;
-				finish_i = i;
-			}
-		};
-		var page = finish_i;
-		return page + 1;
-	},
-	getCraftsCoordsFromPage: function(page, pages){
-		pages -= _elementsGUI_craftingGrid['crafts_y_count'] - 1;
-		var interval = (pages - 1) > 0 ? (_elementsGUI_craftingGrid["crafts_max_y"] - _elementsGUI_craftingGrid["crafts_slider"].start_y) / (pages - 1) : 0;
-		if(Config.dev)Logger.Log('interval: ' + interval + ' ; pages: ' + pages + ' ; page: ' + page + ' ; crafts_slider_start_y: ' + _elementsGUI_craftingGrid["crafts_slider"].start_y + ' ; crafts_max_y: ' + _elementsGUI_craftingGrid["crafts_max_y"] + ' ; crafts_x_count: ' + _elementsGUI_craftingGrid["crafts_x_count"], 'RefinedStorageDebug');
-		function __getY(i) {
-			return ((interval * i) + _elementsGUI_craftingGrid["crafts_slider"].start_y);
-		}
-		if (page > pages) page = pages;
-		if (page < 1) page = 1;
-		return __getY(page - 1);
-	},
-	isDarkenSlot: function(javaRecipe, originalOnlyItemsMap, originalItemsMap, slot){
+var craftingGridFuncs = makePageHelpers(_elementsGUI_craftingGrid, {countX: "x_count", countY: "y_count", maxY: "max_y", slider: "slider_button"});
+var craftsPageHelpers = makePageHelpers(_elementsGUI_craftingGrid, {countX: "crafts_x_count", countY: "crafts_y_count", maxY: "crafts_max_y", slider: "crafts_slider"});
+craftingGridFuncs.craftsPages = craftsPageHelpers.getPages;
+craftingGridFuncs.getCraftsPageFromCoords = craftsPageHelpers.getPageFromCoords;
+craftingGridFuncs.getCraftsCoordsFromPage = craftsPageHelpers.getCoordsFromPage;
+craftingGridFuncs.isDarkenSlot = function(javaRecipe, originalOnlyItemsMap, originalItemsMap, slot){
 		if(!javaRecipe) return true;
 		if(slot && craftingGridData.darkenSlots[slot] != null) return craftingGridData.darkenSlots[slot];
 		var values = javaRecipe.getEntryCollection().iterator();
@@ -584,8 +466,8 @@ var craftingGridFuncs = {
 		}
 		if(slot) craftingGridData.darkenSlots[slot] = false;
 		return false;
-	},
-	updateCrafts: function(items, craftsTextSearch, onlyItemsMap, _object){
+	};
+	craftingGridFuncs.updateCrafts = function(items, craftsTextSearch, onlyItemsMap, _object){
 		var millis = java.lang.System.currentTimeMillis();
 		var inventoryItems = searchItem(-1, -1, true);
 		var inventoryOnlyItemsMap = {};
@@ -598,8 +480,8 @@ var craftingGridFuncs = {
 		var sorted = RefinedStorage.sortCrafts(items, craftsTextSearch || null, Object.assign(inventoryOnlyItemsMap, onlyItemsMap), _object, inventoryItems, craftingGridData.isDarkenMap);
 		if(Config.dev)Logger.Log('Crafts array sorted on: ' + (java.lang.System.currentTimeMillis() - millis), "RefinedStorageDebug");
 		return sorted;
-	},
-	selectRecipe: function(javaRecipe, container, originalOnlyItemsExtraMap, originalOnlyItemsMap, originalItemsMap){
+	};
+	craftingGridFuncs.selectRecipe = function(javaRecipe, container, originalOnlyItemsExtraMap, originalOnlyItemsMap, originalItemsMap){
 		if (!javaRecipe) return false;
 		var result_item = javaRecipe.getResult();
 		if(!result_item) return false;
@@ -654,8 +536,8 @@ var craftingGridFuncs = {
 		}
 		//container.sendEvent('selectRecipe', {uid: javaRecipe.getRecipeUid()});
 		return true;
-	},
-	provideCraft: function(count){
+	};
+	craftingGridFuncs.provideCraft = function(count){
 		if(!craftingGridData.selectedRecipe) return false;
 		var _data = Object.assign({}, craftingGridData.selectedRecipe);
 		_data.count = count;
@@ -663,8 +545,7 @@ var craftingGridFuncs = {
 		delete _data.result;
 		craftingGridData.container.sendEvent('provideCraft', _data);
 		return true;
-	}
-}
+	};
 
 RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_crafting_grid, {
 	blockInfo: {
@@ -840,28 +721,7 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_crafting_grid, {
 			if(this.networkData.getBoolean('update', false)){
 				this.updateCrafts = true;
 				this.networkData.putBoolean('update', false);
-				var pushDeleteEvents = {};
-				var map = (asdgfasdasddsad = this.networkData.getString('deleteItemsMap', 'null')) != 'null' ? JSON.parse(asdgfasdasddsad) : [];
-				for(var i in map){
-					pushDeleteEvents[map[i]] = {
-						type: 'delete',
-						count: Number(this.networkData.getInt(map[i], 0)),
-						updateFull: this.networkData.getBoolean('updateFull'+map[i], false)
-					}
-					this.networkData.putInt(map[i], 0);
-				}
-				this.networkData.putString('deleteItemsMap', 'null');
-				var map = (asdgfasdasddsad = this.networkData.getString('pushItemsMap', 'null')) != 'null' ? JSON.parse(asdgfasdasddsad) : [];
-				for(var i in map){
-					pushDeleteEvents[map[i]] = {
-						type: 'push',
-						count: Number(this.networkData.getInt(map[i], 0)),
-						slot: map[i],
-						updateFull: this.networkData.getBoolean('updateFull'+map[i], false)
-					}
-					this.networkData.putInt(map[i], 0);
-				}
-				this.networkData.putString('pushItemsMap', 'null');
+				var pushDeleteEvents = buildPushDeleteEvents(this.networkData);
 				this.sendPacket("pushDeleteEvents", {pushDeleteEvents: pushDeleteEvents})
 			}
 			if(this.updateCrafts && this.ticks%20 == 0){
