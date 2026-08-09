@@ -212,7 +212,7 @@ GUIs.push(interfaceGUI);
 
 testButtons(interfaceGUI.getWindow('header').getContent().elements, initInterfaceElements);
 
-importSlotsMap = {};
+var importSlotsMap = {};
 for(var asdl = 0; asdl < 9; asdl++){
 	importSlotsMap['slot_import'+asdl] = asdl;
 	importSlotsMap[asdl] = 'slot_import'+asdl;

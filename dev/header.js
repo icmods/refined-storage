@@ -71,12 +71,12 @@ const RefinedStorage = {
 		if(!params.client.load) params.client.load = function(){
 			if(this.pre_load)this.pre_load();
 			if(this.refreshModel)this.refreshModel();
-			if(this.post_load)this.pre_load();
+			if(this.post_load)this.post_load();
 		}
 		if(!params.client.unload) params.client.unload = function(){
 			if(this.pre_unload)this.pre_unload();
 			BlockRenderer.unmapAtCoords(this.x, this.y, this.z);
-			if(this.post_unload)this.pre_unload();
+			if(this.post_unload)this.post_unload();
 		}
 		if(!params.defaultValues.upgrades)params.defaultValues.upgrades = {};
 		if(!params.upgradesSlots)params.upgradesSlots = [];
@@ -217,12 +217,13 @@ const RefinedStorage = {
 			params.redstone = function (params) {
 				this.data.last_redstone_event = params;
 				if(!this.data.redstone_mode) return;
-				if(this.redstoneAllowActive(params)){
+				var _activeState = this.redstoneAllowActive(params);
+				if(_activeState){
 					this.setActive(true);
 				} else {
 					this.setActive(false);
 				}
-				if (this.post_redstone) this.post_redstone(state);
+				if (this.post_redstone) this.post_redstone(_activeState);
 			}
 		}
 		if(!params.redstoneAllowActive){

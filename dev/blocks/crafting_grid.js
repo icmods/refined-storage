@@ -194,7 +194,7 @@ craftingGridFuncs.getCraftsCoordsFromPage = craftsPageHelpers.getCoordsFromPage;
 			onClick: function (itemContainerUiHandler, itemContainer, element) {
 				craftingGridData.selectedRecipe = null;
 				itemContainer.setSlot('craft_result', 0, 0, 0);
-				for(i = 0; i < 9; i++){
+				for(var i = 0; i < 9; i++){
 					itemContainer.setSlot('craft_slot' + i, 0, 0, 0);
 					itemContainer.setSlot('WB_craft_slot' + i, 0, 0, 0);
 				}

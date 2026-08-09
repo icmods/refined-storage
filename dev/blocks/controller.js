@@ -218,9 +218,9 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 				var bck = this.blockSource.getBlock(coordss.x, coordss.y, coordss.z);
 				if (RS_blocks.indexOf(bck.id) != -1) {
 					if(bck.id == BlockID.RS_cable){
-						for(var i in RSNetworks){
-							if(RSNetworks[i][cts(coordss)]){
-								delete RSNetworks[i][cts(coordss)];
+						for(var j in RSNetworks){
+							if(RSNetworks[j][cts(coordss)]){
+								delete RSNetworks[j][cts(coordss)];
 								if(InnerCore_pack.packVersionCode < 120) this.blockSource.destroyBlock(coordss.x, coordss.y, coordss.z, true);
 								else this.blockSource.breakBlock(coordss.x, coordss.y, coordss.z, true);
 								if(InnerCore_pack.packVersionCode < 120)Block.onBlockDestroyed(coordss, bck, false, Player.get());
@@ -432,7 +432,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		}
 		if(!isDropAllowed && isDropAllowed !== undefined) return;
 		this.data.LAST_NETWORK_ID = this.data.NETWORK_ID;
-		this.data.NETWORK_ID == "f";
+		this.data.NETWORK_ID = "f";
 		if(this.data.isCreative){
 			this.blockSource.spawnDroppedItem(this.x + 0.5, this.y + 0.5, this.z + 0.5, BlockID['RS_controller'], 1, 3, null);
 			return;
