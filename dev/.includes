@@ -14,16 +14,18 @@ energy/texture.js
 
 core/api.js
 
+translate.js
+
 gui/layout.js
 gui/pagination.js
 gui/transfer.js
 gui/crafts.js
 gui/controller_layout.js
+gui/precraft.js
 
 client/controller.js
 
 debugWindow.js
-translate.js
 
 items/disk.js
 items/craftItems.js

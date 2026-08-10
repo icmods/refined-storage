@@ -458,6 +458,9 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 					gridData.updateGui(eventData.refresh, eventData.updateFilters, true);
 				}
 			}
+		},
+		openCraftPreview: function(container, window, content, eventData){
+			openCraftPreview(container, eventData);
 		}
 	},
 	containerEvents: {
