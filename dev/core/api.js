@@ -69,7 +69,9 @@ var _RS = {
 		buildCraftsSection: function(ctx) { return buildCraftsSection(ctx); },
 		makePageHelpers: function(elements, config) { return makePageHelpers(elements, config); },
 		createInventoryPushHandler: function(data) { return createInventoryPushHandler(data); },
-		buildPushDeleteEvents: function(networkData) { return buildPushDeleteEvents(networkData); }
+		buildPushDeleteEvents: function(networkData) { return buildPushDeleteEvents(networkData); },
+		openCraftPreview: function(container, data) { openCraftPreview(container, data); },
+		createCraftPreviewPostData: function(data) { return createCraftPreviewPostData(data); }
 	},
 
 	getBlocks: function() { return RS_blocks; },
