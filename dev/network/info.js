@@ -561,6 +561,8 @@ var NetworkInfo = {
 						};
 						this.addItemAddedListener(listener, 0);
 						_craft_.currentCrafts.push(cra);
+					} else {
+						_craft_.currentCrafts.push(cra);
 					}
 				}
 			},
