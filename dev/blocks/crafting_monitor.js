@@ -35,18 +35,24 @@ function createProvidedCraftPostData(_data){
 	var newData = [];
 	for(var i in _data.results){
 		var result = _data.results[i];
-		var ingridient = getIngridientItem(_data.ingridients, result);
 		var craftingTxt = Translation.translate("Crafting") + ": " + (result.count || 1);
-		var storedTxt = "";
-		if (ingridient && ingridient.need > 0 && (ingridient.count - ingridient.need) > 0) {
-			storedTxt = Translation.translate("Stored") + ": " + (ingridient.count - ingridient.need);
-		}
-		newData.push([{id: result.id, data: result.data}, craftingTxt, storedTxt, true]);
+		newData.push([{id: result.id, data: result.data}, craftingTxt, "", true]);
 	}
-	for(var i in _data.ingridients){
-		var ingridient = _data.ingridients[i];
-		var storedTxt = Translation.translate("Stored") + ": " + (ingridient.count || 0);
-		newData.push([{id: ingridient.id, data: ingridient.data}, storedTxt, '']);
+	if(_data.crafts)for(var ci = 0; ci < _data.crafts.length; ci++){
+		var cra = _data.crafts[ci];
+		if(!cra || !cra.completedIngridients) continue;
+		for(var ii = 0; ii < cra.completedIngridients.length; ii++){
+			var ing = cra.completedIngridients[ii];
+			if(!ing || !ing.id) continue;
+			var label = "";
+			if(ing.need > 0){
+				label = Translation.translate("Stored") + ": " + (ing.count || 0) + " / " + Translation.translate("Missing") + ": " + ing.need;
+				newData.unshift([{id: ing.id, data: ing.data, need: ing.need}, label, ""]);
+			} else {
+				label = Translation.translate("Stored") + ": " + (ing.count || 0);
+				newData.push([{id: ing.id, data: ing.data}, label, ""]);
+			}
+		}
 	}
 	return newData;
 }
@@ -273,7 +279,10 @@ function mapProvidingCrafts(value){
 	return {
 		result: value.result,
 		results: value.results,
-		ingridients: value.ingridients
+		ingridients: value.ingridients,
+		crafts: value.crafts ? value.crafts.map(function(c){ return {completedIngridients: c.completedIngridients, craftable: c.craftable}; }) : [],
+		totalSteps: value.totalSteps || 0,
+		currentStep: (value.completedCrafts ? value.completedCrafts.length : 0)
 	}
 }
 
@@ -294,8 +303,38 @@ RefinedStorage.createTile(BlockID.RS_craftingMonitor, {
 	getScreenByName: function(screenName) {
 		return craftingMonitorGUI;
 	},
-	pre_init: function(){},
+	pre_init: function(){
+		var tile = this;
+		tile._monitorListener = function(info) {
+			Logger.Log('[MON] Refresh triggered: tasks=' + info.craftingTasks.length + ' providing=' + info.providingCrafts.length, 'RS_DEBUG');
+			tile.data.refreshCurPage = true;
+		};
+	},
 	post_init: function () {},
+	onWindowOpen: function(container, client){
+		if(this.data.NETWORK_ID == 'f' || !RSNetworks[this.data.NETWORK_ID]) return;
+		var info = RSNetworks[this.data.NETWORK_ID].info;
+		if (info && info.addMonitorListener) {
+			info.addMonitorListener(this._monitorListener);
+			Logger.Log('[MON] Listener ADDED: netId=' + this.data.NETWORK_ID + ' listeners=' + info.monitorListeners.length, 'RS_DEBUG');
+		}
+	},
+	onWindowClose: function(){
+		if(this.data.NETWORK_ID == 'f' || !RSNetworks[this.data.NETWORK_ID]) return;
+		var info = RSNetworks[this.data.NETWORK_ID].info;
+		if (info && info.removeMonitorListener) {
+			info.removeMonitorListener(this._monitorListener);
+			Logger.Log('[MON] Listener REMOVED: listeners=' + info.monitorListeners.length, 'RS_DEBUG');
+		}
+	},
+	post_update_network: function(net_id){
+		if (this.data.LAST_NETWORK_ID != 'f' && RSNetworks[this.data.LAST_NETWORK_ID]) {
+			var oldInfo = RSNetworks[this.data.LAST_NETWORK_ID].info;
+			if (oldInfo && oldInfo.removeMonitorListener) {
+				oldInfo.removeMonitorListener(this._monitorListener);
+			}
+		}
+	},
 	refreshGui: function(first, client, providingCraft){
 		var _data = {
 			name: this.networkData.getName() + '',
@@ -317,6 +356,12 @@ RefinedStorage.createTile(BlockID.RS_craftingMonitor, {
 		this.sendPacket("refreshModel", {block_data: this.data.block_data, isActive: this.data.isActive, coords: {x: this.x, y: this.y, z: this.z}});
 	},
 	containerEvents: {},
+	tick: function(){
+		if(this.data.refreshCurPage){
+			this.data.refreshCurPage = false;
+			this.refreshGui(false);
+		}
+	},
 	client: {
 		refreshModel: function(){
 			var render = new ICRender.Model();

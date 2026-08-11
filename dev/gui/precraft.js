@@ -61,7 +61,7 @@ preCraftGUI_location.x = (1000-preCraftGUI_location.width)/2
 var preCraftCountGUI_elements = {};
 var preCraftGUI = new UI.Window({
 	location: preCraftGUI_location,
-	drawing: [{type: 'color', color: android.graphics.Color.argb(0,0,0,0)}],
+	drawing: [],
 	elements: preCraftGUI_elements
 });
 
@@ -591,8 +591,6 @@ preCraftCountGUI.setEventListener({
 			onClick: function(itemContainerUiHandler, itemContainer, element){
 				if(!preCraftdata.container || !preCraftdata.selectedItem) return;
 				preCraftdata.container.sendEvent("craftPreview", {item: preCraftdata.selectedItem, count: preCraftdata.craftCount});
-				preCraftCountGUI.close();
-				backgroundGUI.close();
 			}
 		}
 	}
@@ -662,18 +660,25 @@ function createCraftPreviewPostData(_data){
 	var newData = [];
 	for(var i in _data.results){
 		var result = _data.results[i];
-		var ingridient = getIngridientItem(_data.ingridients, result);
 		var toCraft = Translation.translate("To craft") + ": " + (result.count || 1);
-		var available = "";
-		if (ingridient && ingridient.need > 0 && (ingridient.count - ingridient.need) > 0){
-			available = Translation.translate("Available") + ": " + (ingridient.count - ingridient.need);
-		}
+		var available = result.count > 0 ? Translation.translate("Available") + ": " + result.count : "";
 		newData.push([{id: result.id, data: result.data}, toCraft, available]);
 	}
-	for(var i in _data.ingridients){
-		var ingridient = _data.ingridients[i];
-		var available = Translation.translate("Available") + ": " + (ingridient.count || 0);
-		newData.push([{id: ingridient.id, data: ingridient.data}, available, '']);
+	if(_data.crafts)for(var ci = 0; ci < _data.crafts.length; ci++){
+		var cra = _data.crafts[ci];
+		if(!cra || !cra.completedIngridients) continue;
+		for(var ii = 0; ii < cra.completedIngridients.length; ii++){
+			var ing = cra.completedIngridients[ii];
+			if(!ing || !ing.id) continue;
+			var label = "";
+			if(ing.need > 0){
+				label = Translation.translate("Available") + ": " + (ing.count || 0) + " / " + Translation.translate("Missing") + ": " + ing.need;
+				newData.unshift([{id: ing.id, data: ing.data, need: ing.need}, label, ""]);
+			} else {
+				label = Translation.translate("Available") + ": " + (ing.count || 0);
+				newData.push([{id: ing.id, data: ing.data}, label, ""]);
+			}
+		}
 	}
 	return newData;
 }
@@ -681,9 +686,16 @@ function createCraftPreviewPostData(_data){
 function openCraftPreview(container, _data){
 	preCraftdata.container = container;
 	preCraftdata.craftable = _data.craftable;
+	if (_data.errorType) {
+		var errorMsg = Translation.translate("Request failed");
+		if (_data.errorType === "RECURSIVE") errorMsg += "\n" + Translation.translate("One of the crafting ingredients ended up needing") + "\n" + Translation.translate("itself.");
+		if (_data.errorType === "TOO_COMPLEX") errorMsg += "\n" + Translation.translate("The crafting task calculation was too complex") + "\n" + Translation.translate("and was stopped to avoid server strain.");
+		if (_data.errorType === "MISSING") errorMsg += "\n" + Translation.translate("Missing") + ": " + Translation.translate("ingredients");
+		alert(errorMsg);
+	}
 	var postData = createCraftPreviewPostData(_data);
-	preSelectCraftItem(_data.results[0]);
+	if (_data.results && _data.results[0]) preSelectCraftItem(_data.results[0]);
 	preCraftSwitchPage(1, postData);
-	backgroundGUI.open();
+	preCraftCountGUI.close();
 	preCraftGUI.open();
 }

@@ -131,6 +131,7 @@ const RefinedStorage = {
 					this.container.setSlotAddTransferPolicy(this.upgradesSlots[i], {
 						transfer: function(itemContainer, slot, id, count, data, extra, player){
 							count = 1;
+							var upgrade;
 							if(!(upgrade = UpgradeRegistry.upgrades[id]) || itemContainer.getSlot(slot).id != 0) return 0
 							if(tile.data.upgrades[upgrade.nameID]){
 								if(upgrade.maxStack && tile.data.upgrades[upgrade.nameID] >= upgrade.maxStack) return 0;
@@ -163,6 +164,7 @@ const RefinedStorage = {
 		if (!params.update_network) {
 			params.update_network = function (net_id, _first) {
 				if (this.pre_update_network) if(this.pre_update_network(net_id)) return true;
+				var netElement;
 				if(net_id == 'f' && RSNetworks[this.data.NETWORK_ID] && (netElement = RSNetworks[this.data.NETWORK_ID][cts(this)]) && netElement.id == this.blockInfo.id) delete RSNetworks[this.data.NETWORK_ID][cts(this)];
 				this.data.LAST_NETWORK_ID = this.data.NETWORK_ID;
 				this.data.NETWORK_ID = net_id;
@@ -284,6 +286,7 @@ const RefinedStorage = {
 		}
 		if(!params.getNetworkTile){
 			params.getNetworkTile = function () {
+				var answ;
 				if(this.data.NETWORK_ID != "f" && RSNetworks[this.data.NETWORK_ID] && (answ = RSNetworks[this.data.NETWORK_ID][this.coords_id()])) return answ;
 			}
 		}
@@ -295,7 +298,15 @@ const RefinedStorage = {
 		if(!this.paramsMap[id1]) throw '[RefinedStorageError - RefinedStorage.copy] TileEntity with this id is not registered';
 		var params1 = Object.assign({}, this.paramsMap[id1]);
 		delete params1.tick;
-		TileEntity.registerPrototype(id2, Object.assign(params1, params));
+		for(var key in params){
+			if(key === 'defaultValues' && params1.defaultValues){
+				Object.assign(params1.defaultValues, params.defaultValues);
+			} else {
+				params1[key] = params[key];
+			}
+		}
+		this.paramsMap[id2] = params1;
+		TileEntity.registerPrototype(id2, params1);
 	},
 	mapTexture: function (coords, texture, meta) {
 		meta = meta || 0;

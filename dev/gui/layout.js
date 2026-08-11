@@ -209,6 +209,17 @@ function buildStorageSlots(ctx) {
 						var slot = ctx.gridData.slotsKeys[_num];
 						var slotItem = itemContainer.slots[slot];
 						if(!slotItem || slotItem.id == 0) return;
+						if(slotItem.count == 0){
+							if(typeof preSelectCraftItem !== 'undefined'){
+								preCraftdata.container = itemContainer;
+								preSelectCraftItem(slotItem);
+								var maxStack = Item.getMaxStack(slotItem.id);
+								preSetCraftCount(maxStack);
+								if(typeof backgroundGUI !== 'undefined') backgroundGUI.open();
+								preCraftCountGUI.open();
+							}
+							return;
+						}
 						var _count = 1;
 						var updateFull = false;
 						if(Config.dev)Logger.Log('Deleting slot: ' + slot + ' ; num: ' + this.num + '(' + _num + ') ; lastPage: ' + ctx.gridData.lastPage + ' ; count: ' + _count + ' ; x_count: ' + ctx.x_count, 'RefinedStorageDebug');
@@ -238,7 +249,7 @@ function buildStorageSlots(ctx) {
 							}
 						}
 						ctx.gridData.setItemInfoSlot(slot, itemContainer);
-						var map = (asdgfasdasddsad = ctx.gridData.networkData.getString('deleteItemsMap', 'null')) != 'null' ? JSON.parse(asdgfasdasddsad) : [];
+						var asdgfasdasddsad; var map = (asdgfasdasddsad = ctx.gridData.networkData.getString('deleteItemsMap', 'null')) != 'null' ? JSON.parse(asdgfasdasddsad) : [];
 						if(map.indexOf(slot) == -1){
 							map.push(slot);
 							ctx.gridData.networkData.putString('deleteItemsMap', JSON.stringify(map));
@@ -256,6 +267,17 @@ function buildStorageSlots(ctx) {
 						var slot = ctx.gridData.slotsKeys[_num];
 						var slotItem = itemContainer.slots[slot];
 						if(!slotItem || slotItem.id == 0) return;
+						if(slotItem.count == 0){
+							if(typeof preSelectCraftItem !== 'undefined'){
+								preCraftdata.container = itemContainer;
+								preSelectCraftItem(slotItem);
+								var maxStack = Item.getMaxStack(slotItem.id);
+								preSetCraftCount(maxStack);
+								if(typeof backgroundGUI !== 'undefined') backgroundGUI.open();
+								preCraftCountGUI.open();
+							}
+							return;
+						}
 						var maxStack = Item.getMaxStack(slotItem.id);
 						var this_item = searchItem(slotItem.id, slotItem.data, false, true);
 						var _count = this_item && this_item.count < maxStack && this_item.extra == slotItem.extra ? Math.min(slotItem.count, maxStack - this_item.count) : Math.min(slotItem.count, maxStack);
@@ -288,7 +310,7 @@ function buildStorageSlots(ctx) {
 						}
 						ctx.gridData.setItemInfoSlot(slot, itemContainer);
 						ctx.gridData.lowPriority = true;
-						var map = (asdgfasdasddsad = ctx.gridData.networkData.getString('deleteItemsMap', 'null')) != 'null' ? JSON.parse(asdgfasdasddsad) : [];
+						var asdgfasdasddsad; var map = (asdgfasdasddsad = ctx.gridData.networkData.getString('deleteItemsMap', 'null')) != 'null' ? JSON.parse(asdgfasdasddsad) : [];
 						if(map.indexOf(slot) == -1){
 							map.push(slot);
 							ctx.gridData.networkData.putString('deleteItemsMap', JSON.stringify(map));
@@ -349,7 +371,7 @@ function buildStorageSlider(ctx) {
 			}
 		}
 	}
-	ctx.elements["slider_frame"].x = ctx.grid_end_x + (1000 - ctx.grid_end_x - ctx.elements["slider_frame"].width) / 2;
+	ctx.elements["slider_frame"].x = ctx.grid_end_x + ctx.cons / 3;
 	ctx.elements["slider_button"] = {
 		type: "button",
 		x: ctx.elements["slider_frame"].x + slider_frame_border,
@@ -539,6 +561,7 @@ function grid_set_elements(x, y, cons, limit, elementsGUI_grid, grid_Data, _wind
 		y: y,
 		cons: cons,
 		limit: limit,
+		x_count: grid_Data.x_count,
 		elements: elementsGUI_grid,
 		gridData: grid_Data,
 		gridSwitchPage: __gridSwitchPage || _gridSwitchPage__,

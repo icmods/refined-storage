@@ -72,7 +72,7 @@ function gridSwitchPage(page, container, ignore, dontMoveSlider){
 		var item = slots[slotsKeys[i]] || { id: 0, data: 0, count: 0, extra: null };
 		//container.markSlotDirty("slot" + a);
 		container.markSlotDirty("slot" + a);
-		elements_.get("slot" + a).setBinding('text', cutNumber(item.count, true) + "");
+		elements_.get("slot" + a).setBinding('text', (!item.count ? 'Craft' : cutNumber(item.count, true) + ""));
 		//container.setText("slot" + a, cutNumber(item.count));
 		container.setSlot("slot" + a, item.id, item.count, item.data, item.extra || null);
 	}
@@ -176,6 +176,7 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		if(this.data.NETWORK_ID == 'f') return;
 		var coords_id = this.coords_id();
 		RSNetworks[this.data.NETWORK_ID][coords_id].isOpenedGrid = false;
+		var iIndex;
 		if((iIndex = RSNetworks[this.data.NETWORK_ID].info.openedGrids.findIndex(function(element){return cts(element) == coords_id})) != -1) RSNetworks[this.data.NETWORK_ID].info.openedGrids.splice(iIndex, 1);
 	},
 	onWindowOpen: function(container, client){
@@ -188,6 +189,12 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 	pre_init: function(){
 		this.container.setGlobalGetTransferPolicy({
 			transfer: function(itemContainer, slot, id, count, data, extra, player){
+				return 0;
+			}
+		})
+		this.container.setGlobalAddTransferPolicy({
+			transfer: function(itemContainer, slot, id, count, data, extra, player){
+				if(slot[0] >= '0' && slot[0] <= '9') return count;
 				return 0;
 			}
 		})
@@ -225,13 +232,14 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 				}
 				if(event.type == 'push'){
 					var item = player.getInventorySlot(event.slot);
-					if(item.id == 0) return;
+					if(item.id == 0) continue;
 					var count = Math.min(event.count, item.count);
 					var pushed = this.pushItem(item, count, true);
 					if(pushed < count){
 						player.setInventorySlot(event.slot, item.id, item.count - (count - pushed), item.data, item.extra);
 					}
-					if((_index = this.originalItemsMap().indexOf(getItemUid(item))) != -1)this.container.markSlotDirty(_index+'slot');
+					var _index;
+				if((_index = this.originalItemsMap().indexOf(getItemUid(item))) != -1)this.container.markSlotDirty(_index+'slot');
 					this.items();
 					this.refreshGui(false, false, item.count <= count || event.updateFull);
 					delete this.data.pushDeleteEvents[p][i];
@@ -241,7 +249,8 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 					var itemMaxStack = Item.getMaxStack(item.id);
 					var this_item = searchItem(item.id, item.data, item.extra, false, true, p);
 					var count = this_item && this_item.count < itemMaxStack ? Math.min(event.count, item.count, itemMaxStack - this_item.count) : Math.min(event.count, item.count/* , itemMaxStack*emptySlots.length */);
-					if((res = this.deleteItem(item, count, true)) < count) {
+					var res;
+				if((res = this.deleteItem(item, count, true)) < count) {
 						var _extra = (this_item ? this_item.extra : item.extra);
 						player.addItemToInventory(item.id, count - res, item.data, _extra || null, true);
 						this.items();
@@ -272,19 +281,50 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 			return 1;
 		}
 	},
+	originalCrafts: function(){
+		if (!this.isWorkAllowed()) return {};
+		var info = RSNetworks[this.data.NETWORK_ID].info;
+		var items = this.originalItems();
+		var itemMap = {};
+		for(var i = 0; i < items.length; i++) itemMap[items[i].id + '_' + items[i].data] = true;
+		var crafts = {};
+		for(var uid in info.crafts){
+			if(!itemMap[uid]){
+				var parts = uid.split('_');
+				crafts[uid] = {id: parseInt(parts[0]), data: parseInt(parts[1]), count: 0};
+			}
+		}
+		if(Config.dev)Logger.Log('[CRAFT] originalCrafts: items=' + items.length + ' itemMap=' + JSON.stringify(Object.keys(itemMap)) + ' crafts=' + JSON.stringify(Object.keys(crafts)), 'RefinedStorageDebug');
+		return crafts;
+	},
 	items: function (forced) {
 		if (!this.isWorkAllowed()) {
 			return [];
 		}
 		var items = this.originalItems();
-		var slotsKeys = Object.keys(this.container.slots);
-		for(var i = 0; i < Math.max(slotsKeys.length, items.length); i++){
-			var slot = this.container.getSlot(i+'slot');
-			var slot2 = items[i] || {id:0, data:0, count:0, extra: null};
-			if(forced || !compareSlots(slot, slot2)){
-				this.container.setSlot(i+'slot', slot2.id, slot2.count, slot2.data, slot2.extra || null);
-			}
+		var allSlots = Object.keys(this.container.slots);
+		for (var ci = 0; ci < allSlots.length; ci++) {
+			if (allSlots[ci][0] >= '0' && allSlots[ci][0] <= '9') this.container.setSlot(allSlots[ci], 0, 0, 0);
 		}
+		var crafts = this.originalCrafts();
+		var craftsPush = Object.keys(crafts);
+		var craftSlots = [];
+		for(var i = 0; i < items.length; i++){
+			this.container.setSlot(i+'slot', items[i].id, items[i].count, items[i].data, items[i].extra || null);
+			var uid1 = items[i].id + '_' + items[i].data;
+			if(crafts[uid1]) craftsPush.splice(craftsPush.indexOf(uid1), 1);
+			else if(crafts[items[i].id + '_-1']) craftsPush.splice(craftsPush.indexOf(items[i].id + '_-1'), 1);
+			craftSlots.push(i+'slot');
+		}
+		for(var k in craftsPush){
+			var slotId = items.length + Number(k);
+			var splitedItem = craftsPush[k].split('_');
+			var item = {id: Number(splitedItem[0]), data: Number(splitedItem[1]), count: 0};
+			this.container.setSlot(slotId + 'slot', item.id, 0, item.data);
+			items.push(item);
+			craftSlots.push(slotId + 'slot');
+		}
+		this.data.craftSlots = craftSlots;
 		this.container.sendChanges();
 		return items;
 	},
@@ -405,8 +445,13 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 					if(Config.dev)Logger.Log((nonlocal ? 'Server ' : 'Local ') + (refresh ? 'Updating' : 'Openning') + ' window: refresh:' + refresh + ' updateFilters:' + updateFilters + ' eventdata:' + JSON.stringify(eventData), 'RefinedStorageDebug');
 					delete container.slots.bindings;
 					delete container.slots.slots;
+					var slotsCount = content.elements.slots_count || 0;
+					for (var sc = 0; sc < slotsCount; sc++) {
+						container.setSlot('slot' + sc, 0, 0, 0, null);
+						if (content.elements['slot' + sc]) content.elements['slot' + sc].darken = false;
+					}
 					gridData.networkData = SyncedNetworkData.getClientSyncedData(eventData.name);
-					if(updateFilters){
+					if(updateFilters || refresh){
 						var _slotKeys = [];
 						for(var i in container.slots)if(i[0] >= 0 && container.slots[i].id != 0)_slotKeys.push(i);
 						gridData.slotsKeys = _slotKeys;
@@ -457,6 +502,9 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 				} else {
 					gridData.updateGui(eventData.refresh, eventData.updateFilters, true);
 				}
+			},
+			openCraftPreview: function(container, window, content, eventData){
+				openCraftPreview(container, eventData);
 			}
 		},
 		openCraftPreview: function(container, window, content, eventData){
@@ -472,6 +520,29 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		updateReverseFilter: function(eventData, connectedClient) {
 			this.data.reverse_filter = !this.data.reverse_filter;
 			this.refreshGui(false, false, true);
+		},
+		craftPreview: function(eventData, connectedClient){
+			if(!eventData.item || !eventData.count || this.data.NETWORK_ID == 'f') return;
+			if(Config.dev)Logger.Log('[CRAFT] Grid preview: ' + Item.getName(eventData.item.id, eventData.item.data) + ' x' + (eventData.count||1), 'RefinedStorageDebug');
+			var constructedCraft = RSNetworks[this.data.NETWORK_ID].info.constructCraft(eventData.item, eventData.count);
+			if(constructedCraft){
+				if(Config.dev)Logger.Log('[CRAFT] Grid preview result: craftable=' + constructedCraft.craftable + ' crafts=' + (constructedCraft.crafts?constructedCraft.crafts.length:0), 'RefinedStorageDebug');
+				var craftsData = constructedCraft.crafts ? constructedCraft.crafts.map(function(c){ return {completedIngridients: c.completedIngridients, craftable: c.craftable}; }) : [];
+				Logger.Log('[GRID] Preview: craftable=' + constructedCraft.craftable + ' error=' + (constructedCraft.errorType || 'none') + ' results=' + (constructedCraft.results ? constructedCraft.results.length : 0) + ' ingridients=' + (constructedCraft.ingridients ? constructedCraft.ingridients.length : 0), 'RS_DEBUG');
+				this.container.sendEvent(connectedClient, "openCraftPreview", {results: constructedCraft.results, ingridients: constructedCraft.ingridients, craftable: constructedCraft.craftable, crafts: craftsData, errorType: constructedCraft.errorType || null});
+			}
+		},
+		provideConstructedCraft: function(eventData, connectedClient){
+			if(!eventData.item || !eventData.count || this.data.NETWORK_ID == 'f') return;
+			Logger.Log('[GRID] CraftRequest: ' + Item.getName(eventData.item.id, eventData.item.data) + ' x' + (eventData.count||1) + ' netId=' + this.data.NETWORK_ID, 'RS_DEBUG');
+			if(Config.dev)Logger.Log('[CRAFT] Grid start: ' + Item.getName(eventData.item.id, eventData.item.data) + ' x' + (eventData.count||1), 'RefinedStorageDebug');
+			var constructedCraft = RSNetworks[this.data.NETWORK_ID].info.constructCraft(eventData.item, eventData.count);
+			if(Config.dev)Logger.Log('[CRAFT] Grid start result: craftable=' + (constructedCraft?constructedCraft.craftable:'false') + ' providingCrafts=' + RSNetworks[this.data.NETWORK_ID].info.providingCrafts.length, 'RefinedStorageDebug');
+			if(constructedCraft && constructedCraft.craftable){
+				RSNetworks[this.data.NETWORK_ID].info.provideCraft(constructedCraft);
+				this.items();
+				this.refreshGui(false, false, true);
+			}
 		}
 	},
 	events: {

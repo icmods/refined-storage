@@ -4,6 +4,9 @@ header.js
 network/state.js
 network/topology.js
 network/info.js
+network/calculator.js
+network/task.js
+network/scheduler.js
 
 storage/disks.js
 
@@ -36,6 +39,7 @@ blocks/diskDrive.js
 blocks/controller.js
 blocks/grid.js
 blocks/crafting_grid.js
+blocks/pattern_grid.js
 blocks/crafter.js
 blocks/crafting_monitor.js
 blocks/cable.js

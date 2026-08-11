@@ -25,6 +25,8 @@ var _RS = {
 		searchBlocks: function(netId, blockId) { return searchBlocksInNetwork(netId, blockId); },
 		constructCraft: function(netId, item, count) { return RSNetworks[netId] && RSNetworks[netId].info.constructCraft(item, count || 1); },
 		provideCraft: function(netId, tree) { var info = RSNetworks[netId] && RSNetworks[netId].info; if (info) info.provideCraft(tree); },
+		cancelTask: function(netId, taskId) { var info = RSNetworks[netId] && RSNetworks[netId].info; return info ? info.cancelTask(taskId) : false; },
+		getTask: function(netId, taskId) { return RSNetworks[netId] && RSNetworks[netId].info.getTask(taskId); },
 		getCrafts: function(netId) { return RSNetworks[netId] && RSNetworks[netId].info.providingCrafts; },
 		on: function(netId, event, callback) { return _RS.on(event, callback); }
 	},

@@ -1,6 +1,7 @@
 
 function buildPushDeleteEvents(networkData) {
 	var pushDeleteEvents = {};
+	var asdgfasdasddsad;
 	var map = (asdgfasdasddsad = networkData.getString('deleteItemsMap', 'null')) != 'null' ? JSON.parse(asdgfasdasddsad) : [];
 	for(var i in map){
 		pushDeleteEvents[map[i]] = {
@@ -26,6 +27,7 @@ function buildPushDeleteEvents(networkData) {
 }
 
 function createInventoryPushHandler(data) {
+	var asdgfasdasddsad;
 	return function(element, event){
 		if(event.type == 'CLICK' || event.type == 'LONG_CLICK'){
 			if (!data.isWorkAllowed) return;

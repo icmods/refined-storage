@@ -201,6 +201,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		networkDataUpdate: false,
 		containerUpdate: false,
 		ticks: 0,
+		networkTick: 0,
 		updateControllerNetwork: false,
 		updateModel: false,
 		lastTexture: ''
@@ -374,6 +375,8 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 				this.updateNetMap(true);
 				this.setActive(this.data.energy > this.data.usage, true, true);
 				this.refreshModel();
+				Logger.Log('[CTRL] Network built, restoring tasks: netId=' + this.data.NETWORK_ID, 'RS_DEBUG');
+				restoreCraftingTasks(this);
 				this.data.timer = false;
 				this.data.ticks = 0;
 			}
@@ -388,6 +391,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 				this.container.sendChanges();
 				this.data.containerUpdate = false;
 			}
+			Logger.Log('[CTRL] Scheduler SKIPPED: isWorkAllowed=false active=' + this.data.isActive + ' netId=' + this.data.NETWORK_ID + ' energy=' + this.data.energy, 'RS_DEBUG');
 			return;
 		}
 		if(this.data.updateControllerNetwork){
@@ -421,10 +425,10 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		}
 		if (this.data.NETWORK_ID != 'f' && RSNetworks[this.data.NETWORK_ID]) {
 			var info = RSNetworks[this.data.NETWORK_ID].info;
-			if (info && info.providingCrafts) {
-				for (var i = info.providingCrafts.length - 1; i >= 0; i--) {
-					info.updateCrafts_(info.providingCrafts[i]);
-				}
+			if (info && info.craftingTasks && info.craftingTasks.length > 0) {
+				this.data.networkTick++;
+				Logger.Log('[CTRL] Scheduler: tasks=' + info.craftingTasks.length + ' tick=' + this.data.networkTick + ' active=' + this.data.isActive + ' energy=' + this.data.energy, 'RS_DEBUG');
+				CraftingScheduler.processTick(info, this.blockSource, this.data.networkTick);
 			}
 		}
 	},
@@ -433,8 +437,21 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		this.sendPacket("refreshModel", {energy: this.data.energy, isActive: this.data.isActive, coords: {x: this.x, y: this.y, z: this.z}});
 	},
 	destroy: function (param1, isDropAllowed) {
-		_RS._emit("networkDestroyed", {netId: this.data.NETWORK_ID, tile: this});
 		if (this.data.NETWORK_ID != "f" && RSNetworks[this.data.NETWORK_ID]) {
+			var info = RSNetworks[this.data.NETWORK_ID].info;
+			if (info && info.craftingTasks) {
+				for (var ti = 0; ti < info.craftingTasks.length; ti++) {
+					var task = info.craftingTasks[ti];
+					Logger.Log('[CTRL] Destroy flush: task=' + task.id + ' hasFlush=' + !!task.flushBuffer + ' buffer=' + JSON.stringify(task.buffer || {}) + ' internal=' + (task.internalStorage ? task.internalStorage.length : 0), 'RS_DEBUG');
+					if (task.flushBuffer) task.flushBuffer(info);
+					if (task.internalStorage) {
+						for (var bi = 0; bi < task.internalStorage.length; bi++) {
+							info.pushItem(task.internalStorage[bi], task.internalStorage[bi].count, false, ['autocraft']);
+						}
+					}
+				}
+			}
+			_RS._emit("networkDestroyed", {netId: this.data.NETWORK_ID, tile: this});
 			set_net_for_blocks(this, 'f');
 			delete RSNetworks[this.data.NETWORK_ID];
 		}
@@ -488,16 +505,22 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			if (this.data.NETWORK_ID == 'f') return;
 			var info = RSNetworks[this.data.NETWORK_ID].info;
 			var result = info.constructCraft(eventData.item, eventData.count || 1);
+			if(Config.dev)Logger.Log('[CRAFT] Preview requested: ' + Item.getName(eventData.item.id, eventData.item.data) + ' x' + (eventData.count||1) + ' craftable=' + result.craftable + ' results=' + result.results.length + ' ingridients=' + result.ingridients.length + ' crafts=' + (result.crafts?result.crafts.length:0), 'RefinedStorageDebug');
+			var craftsData = result.crafts ? result.crafts.map(function(c){ return {completedIngridients: c.completedIngridients, craftable: c.craftable}; }) : [];
 			this.container.sendEvent(connectedClient, "openCraftPreview", {
 				results: result.results,
 				ingridients: result.ingridients,
-				craftable: result.craftable
+				craftable: result.craftable,
+				crafts: craftsData,
+				errorType: result.errorType || null
 			});
 		},
 		provideConstructedCraft: function(eventData, connectedClient) {
 			if (this.data.NETWORK_ID == 'f') return;
 			var info = RSNetworks[this.data.NETWORK_ID].info;
+			if(Config.dev)Logger.Log('[CRAFT] Start requested: ' + Item.getName(eventData.item.id, eventData.item.data) + ' x' + (eventData.count||1), 'RefinedStorageDebug');
 			var result = info.constructCraft(eventData.item, eventData.count || 1);
+			if(Config.dev)Logger.Log('[CRAFT] Tree built: craftable=' + result.craftable + ' providingCrafts=' + (info.providingCrafts?info.providingCrafts.length+1:1), 'RefinedStorageDebug');
 			if (result.craftable) info.provideCraft(result);
 		}
 	}
