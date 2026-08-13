@@ -17,6 +17,10 @@ function computeNetMap(netId, blockSource, ignoreIsActive) {
 			net_map[String(id_)].energy_use += __usage;
 		} else {
 			var __usage = EnergyUse[id_] || 0;
+			if (id_ == BlockID.RS_crafter) {
+				var crafterTile = World.getTileEntity(networkTile.coords.x, networkTile.coords.y, networkTile.coords.z, blockSource);
+				if (crafterTile && crafterTile.data) __usage += (Config.energy_uses.crafterPerPattern || 1) * (crafterTile.data.patternsCount || 0);
+			}
 			for(var j in networkTile.upgrades) __usage += UpgradeRegistry.getEnergyUsage(j) * networkTile.upgrades[j];
 			usage += __usage;
 			net_map[String(id_)].energy_use += __usage;

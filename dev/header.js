@@ -1,11 +1,7 @@
-const DISPLAY = UI.getContext().getWindow().getWindowManager().getDefaultDisplay();
 const WorkbenchRecipes = WRAP_JAVA('com.zhekasmirnov.innercore.api.mod.recipes.workbench.WorkbenchRecipeRegistry');
 const WorkbenchFieldAPI = WRAP_JAVA('com.zhekasmirnov.innercore.api.mod.recipes.workbench.WorkbenchFieldAPI');
-const zhekaCompiler = WRAP_JAVA('com.zhekasmirnov.innercore.mod.executable.Compiler');
 const ScriptableObjectHelper = WRAP_JAVA('com.zhekasmirnov.innercore.api.mod.ScriptableObjectHelper');
 const JavaFONT = WRAP_JAVA('com.zhekasmirnov.innercore.api.mod.ui.types.Font');
-const JavaRect = android.graphics.Rect;
-const _setTip = ModAPI.requireGlobal("MCSystem.setLoadingTip");
 var RSJava = WRAP_JAVA('org.innercore.icmods.refined_storage.RefinedStorage');
 
 IMPORT("EnergyNet");
@@ -14,13 +10,8 @@ IMPORT("StorageInterface");
 var Config = {
 	reload: function () {
 		var reload = Config.reload;
-		var write = Config.write;
 		Config = FileTools.ReadJSON(__dir__ + 'config.json');
 		Config.reload = reload;
-		Config.write = write;
-	},
-	write: function(){
-		FileTools.WriteJSON(__dir__ + 'config.json', this, true);
 	}
 }
 Config.reload();
@@ -32,19 +23,6 @@ const RF = EnergyTypeRegistry.assureEnergyType("RF", 0.25);
 const RSgroup = ICRender.getGroup("RefinedStoragePECable");
 
 const GUIs = [];
-
-const runOnUiThread = function(func_, _interval){
-	if(_interval)return function(){
-		return UI.getContext().runOnUiThread(new java.lang.Runnable({
-			run: func_
-		}));
-	};
-	return UI.getContext().runOnUiThread(new java.lang.Runnable({
-		run: func_
-	}));
-}
-
-
 
 
 var itemsNamesMap = {};
@@ -82,7 +60,6 @@ const RefinedStorage = {
 		if(!params.upgradesSlots)params.upgradesSlots = [];
 		if(!params.init){
 			params.init = function () {
-				//alert(cts(this) + ' : init');
 				if(this.pre_init)this.pre_init();
 				if(this.data.energy || this.data.energy === 0)this.networkData.putInt('energy', this.data.energy);
 				if(!this.data.createdCalled) {
@@ -94,8 +71,6 @@ const RefinedStorage = {
 						var tile = World.getTileEntity(controller.x, controller.y, controller.z, this.data.blockSource);
 						if (tile) {
 							tile.data.updateControllerNetwork = true;
-							//tile.updateControllerNetwork();
-							//if (this.post_created) this.post_created();
 						}
 					}
 				}
@@ -104,7 +79,6 @@ const RefinedStorage = {
 				this.blockInfo.data = this.data.block_data;
 				this.networkData.putInt('block_data', this.data.block_data);
 				this.networkData.putBoolean('isActive', this.data.isActive || false);
-				//if(this.refreshModel)this.refreshModel();
 				var tile = this;
 				this.container.addServerOpenListener({
 					onOpen: function(container, client){
@@ -139,8 +113,6 @@ const RefinedStorage = {
 							} else {
 								tile.data.upgrades[upgrade.nameID] = 1;
 							}
-							//var networkTile = tile.getNetworkTile();
-							//if(networkTile)networkTile.upgrades = tile.data.upgrades;
 							if(upgrade.addFunc)upgrade.addFunc(tile, {id: id, count: count, data: data, extra: extra}, itemContainer, slot, player);
 							return count;
 						}
@@ -149,8 +121,6 @@ const RefinedStorage = {
 						transfer: function(itemContainer, slot, id, count, data, extra, player){
 							if(!(upgrade = UpgradeRegistry.upgrades[id])) return 0
 							if(tile.data.upgrades[upgrade.nameID])tile.data.upgrades[upgrade.nameID]--
-							//var networkTile = tile.getNetworkTile();
-							//if(networkTile)networkTile.upgrades = tile.data.upgrades;
 							if(upgrade.deleteFunc)upgrade.deleteFunc(tile, {id: id, count: count, data: data, extra: extra}, itemContainer, slot, player);
 							return count;
 						}
@@ -190,8 +160,6 @@ const RefinedStorage = {
 		if (!params.created) {
 			params.created = function () {
 				if(!this.blockSource)this.blockSource = BlockSource.getDefaultForDimension(this.dimension);
-				//alert(cts(this) + ' : created');
-				//this.data.block_data = this.blockSource.getBlockData(this.x, this.y, this.z);
 				this.data.upgrades = {};
 				this.data.createdCalled = true;
 				if (this.pre_created) this.pre_created();
@@ -268,7 +236,6 @@ const RefinedStorage = {
 				if(this.data.NETWORK_ID != 'f' && RSNetworks[this.data.NETWORK_ID]) delete RSNetworks[this.data.NETWORK_ID][cts(this)];
 				this.data.LAST_NETWORK_ID = this.data.NETWORK_ID;
 				this.data.NETWORK_ID = 'f';
-				//BlockRenderer.unmapAtCoords(this.x, this.y, this.z);
 				if(this.post_destroy) this.post_destroy(param1);
 			}
 		}
@@ -455,7 +422,6 @@ function testButtons(elementsS_, initFunc_){
 		clicker: {
 			onClick: function (itemContainerUiHandler, itemContainer, element) {
 				UIHeight -= 100;
-				//elementsS_['testText2'].text = UIHeight + '';
 				itemContainerUiHandler.setBinding('testText2', 'text', UIHeight + '');
 				UI.getScreenHeight = function(){
 					return UIHeight;
@@ -537,16 +503,3 @@ function testButtons(elementsS_, initFunc_){
 		}
 	}
 };
-
-function getCircularReplacer(){
-	const seen = new WeakSet();
-	return function(key, value){
-		if (typeof value === "object" && value !== null) {
-			if (seen.has(value)) {
-				return;
-			}
-			seen.add(value);
-		}
-		return value;
-	};
-}

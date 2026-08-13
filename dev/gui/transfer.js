@@ -1,8 +1,7 @@
 
 function buildPushDeleteEvents(networkData) {
 	var pushDeleteEvents = {};
-	var asdgfasdasddsad;
-	var map = (asdgfasdasddsad = networkData.getString('deleteItemsMap', 'null')) != 'null' ? JSON.parse(asdgfasdasddsad) : [];
+	var map = (jsonMap_ = networkData.getString('deleteItemsMap', 'null')) != 'null' ? JSON.parse(jsonMap_) : [];
 	for(var i in map){
 		pushDeleteEvents[map[i]] = {
 			type: 'delete',
@@ -12,7 +11,7 @@ function buildPushDeleteEvents(networkData) {
 		networkData.putInt(map[i], 0);
 	}
 	networkData.putString('deleteItemsMap', 'null');
-	var map = (asdgfasdasddsad = networkData.getString('pushItemsMap', 'null')) != 'null' ? JSON.parse(asdgfasdasddsad) : [];
+	var map = (jsonMap_ = networkData.getString('pushItemsMap', 'null')) != 'null' ? JSON.parse(jsonMap_) : [];
 	for(var i in map){
 		pushDeleteEvents[map[i]] = {
 			type: 'push',
@@ -27,7 +26,6 @@ function buildPushDeleteEvents(networkData) {
 }
 
 function createInventoryPushHandler(data) {
-	var asdgfasdasddsad;
 	return function(element, event){
 		if(event.type == 'CLICK' || event.type == 'LONG_CLICK'){
 			if (!data.isWorkAllowed) return;
@@ -43,14 +41,12 @@ function createInventoryPushHandler(data) {
 			} else {
 				var count = Math.min(Item.getMaxStack(item.id), data.disksStorage - data.disksStored, item.count);
 			}
-			if(Config.dev)Logger.Log('Grid local pushing item: ' + getItemUid(item) + ' ; count: ' + count + ' ; slot: ' + slot_id + " ; extra: " + fullExtraToString(item.extra), 'RefinedStorageDebug');
 			var slotFounded = false;
 			for(var i in data.slotsKeys){
 				var _slotName = data.slotsKeys[i];
 				var _slot = itemContainer.slots[_slotName];
 				if(_slot && (_slot.id == 0 || (_slot.id == item.id && _slot.data == item.data && (item.extra == _slot.extra || (item.extra && _slot.extra && fullExtraToString(item.extra) == fullExtraToString(_slot.extra)))))){
 					item.extra = _slot.extra;
-					if(Config.dev)Logger.Log('Founded slot: ' + _slotName + ' : ' + JSON.stringify(_slot.asScriptable()), 'RefinedStorageDebug');
 					slotFounded = true;
 					itemContainer.setSlot(_slotName, item.id, _slot.count + count, item.data, item.extra || null);
 					data.setItemInfoSlot(_slotName, itemContainer);
@@ -60,17 +56,7 @@ function createInventoryPushHandler(data) {
 					break
 				}
 			}
-			if(!slotFounded){
-				var _slotName = data.slotsKeys.length + 'slot';
-				if(Config.dev)Logger.Log('Slot not founded, new slot name: ' + _slotName, 'RefinedStorageDebug');
-				data.slotsKeys.push(_slotName);
-				itemContainer.setSlot(_slotName, item.id, count, item.data, item.extra || null);
-				data.setItemInfoSlot(_slotName, itemContainer);
-				updateFull = true;
-				data.updateGui(true, updateFull);
-				data.lowPriority = true;
-			}
-			var map = (asdgfasdasddsad = data.networkData.getString('pushItemsMap', 'null')) != 'null' ? JSON.parse(asdgfasdasddsad) : [];
+			var map = (jsonMap_ = data.networkData.getString('pushItemsMap', 'null')) != 'null' ? JSON.parse(jsonMap_) : [];
 			if(map.indexOf(slot_id) == -1){
 				map.push(slot_id);
 				data.networkData.putString('pushItemsMap', JSON.stringify(map));

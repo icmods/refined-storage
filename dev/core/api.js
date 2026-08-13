@@ -25,10 +25,74 @@ var _RS = {
 		searchBlocks: function(netId, blockId) { return searchBlocksInNetwork(netId, blockId); },
 		constructCraft: function(netId, item, count) { return RSNetworks[netId] && RSNetworks[netId].info.constructCraft(item, count || 1); },
 		provideCraft: function(netId, tree) { var info = RSNetworks[netId] && RSNetworks[netId].info; if (info) info.provideCraft(tree); },
+		requestCraft: function(netId, item, count) {
+			var info = RSNetworks[netId] && RSNetworks[netId].info;
+			if (!info) return false;
+			var result = info.constructCraft(item, count || 1);
+			if (result && result.craftable) {
+				info.provideCraft(result);
+				return true;
+			}
+			return false;
+		},
 		cancelTask: function(netId, taskId) { var info = RSNetworks[netId] && RSNetworks[netId].info; return info ? info.cancelTask(taskId) : false; },
 		getTask: function(netId, taskId) { return RSNetworks[netId] && RSNetworks[netId].info.getTask(taskId); },
-		getCrafts: function(netId) { return RSNetworks[netId] && RSNetworks[netId].info.providingCrafts; },
-		on: function(netId, event, callback) { return _RS.on(event, callback); }
+		getTasks: function(netId) {
+			var info = RSNetworks[netId] && RSNetworks[netId].info;
+			if (!info) return [];
+			return info.craftingTasks.map(function(t) {
+				return {
+					id: t.id,
+					requested: t.requestedUid,
+					requestedCount: t.requestedCount,
+					totalSteps: t.totalSteps,
+					currentStep: t.currentStep || 0,
+					progress: t.getProgress ? t.getProgress() : 0,
+					cancelled: !!t.cancelled
+				};
+			});
+		},
+		getCrafts: function(netId) {
+			var info = RSNetworks[netId] && RSNetworks[netId].info;
+			if (!info) return [];
+			var out = [];
+			for (var uid in info.crafts) {
+				var crafts = info.crafts[uid];
+				for (var i = 0; i < crafts.length; i++) {
+					var c = crafts[i];
+					out.push({uid: uid, isProcessed: !!c.isProcessed, coordsId: c.coordsId, result: c.result, ingridients: c.ingridients});
+				}
+			}
+			return out;
+		},
+		on: function(netId, event, callback) {
+			if (typeof event === 'function') {
+				callback = event;
+				event = netId;
+				netId = null;
+			}
+			return _RS.on(event, function(payload) {
+				if (netId === null || netId === undefined || (payload && payload.netId === netId)) callback(payload);
+			});
+		}
+	},
+
+	pattern: {
+		create: function(inputs, outputs, isProcessed, oredict) {
+			var extra = new ItemExtraData();
+			extra.putBoolean('isProcessed', !!isProcessed);
+			extra.putBoolean('oredictEnabled', isProcessed ? false : !!oredict);
+			for (var i = 0; i < 9 && i < (inputs || []).length; i++) {
+				var ing = inputs[i];
+				extra.putString('craft' + i, ing.id + "," + (ing.count || 1) + "," + (oredict && !isProcessed ? -1 : (ing.data || 0)));
+			}
+			var maxOut = isProcessed ? 9 : 1;
+			for (var i = 0; i < maxOut && i < (outputs || []).length; i++) {
+				var res = outputs[i];
+				extra.putString('result' + i, res.id + "," + (res.count || 1) + "," + (res.data || 0));
+			}
+			return extra;
+		}
 	},
 
 	disks: {
@@ -54,6 +118,24 @@ var _RS = {
 
 	config: {
 		get: function() { return Config; }
+	},
+
+	getBlocks: function() { return RS_blocks; },
+	getNetworks: function() { return RSNetworks; },
+	getNetworksInfo: function() {
+		var out = [];
+		for (var i = 0; i < RSNetworks.length; i++) {
+			var net = RSNetworks[i];
+			if (!net || !net.info) continue;
+			var controller = searchController_net(i);
+			out.push({
+				netId: i,
+				controllerCoords: controller ? {x: controller.x, y: controller.y, z: controller.z} : null,
+				storage: net.info.storage,
+				stored: net.info.stored
+			});
+		}
+		return out;
 	},
 
 	ui: {

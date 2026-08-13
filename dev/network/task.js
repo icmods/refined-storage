@@ -16,6 +16,9 @@ var CraftingTask = {
 				quantity: pn.quantity,
 				remaining: pn.quantity,
 				done: false,
+				received: 0,
+				expectedByUid: null,
+				receivedByUid: {},
 				requirements: (pn.requirements || []).map(function(r) {
 					return { uid: r.uid, count: r.count, provided: 0, altUids: r.altUids || [] };
 				})
@@ -33,7 +36,6 @@ var CraftingTask = {
 			nodes: nodes,
 			buffer: {},
 			toReserve: Object.assign({}, plan.toReserve || {}),
-			internalStorage: [],
 
 			reserveItems: function(info) {
 				for (var uid in this.toReserve) {
@@ -46,7 +48,6 @@ var CraftingTask = {
 					if (reserved > 0) {
 						this.buffer[uid] = (this.buffer[uid] || 0) + reserved;
 					}
-					Logger.Log('[TASK] reserveItems: uid=' + uid + ' requested=' + count + ' deleted=' + deleted + ' reserved=' + reserved + ' bufferNow=' + (this.buffer[uid] || 0) + ' toReserveLeft=' + Object.keys(this.toReserve).length, 'RS_DEBUG');
 					if (deleted === 0) {
 						delete this.toReserve[uid];
 					} else {
@@ -78,15 +79,49 @@ var CraftingTask = {
 					this.buffer[uid] -= take;
 					if (this.buffer[uid] <= 0) delete this.buffer[uid];
 				}
-				Logger.Log('[TASK] consumeFromBuffer: uid=' + uid + ' needed=' + count + ' available=' + available + ' take=' + take + ' left=' + (this.buffer[uid] || 0), 'RS_DEBUG');
 				return take;
 			},
 
-			addToBuffer: function(uid, count) {
-				this.buffer[uid] = (this.buffer[uid] || 0) + count;
+			cacheExpectedOutputs: function(node, pattern) {
+				var expected = {};
+				for (var ri = 0; ri < pattern.result.length; ri++) {
+					var res = pattern.result[ri];
+					var uid = res.id + '_' + res.data;
+					expected[uid] = (expected[uid] || 0) + node.quantity * (res.count || 1);
+				}
+				node.expectedByUid = expected;
+			},
+
+			outputsSatisfied: function(node) {
+				if (!node.expectedByUid || node.remaining > 0) return false;
+				for (var uid in node.expectedByUid) {
+					if ((node.receivedByUid[uid] || 0) < node.expectedByUid[uid]) return false;
+				}
+				return true;
+			},
+
+			onOutputArrived: function(uid, count) {
+				if (!this.nodes || count <= 0) return 0;
+				var consumed = 0;
+				for (var ni = 0; ni < this.nodes.length && count > 0; ni++) {
+					var node = this.nodes[ni];
+					if (!node || node.done || !node.isProcessing || !node.expectedByUid) continue;
+					var expected = node.expectedByUid[uid];
+					if (!expected) continue;
+					var received = node.receivedByUid[uid] || 0;
+					if (received >= expected) continue;
+					var take = Math.min(count, expected - received);
+					node.receivedByUid[uid] = received + take;
+					node.received = (node.received || 0) + take;
+					count -= take;
+					consumed += take;
+					if (this.outputsSatisfied(node)) {
+						node.done = true;
+					}
+				}
+				return consumed;
 			}
 		});
-		Logger.Log('[TASK] Created: id=' + task.id + ' uid=' + task.requestedUid + ' count=' + task.requestedCount + ' nodes=' + nodes.length + ' totalSteps=' + totalSteps, 'RS_DEBUG');
 
 		return task;
 	},
@@ -111,11 +146,13 @@ var CraftingTask = {
 				quantity: n.quantity,
 				remaining: n.remaining,
 				done: n.done,
+				received: n.received || 0,
+				expectedByUid: n.expectedByUid || null,
+				receivedByUid: n.receivedByUid || {},
 				requirements: n.requirements || []
 			}; }),
 			buffer: task.buffer || {},
 			toReserve: task.toReserve || {},
-			internalStorage: task.internalStorage || [],
 			results: task.results || [],
 			crafts: (task.crafts || []).map(function(c) { return {
 				craftable: c.craftable,
@@ -148,11 +185,13 @@ var CraftingTask = {
 		task.currentStep = data.currentStep || 0;
 		task.buffer = data.buffer || {};
 		task.toReserve = data.toReserve || {};
-		task.internalStorage = data.internalStorage || [];
 		for (var ni = 0; ni < task.nodes.length; ni++) {
 			if (data.nodes[ni]) {
 				task.nodes[ni].remaining = data.nodes[ni].remaining;
 				task.nodes[ni].done = data.nodes[ni].done;
+				task.nodes[ni].received = data.nodes[ni].received || 0;
+				task.nodes[ni].expectedByUid = data.nodes[ni].expectedByUid || null;
+				task.nodes[ni].receivedByUid = data.nodes[ni].receivedByUid || {};
 			}
 		}
 		return task;

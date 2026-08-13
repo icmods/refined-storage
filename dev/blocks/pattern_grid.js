@@ -1,16 +1,4 @@
-// ============================================================================
-// Pattern Grid — Legacy Recovery
-// Source: DataBase/temporar/Refined-Storage/dev/blocks/pattern_grid.js
-// Status: ~70% readable code recovered, ~30% needs reconstruction
-// ============================================================================
 
-// ============================================================================
-// BEGIN LEGACY CORRUPTED REGION
-// Legacy lines: ~1-80
-// Status: CORRUPTED — texture array + getPatternGridTexture function
-// Reason: character substitution throughout; texture names partially readable
-// Expected structure: matching getGridTexture() pattern with pattern_grid textures
-// ============================================================================
 
 var _patternGridTextureOff = [
 	["RScrafter_bot", 0], ["RScrafter_top", 0], ["RScrafter_bottom", 0],
@@ -38,13 +26,9 @@ Block.createBlockWithRotation("RS_pattern_grid", [
 RS_blocks.push(BlockID['RS_pattern_grid']);
 EnergyUse[BlockID['RS_pattern_grid']] = Config.energy_uses.patternGrid || 4;
 
-// ============================================================================
-// END LEGACY CORRUPTED REGION — reconstructed from grid.js pattern
-// ============================================================================
 
 var patternGridData = Object.assign({}, craftingGridData);
 patternGridData.lastCraftsPage = -1;
-patternGridData.darkenSlots = {};
 patternGridData.isCrafting = true;
 patternGridData.patternMode = false;
 patternGridData.oredictMode = false;
@@ -62,7 +46,6 @@ patternGridData.deselectSlots = function(){
 	}
 	patternGridData.selectedSlot = null;
 };
-patternGridData.setItemInfoSlot = function(){};
 
 var checkedCrafts = {};
 var checkContainer = new ItemContainer();
@@ -101,82 +84,14 @@ function checkCraft(javaRecipe){
 	}
 }
 
-// ============================================================================
-// BEGIN LEGACY RECOVERED REGION
-// Legacy lines: ~80-180
-// Status: RECOVERED — patternGridFuncs (pagination + sort + crafts helpers)
-// ============================================================================
 
-var patternGridFuncs = {
-	getPages: function(_length){
-		if(_length == 0) return 1;
-		_length = Math.ceil(_length / _elementsGUI_patternGrid["x_count"]);
-		return _length;
-	},
-	getPageFromCoords: function(_coords, pages){
-		pages -= _elementsGUI_patternGrid['y_count'] - 1;
-		var interval = (pages - 1) > 0 ? (_elementsGUI_patternGrid["max_y"] - _elementsGUI_patternGrid["slider_button"].start_y) / (pages - 1) : 0;
-		function __getY(i) {
-			return ((interval * i) + _elementsGUI_patternGrid["slider_button"].start_y);
-		}
-		var least_dec = 10001;
-		var finish_i = 0;
-		for (var i = 0; i < pages; i++) {
-			var dec = Math.abs(Math.round(_coords.y - __getY(i)));
-			if (dec < least_dec) {
-				least_dec = dec;
-				finish_i = i;
-			}
-		};
-		var page = finish_i;
-		return page + 1;
-	},
-	getCoordsFromPage: function(page, pages){
-		pages -= _elementsGUI_patternGrid['y_count'] - 1;
-		var interval = (pages - 1) > 0 ? (_elementsGUI_patternGrid["max_y"] - _elementsGUI_patternGrid["slider_button"].start_y) / (pages - 1) : 0;
-		function __getY(i) {
-			return ((interval * i) + _elementsGUI_patternGrid["slider_button"].start_y);
-		}
-		if (page > pages) page = pages;
-		if (page < 1) page = 1;
-		return __getY(page - 1);
-	},
-	craftsPages: function(_length){
-		if(_length == 0) return 1;
-		_length = Math.ceil(_length / _elementsGUI_patternGrid["crafts_x_count"]);
-		return _length;
-	},
-	getCraftsPageFromCoords: function(_coords, pages){
-		pages -= _elementsGUI_patternGrid['crafts_y_count'] - 1;
-		var interval = (pages - 1) > 0 ? (_elementsGUI_patternGrid["crafts_max_y"] - _elementsGUI_patternGrid["crafts_slider"].start_y) / (pages - 1) : 0;
-		if(Config.dev)Logger.Log('interval: ' + interval + ' ; pages: ' + pages + ' ; _coords_y: ' + _coords.y + ' ; crafts_slider_start_y: ' + _elementsGUI_patternGrid["crafts_slider"].start_y + ' ; crafts_max_y: ' + _elementsGUI_patternGrid["crafts_max_y"] + ' ; crafts_x_count: ' + _elementsGUI_patternGrid["crafts_x_count"], 'RefinedStorageDebug');
-		function __getY(i) {
-			return ((interval * i) + _elementsGUI_patternGrid["crafts_slider"].start_y);
-		}
-		var least_dec = 10001;
-		var finish_i = 0;
-		for (var i = 0; i < pages; i++) {
-			var dec = Math.abs(Math.round(_coords.y - __getY(i)));
-			if (dec < least_dec) {
-				least_dec = dec;
-				finish_i = i;
-			}
-		};
-		var page = finish_i;
-		return page + 1;
-	},
-	getCraftsCoordsFromPage: function(page, pages){
-		pages -= _elementsGUI_patternGrid['crafts_y_count'] - 1;
-		var interval = (pages - 1) > 0 ? (_elementsGUI_patternGrid["crafts_max_y"] - _elementsGUI_patternGrid["crafts_slider"].start_y) / (pages - 1) : 0;
-		if(Config.dev)Logger.Log('interval: ' + interval + ' ; pages: ' + pages + ' ; page: ' + page + ' ; crafts_slider_start_y: ' + _elementsGUI_patternGrid["crafts_slider"].start_y + ' ; crafts_max_y: ' + _elementsGUI_patternGrid["crafts_max_y"] + ' ; crafts_x_count: ' + _elementsGUI_patternGrid["crafts_x_count"], 'RefinedStorageDebug');
-		function __getY(i) {
-			return ((interval * i) + _elementsGUI_patternGrid["crafts_slider"].start_y);
-		}
-		if (page > pages) page = pages;
-		if (page < 1) page = 1;
-		return __getY(page - 1);
-	},
-	updateCrafts: function(items, craftsTextSearch, onlyItemsMap, _object){
+var _elementsGUI_patternGrid = {};
+var patternGridFuncs = makePageHelpers(_elementsGUI_patternGrid, {countX:"x_count", countY:"y_count", maxY:"max_y", slider:"slider_button"});
+var craftsPageHelpers = makePageHelpers(_elementsGUI_patternGrid, {countX:"crafts_x_count", countY:"crafts_y_count", maxY:"crafts_max_y", slider:"crafts_slider"});
+patternGridFuncs.craftsPages = craftsPageHelpers.getPages;
+patternGridFuncs.getCraftsPageFromCoords = craftsPageHelpers.getPageFromCoords;
+patternGridFuncs.getCraftsCoordsFromPage = craftsPageHelpers.getCoordsFromPage;
+patternGridFuncs.updateCrafts = function(items, craftsTextSearch, onlyItemsMap, _object){
 		var inventoryItems = searchItem(-1, -1, true);
 		var inventoryOnlyItemsMap = {};
 		for(var i in inventoryItems){
@@ -187,8 +102,8 @@ var patternGridFuncs = {
 		}
 		var sorted = RefinedStorage.sortCrafts(items, craftsTextSearch || null, Object.assign(inventoryOnlyItemsMap, onlyItemsMap), _object, inventoryItems, patternGridData.isDarkenMap);
 		return sorted;
-	},
-	selectRecipe: function(javaRecipe, container){
+	};
+	patternGridFuncs.selectRecipe = function(javaRecipe, container){
 		if (!javaRecipe) return false;
 		patternGridData.selectedRecipe = {
 			result: javaRecipe.getResult(),
@@ -198,19 +113,15 @@ var patternGridFuncs = {
 		}
 		container.sendEvent('selectRecipe', {uid: javaRecipe.getRecipeUid()});
 		return true;
-	},
-	provideCraft: function(count){
+	};
+	patternGridFuncs.provideCraft = function(count){
 		patternGridData.container.sendEvent('provideCraft', {count:count});
 		return true;
-	}
-}
+	};
 
-// ============================================================================
-// END LEGACY RECOVERED REGION
-// ============================================================================
+
 
 function patternGridSwitchPage(page, container, ignore, dontMoveSlider){
-	if(Config.dev)Logger.Log('Switch pattern grid Page; page: ' + page + ' ; ignore: ' + ignore + ' ; dontMoveSlider: ' + dontMoveSlider + ' ; container: ' + container + ' ; patternGridData: ', 'RefinedStorageDebug');
 	if(!container.getUiAdapter() || !container.getUiAdapter().getWindow() || !container.getUiAdapter().getWindow().isOpened()) return false;
 	var slots = container.slots;
 	var slotsKeys = patternGridData.slotsKeys;
@@ -245,7 +156,6 @@ function patternGridSwitchPage(page, container, ignore, dontMoveSlider){
 }
 
 function patternGridSwitchCraftsPage(page, container, ignore, dontMoveSlider){
-	if(Config.dev)Logger.Log('Switch Crafts Page; page: ' + page + ' ; ignore: ' + ignore + ' ; dontMoveSlider: ' + dontMoveSlider + ' ; container: ' + container + ' ; patternGridData: ', 'RefinedStorageDebug');
 	if(!container.getUiAdapter() || !container.getUiAdapter().getWindow() || !container.getUiAdapter().getWindow().isOpened()) return false;
 	var crafts = patternGridData.crafts;
 	var slots_count = patternGridData.crafts_slots_count;
@@ -280,7 +190,6 @@ function patternGridSwitchCraftsPage(page, container, ignore, dontMoveSlider){
 	return true;
 }
 
-var _elementsGUI_patternGrid = {};
 var _drawingGUI_patternGrid = [];
 var patternGridGUI = new UI.StandartWindow({
 	standart: {
@@ -302,12 +211,6 @@ var patternGridGUI = new UI.StandartWindow({
 });
 GUIs.push(patternGridGUI);
 
-// ============================================================================
-// BEGIN LEGACY RECOVERED REGION
-// Legacy lines: patternGrid_set_elements + moveCraftsSlots
-// Status: RECOVERED — core GUI layout (processing/oredict toggles, pattern slots, 
-//          click frames, 3x3 crafting grid, hcraft_slots for processing mode)
-// ============================================================================
 
 function moveCraftsSlots(_mode){
 	var elements_ = patternGridGUI.getWindow('main').getElements();
@@ -434,11 +337,6 @@ function patternGrid_set_elements(_elementsGUI_patternGrid, patternGridFuncs){
 		}
 	};
 
-	// ========================================================================
-	// BEGIN LEGACY CORRUPTED REGION
-	// Legacy lines: ~processing/oredict button setup (partially garbled)
-	// Reconstructed from visible structure
-	// ========================================================================
 
 	_elementsGUI_patternGrid['craft_proccessing'] = {
 		type: "button",
@@ -469,8 +367,10 @@ function patternGrid_set_elements(_elementsGUI_patternGrid, patternGridFuncs){
 		scale: toggleScale,
 		bitmapOff: "empty1",
 		bitmapOn: "RSoption_selected",
+		state: false,
 		onNewState: function(value, container){
 			if(patternGridData._settingSwitchState) return;
+			if(patternGridData.patternMode === value) return;
 			var c = container && container.getParent ? container.getParent() : container;
 			if(c) c.sendEvent("updatePatternMode", {val: value});
 		}
@@ -503,8 +403,10 @@ function patternGrid_set_elements(_elementsGUI_patternGrid, patternGridFuncs){
 		scale: toggleScale,
 		bitmapOff: "empty1",
 		bitmapOn: "RSoption_selected",
+		state: false,
 		onNewState: function(value, container){
 			if(patternGridData._settingSwitchState) return;
+			if(patternGridData.oredictMode === value) return;
 			var c = container && container.getParent ? container.getParent() : container;
 			if(c) c.sendEvent("updateOredictMode", {val: value});
 		}
@@ -593,10 +495,6 @@ function patternGrid_set_elements(_elementsGUI_patternGrid, patternGridFuncs){
 var PgridConsPercents = 49/(575.5 - 60);
 var PgridCons = PgridConsPercents*(UI.getScreenHeight() - 60);
 grid_set_elements(360 + 109 + PgridCons + PgridCons, 70, PgridCons, 0, _elementsGUI_patternGrid, patternGridData, patternGridGUI, patternGridSwitchPage, patternGridFuncs);
-_elementsGUI_patternGrid["x_count"] = 10;
-patternGridData.x_count = 10;
-patternGridData.slots_count = 10 * patternGridData.y_count;
-_elementsGUI_patternGrid["slots_count"] = patternGridData.slots_count;
 
 var craftingPadding = patternGridData.craftingPadding;
 var craftSlotsSize = (37/(575.5-60)) * (UI.getScreenHeight() - 60);
@@ -687,7 +585,6 @@ _elementsGUI_patternGrid["image_craft_arrow"].y = _elementsGUI_patternGrid['craf
 			patternGridData.craftsTextSearch = keyword.length ? keyword : false;
 			uiHandler.setBinding('search_text_crafts', 'text', keyword.length ? keyword : Translation.translate('Search'));
 			patternGridData.crafts = patternGridFuncs.updateCrafts(patternGridData.slotsKeys, patternGridData.craftsTextSearch, patternGridData.originalOnlyItemsMap, container.slots);
-			patternGridData.darkenSlots = {};
 			patternGridSwitchCraftsPage(1, container, true);
 		},
 		onSelectCraft: function(craft, container) {
@@ -700,14 +597,7 @@ _elementsGUI_patternGrid["image_craft_arrow"].y = _elementsGUI_patternGrid['craf
 
 patternGrid_set_elements(_elementsGUI_patternGrid, patternGridFuncs);
 
-// ============================================================================
-// END LEGACY RECOVERED REGION
-// ============================================================================
 
-// ============================================================================
-// BEGIN LEGACY RECOVERED REGION
-// Legacy lines: ~32000-36000 — CLICKFRAME inventory push handler
-// ============================================================================
 
 var patternInv_elements = patternGridGUI.getWindow('inventory').getContent();
 patternInv_elements.elements["_CLICKFRAME_"] = {
@@ -735,9 +625,6 @@ for (var izxc = 4; izxc < 8; izxc++) {
 	BlockRenderer.enableCoordMapping(BlockID["RS_pattern_grid"], izxc, render);
 }
 
-// ============================================================================
-// END LEGACY RECOVERED REGION
-// ============================================================================
 
 RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 	defaultValues:{
@@ -802,12 +689,8 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 			this.container.setSlotSavingEnabled('hcraft_slot' + i, true);
 		}
 	},
-	// ========================================================================
-	// BEGIN LEGACY CORRUPTED REGION
-	// Legacy lines: ~selectRecipe server-side + provideCraft
-	// Status: PARTIALLY CORRUPTED — structure visible, some chars garbled
-	// ========================================================================
 	selectRecipe: function(javaRecipe, player){
+		if(this.data.patternMode) return false;
 		if (!javaRecipe) return false;
 		var result = javaRecipe.getResult();
 		if (!result) return false;
@@ -890,9 +773,6 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 		Callback.invokeCallback("VanillaWorkbenchPostCraft", result, this.container);
 		return true;
 	},
-	// ========================================================================
-	// END LEGACY CORRUPTED REGION
-	// ========================================================================
 	refreshGui: function(first, client, updateFilters, updateCrafts){
 		var _data = {
 			name: this.networkData.getName() + '',
@@ -926,10 +806,6 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 	getScreenByName: function(screenName) {
 		return patternGridGUI;
 	},
-	// ========================================================================
-	// BEGIN LEGACY RECOVERED REGION
-	// Legacy lines: ~containerEvents — craftPattern, updatePatternMode, updateOredictMode, clearCraft, selectRecipe, provideCraft
-	// ========================================================================
 	containerEvents: {
 		updateRedstoneMode: function(eventData, connectedClient){
 			if(this.data.redstone_mode == undefined) this.data.redstone_mode = 0;
@@ -937,13 +813,10 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 			if(!this.refreshRedstoneMode()) this.refreshGui();
 		},
 		updateFilter: function(eventData, connectedClient){
-			if(this.data.sort == undefined) this.data.sort = 0;
-			this.data.sort = this.data.sort >= 2 ? 0 : this.data.sort + 1;
-			this.refreshGui(false, false, true);
+			GridEvents.updateFilter(this);
 		},
 		updateReverseFilter: function(eventData, connectedClient){
-			this.data.reverse_filter = !this.data.reverse_filter;
-			this.refreshGui(false, false, true);
+			GridEvents.updateReverseFilter(this);
 		},
 		craftPattern: function(eventData, connectedClient){
 			if(!this.data.patternMode && this.data.selectedRecipe){
@@ -971,9 +844,13 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 				var resultItem = this.container.getSlot('craft_result');
 				if(resultItem.id) extra.putString('result0', resultItem.id + "," + resultItem.count + "," + resultItem.data);
 			}
+			var hasResult = false;
 			for(var i in results){
 				extra.putString('result' + i, results[i]);
+				hasResult = true;
 			}
+			if(!this.data.patternMode && this.container.getSlot('craft_result').id) hasResult = true;
+			if(!hasResult) return;
 			this.container.setSlot('pattern_slot_export', ItemID.RSpattern, 1, 0, extra);
 			this.container.setSlot('pattern_slot_input', slotInput.id, slotInput.count - 1, slotInput.data);
 			slotInput.validate();
@@ -1025,26 +902,12 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 		this.refreshGui(false, false, true);
 	},
 	craftPreview: function(eventData, connectedClient){
-		if(!eventData.item || !eventData.count || this.data.NETWORK_ID == 'f') return;
-		var constructedCraft = RSNetworks[this.data.NETWORK_ID].info.constructCraft(eventData.item, eventData.count);
-		if(constructedCraft){
-			var craftsData = constructedCraft.crafts ? constructedCraft.crafts.map(function(c){ return {completedIngridients: c.completedIngridients, craftable: c.craftable}; }) : [];
-			this.container.sendEvent(connectedClient, "openCraftPreview", {results: constructedCraft.results, ingridients: constructedCraft.ingridients, craftable: constructedCraft.craftable, crafts: craftsData, errorType: constructedCraft.errorType || null});
-		}
+		GridEvents.craftPreview(this, eventData, connectedClient);
 	},
 	provideConstructedCraft: function(eventData, connectedClient){
-		if(!eventData.item || !eventData.count || this.data.NETWORK_ID == 'f') return;
-		var constructedCraft = RSNetworks[this.data.NETWORK_ID].info.constructCraft(eventData.item, eventData.count);
-		if(constructedCraft && constructedCraft.craftable){
-			RSNetworks[this.data.NETWORK_ID].info.provideCraft(constructedCraft);
-			this.items();
-			this.refreshGui(false, false, true);
-		}
+		GridEvents.provideConstructedCraft(this, eventData, connectedClient);
 	}
 },
-	// ========================================================================
-	// END LEGACY RECOVERED REGION
-	// ========================================================================
 	client: {
 		refreshModel: function(){
 			var render = new ICRender.Model();
@@ -1075,20 +938,15 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 			}
 		},
 		containerEvents: {
-			reselectRecipe: function(container, window, content, eventData){
-				patternGridData.selectedRecipe = eventData.selectedRecipe;
-				if(patternGridData.selectedRecipe) patternGridData.selectedRecipe.javaRecipe = Recipes.getRecipeByUid(patternGridData.selectedRecipe.uid);
-			},
-			deselectRecipe: function(container, window, content, eventData){
-				patternGridData.selectedRecipe = null;
-			},
 			openCraftPreview: function(container, window, content, eventData){
 				openCraftPreview(container, eventData);
 			},
 			openGui: function(container, window, content, eventData){
 				if(!content || !window || !window.isOpened()) return;
 				eventData.disksStorage = Number(eventData.disksStorage);
+				patternGridData._settingSwitchState = true;
 				Object.assign(patternGridData, eventData);
+				patternGridData._settingSwitchState = false;
 				patternGridData.container = container;
 				patternGridData.updateGui = function(refresh, updateFilters, updateCrafts, nonlocal){
 					if(!content || !window || !window.isOpened()) return;
@@ -1151,7 +1009,6 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 								try {
 									patternGridData.isDarkenMap = {};
 									patternGridData.crafts = patternGridFuncs.updateCrafts(patternGridData.slotsKeys, patternGridData.craftsTextSearch, patternGridData.originalOnlyItemsMap, container.slots);
-									patternGridData.darkenSlots = {};
 									patternGridSwitchCraftsPage(refresh ? patternGridData.lastCraftsPage : 1, container, true);
 								} catch(err){
 									alert('Error on sorting crafts: ' + JSON.stringify(err));
@@ -1161,15 +1018,15 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 						crafts2Thread.setPriority(java.lang.Thread.MIN_PRIORITY);
 						crafts2Thread.start();
 					}
+					moveCraftsSlots(patternGridData.patternMode);
+					patternGridData._settingSwitchState = true;
 					try {
-						patternGridData._settingSwitchState = true;
-						if(content.elements["switch_processing"]) content.elements["switch_processing"].state = eventData.patternMode;
-						if(content.elements["switch_oredict"]) content.elements["switch_oredict"].state = eventData.oredictMode;
+						if(content.elements["switch_processing"]) content.elements["switch_processing"].state = patternGridData.patternMode;
+						if(content.elements["switch_oredict"]) content.elements["switch_oredict"].state = patternGridData.oredictMode;
+						patternGridGUI.getWindow('main').forceRefresh();
 					} finally {
 						patternGridData._settingSwitchState = false;
 					}
-					moveCraftsSlots(patternGridData.patternMode);
-					patternGridGUI.getWindow('main').forceRefresh();
 				}
 				if(patternGridData.lowPriority){
 					patternGridData.lowPriority = false;
@@ -1196,45 +1053,7 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 				this.data.fullRefreshPage = false;
 			}
 		}
-		for(var p in this.data.pushDeleteEvents){
-			var player = new PlayerActor(Number(p));
-			for(var i in this.data.pushDeleteEvents[p]){
-				var event = this.data.pushDeleteEvents[p][i];
-				if(!event) {
-					delete this.data.pushDeleteEvents[p][i];
-					continue;
-				}
-				if(event.type == 'push'){
-					var item = player.getInventorySlot(event.slot);
-					if(item.id == 0) continue;
-					var count = Math.min(event.count, item.count);
-					var pushed = this.pushItem(item, count, true);
-					if(pushed < count){
-						player.setInventorySlot(event.slot, item.id, item.count - (count - pushed), item.data, item.extra);
-					}
-					var _index;
-				if((_index = this.originalItemsMap().indexOf(getItemUid(item))) != -1)this.container.markSlotDirty(_index+'slot');
-					this.items();
-					this.refreshGui(false, false, item.count <= count || event.updateFull);
-					delete this.data.pushDeleteEvents[p][i];
-				}
-				if(event.type == 'delete'){
-					var item = this.container.getSlot(i);
-					var itemMaxStack = Item.getMaxStack(item.id);
-					var this_item = searchItem(item.id, item.data, item.extra, false, true, p);
-					var count = this_item && this_item.count < itemMaxStack ? Math.min(event.count, item.count, itemMaxStack - this_item.count) : Math.min(event.count, item.count);
-					var res;
-				if((res = this.deleteItem(item, count, true)) < count) {
-						var _extra = (this_item ? this_item.extra : item.extra);
-						player.addItemToInventory(item.id, count - res, item.data, _extra || null, true);
-						this.items();
-						this.refreshGui(false, false, item.count <= count || event.updateFull);
-					}
-					delete this.data.pushDeleteEvents[p][i];
-				}
-			}
-			delete this.data.pushDeleteEvents[p];
-		}
+	GridEvents.processPushDeleteEvents(this);
 	},
 	post_destroy: function () {
 		for(var i in this.container.slots){

@@ -45,7 +45,6 @@ var gridData = {
 }
 
 function gridSwitchPage(page, container, ignore, dontMoveSlider){
-	if(Config.dev)Logger.Log('Switch grid Page; page: ' + page + ' ; ignore: ' + ignore + ' ; dontMoveSlider: ' + dontMoveSlider + ' ; container: ' + container, 'RefinedStorageDebug');
 	if(!container.getUiAdapter() || !container.getUiAdapter().getWindow() || !container.getUiAdapter().getWindow().isOpened()) return false;
 	var slots = container.slots;
 	var slotsKeys = gridData.slotsKeys;
@@ -70,10 +69,8 @@ function gridSwitchPage(page, container, ignore, dontMoveSlider){
 	for (var i = page * x_count; i < page * x_count + slots_count; i++) {
 		var a = i - (page * x_count);
 		var item = slots[slotsKeys[i]] || { id: 0, data: 0, count: 0, extra: null };
-		//container.markSlotDirty("slot" + a);
 		container.markSlotDirty("slot" + a);
 		elements_.get("slot" + a).setBinding('text', (!item.count ? 'Craft' : cutNumber(item.count, true) + ""));
-		//container.setText("slot" + a, cutNumber(item.count));
 		container.setSlot("slot" + a, item.id, item.count, item.data, item.extra || null);
 	}
 	return true;
@@ -124,12 +121,6 @@ inv_elements.elements["_CLICKFRAME_"] = {
 	scale: 1,
 	onTouchEvent: createInventoryPushHandler(gridData)
 }
-function least_sort(a, b) { return a - b; };
-
-function error(message) {
-	alert(message);
-	return false;
-}
 
 var gridFuncs = makePageHelpers(_elementsGUI_grid, {countX: "x_count", countY: "y_count", maxY: "max_y", slider: "slider_button"});
 
@@ -138,20 +129,14 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		NETWORK_ID: 'f',
 		LAST_NETWORK_ID: 0,
 		block_data: 0,
-		page: 1,
 		items: [],
 		event: { x: 0, y: 0 },
 		sort: 0,
 		sort_map: ['count', 'name', 'id'],
 		reverse_filter: false,
-		page_switched: false,
 		controller_coords: { x: 0, y: 0, z: 0 },
-		slots_count: 0,
 		textSearch: false,
-		privateRemaked: false,
 		pushDeleteEvents: {},
-		firstOpen: false,
-		firstOpenClients: [],
 		fullRefreshPage: false
 	},
 	unsaveableSlots: true,
@@ -163,12 +148,6 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		if (!client || this.container.getNetworkEntity().getClients().contains(client)) return true;
 		this.items();
 		this.container.openFor(client, "main");
-		/* this.data.firstOpen = World.getThreadTime() + 40;
-		this.data.firstOpenClients.push(client); */
-		/* var ths = this;
-		setTimeout(function(){
-			ths.refreshGui(true, client);
-		},40); */
 		if(InnerCore_pack.packVersionCode < 119)this.refreshGui(true, client); 
 		return true;
 	},
@@ -200,18 +179,9 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		})
 	},
 	post_init: function(){
-		/* this.data.firstOpen = false;
-		this.data.firstOpenClients = []; */
 		this.data.pushDeleteEvents = {};
 	},
 	tick: function () {
-		/* if(this.data.firstOpen && this.data.firstOpen == World.getThreadTime()){
-			for(var i in this.data.firstOpenClients){
-				this.refreshGui(true, this.data.firstOpenClients[i]);
-			}
-			this.data.firstOpenClients = [];
-			this.data.firstOpen = false;
-		} */
 		if (this.container.getNetworkEntity().getClients().iterator().hasNext()) {
 			if(this.data.refreshCurPage){
 				this.items();
@@ -220,47 +190,7 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 				this.data.fullRefreshPage = false;
 			}
 		}
-		for(var p in this.data.pushDeleteEvents){
-			var player = new PlayerActor(Number(p));
-			//alert('Checking event of: ' + p);
-			for(var i in this.data.pushDeleteEvents[p]){
-				var event = this.data.pushDeleteEvents[p][i];
-				//alert('Event: ' + JSON.stringify(event));
-				if(!event) {
-					delete this.data.pushDeleteEvents[p][i];
-					continue;
-				}
-				if(event.type == 'push'){
-					var item = player.getInventorySlot(event.slot);
-					if(item.id == 0) continue;
-					var count = Math.min(event.count, item.count);
-					var pushed = this.pushItem(item, count, true);
-					if(pushed < count){
-						player.setInventorySlot(event.slot, item.id, item.count - (count - pushed), item.data, item.extra);
-					}
-					var _index;
-				if((_index = this.originalItemsMap().indexOf(getItemUid(item))) != -1)this.container.markSlotDirty(_index+'slot');
-					this.items();
-					this.refreshGui(false, false, item.count <= count || event.updateFull);
-					delete this.data.pushDeleteEvents[p][i];
-				}
-				if(event.type == 'delete'){
-					var item = this.container.getSlot(i);//event.item;
-					var itemMaxStack = Item.getMaxStack(item.id);
-					var this_item = searchItem(item.id, item.data, item.extra, false, true, p);
-					var count = this_item && this_item.count < itemMaxStack ? Math.min(event.count, item.count, itemMaxStack - this_item.count) : Math.min(event.count, item.count/* , itemMaxStack*emptySlots.length */);
-					var res;
-				if((res = this.deleteItem(item, count, true)) < count) {
-						var _extra = (this_item ? this_item.extra : item.extra);
-						player.addItemToInventory(item.id, count - res, item.data, _extra || null, true);
-						this.items();
-						this.refreshGui(false, false, item.count <= count || event.updateFull);
-					}
-					delete this.data.pushDeleteEvents[p][i];
-				}
-			}
-			delete this.data.pushDeleteEvents[p];
-		}
+		GridEvents.processPushDeleteEvents(this);
 	},
 	post_update_network: function () {
 		this.data.controller_coords = searchController_net(this.data.NETWORK_ID);
@@ -269,17 +199,6 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 	post_setActive: function(){
 		this.items();
 		this.refreshGui(false, false, true, true);
-	},
-	controller_id: function () {
-		if (this.data.NETWORK_ID == "f") return '0,0,0';
-		return this.data.controller_coords.x + ',' + this.data.controller_coords.y + ',' + this.data.controller_coords.z;
-	},
-	pages: function () {
-		if (this.container.getNetworkEntity().getClients().iterator().hasNext() && this.data.NETWORK_ID != "f") {
-			return gridFuncs.getPages(this.originalItems().length)
-		} else {
-			return 1;
-		}
 	},
 	originalCrafts: function(){
 		if (!this.isWorkAllowed()) return {};
@@ -294,14 +213,13 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 				crafts[uid] = {id: parseInt(parts[0]), data: parseInt(parts[1]), count: 0};
 			}
 		}
-		if(Config.dev)Logger.Log('[CRAFT] originalCrafts: items=' + items.length + ' itemMap=' + JSON.stringify(Object.keys(itemMap)) + ' crafts=' + JSON.stringify(Object.keys(crafts)), 'RefinedStorageDebug');
 		return crafts;
 	},
 	items: function (forced) {
 		if (!this.isWorkAllowed()) {
 			return [];
 		}
-		var items = this.originalItems();
+		var items = this.originalItems().slice();
 		var allSlots = Object.keys(this.container.slots);
 		for (var ci = 0; ci < allSlots.length; ci++) {
 			if (allSlots[ci][0] >= '0' && allSlots[ci][0] <= '9') this.container.setSlot(allSlots[ci], 0, 0, 0);
@@ -379,7 +297,6 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		return res;
 	},
 	post_destroy: function () {
-		delete temp_data[this.coords_id()];
 		for(var i in this.container.slots){
 			this.container.clearSlot(i);
 		}
@@ -401,7 +318,6 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 			disksStorage: this.getDisksStorage() + "",
 			disksStored: this.getDisksStored(),
 			isWorkAllowed: this.isWorkAllowed()
-			//slotsLength: Object.keys(this.container.slots).length
 		};
 		if(client){
 			this.container.sendEvent(client, "openGui", _data);
@@ -414,7 +330,6 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 	},
 	client: {
 		refreshModel: function(){
-			if(Config.dev)Logger.Log('Local refreshing Grid model: block_data: ' + this.networkData.getInt('block_data') + ' ; isActive: ' + this.networkData.getBoolean('isActive'), 'RefinedStorageDebug');
 			var render = new ICRender.Model();
 			var model = BlockRenderer.createTexturedBlock(getGridTexture(this.networkData.getInt('block_data'), this.networkData.getBoolean('isActive')));
 			render.addEntry(model);
@@ -429,7 +344,6 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		},
 		events: {
 			refreshModel: function(eventData, packetExtra) {
-				if(Config.dev)Logger.Log('Event refreshing Grid model: block_data: ' + this.networkData.getInt('block_data') + ' ; isActive: ' + this.networkData.getBoolean('isActive') + ' ; eventIsActive: ' + eventData.isActive, 'RefinedStorageDebug');
 				var render = new ICRender.Model();
 				var model = BlockRenderer.createTexturedBlock(getGridTexture(eventData.block_data, eventData.isActive));
 				render.addEntry(model);
@@ -442,14 +356,8 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 				eventData.disksStorage = Number(eventData.disksStorage);
 				Object.assign(gridData, eventData);
 				gridData.updateGui = function(refresh, updateFilters, nonlocal){
-					if(Config.dev)Logger.Log((nonlocal ? 'Server ' : 'Local ') + (refresh ? 'Updating' : 'Openning') + ' window: refresh:' + refresh + ' updateFilters:' + updateFilters + ' eventdata:' + JSON.stringify(eventData), 'RefinedStorageDebug');
 					delete container.slots.bindings;
 					delete container.slots.slots;
-					var slotsCount = content.elements.slots_count || 0;
-					for (var sc = 0; sc < slotsCount; sc++) {
-						container.setSlot('slot' + sc, 0, 0, 0, null);
-						if (content.elements['slot' + sc]) content.elements['slot' + sc].darken = false;
-					}
 					gridData.networkData = SyncedNetworkData.getClientSyncedData(eventData.name);
 					if(updateFilters || refresh){
 						var _slotKeys = [];
@@ -459,7 +367,6 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 						var millis = 0;
 						if(Config.dev)millis = java.lang.System.currentTimeMillis();
 						gridData.slotsKeys = RefinedStorage.sortItems(eventData.sort, eventData.reverse_filter, gridData.textSearch || null, container, gridData.slotsKeys);
-						if(Config.dev)Logger.Log('Items array sorted on: ' + (java.lang.System.currentTimeMillis() - millis), "RefinedStorageDebug");
 						if(gridData.selectedItemInfoSlot)gridData.setItemInfoSlot(gridData.selectedItemInfoSlot, container);
 					}
 					content.elements["image_filter"].bitmap = 'RS_filter' + (eventData.sort + 1);
@@ -473,7 +380,6 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 					content.elements["image_redstone"].bitmap = 'redstone_GUI_' + (eventData.redstone_mode || 0);
 					var slots_count = content.elements.slots_count;
 					content.elements["slider_button"].bitmap = gridData.slotsKeys.length <= gridData.slots_count ? 'slider_buttonOff' : 'slider_buttonOn';
-					//if(refresh)window.getWindow('main').getElements().get("slider_button").setPosition(content.elements['slider_button'].x, gridFuncs.getCoordsFromPage(gridData.lastPage, gridFuncs.getPages(gridData.slotsKeys.length)));
 					if (!eventData.isWorkAllowed) {
 						for (var i = 0; i < slots_count; i++) {
 							content.elements['slot' + i].bitmap = 'classic_darken_slot';
@@ -506,49 +412,25 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 			openCraftPreview: function(container, window, content, eventData){
 				openCraftPreview(container, eventData);
 			}
-		},
-		openCraftPreview: function(container, window, content, eventData){
-			openCraftPreview(container, eventData);
 		}
 	},
 	containerEvents: {
 		updateFilter: function(eventData, connectedClient) {
-			if(this.data.sort == undefined) this.data.sort = 0;
-			this.data.sort = this.data.sort >= 2 ? 0 : this.data.sort + 1;
-			this.refreshGui(false, false, true);
+			GridEvents.updateFilter(this);
 		},
 		updateReverseFilter: function(eventData, connectedClient) {
-			this.data.reverse_filter = !this.data.reverse_filter;
-			this.refreshGui(false, false, true);
+			GridEvents.updateReverseFilter(this);
 		},
 		craftPreview: function(eventData, connectedClient){
-			if(!eventData.item || !eventData.count || this.data.NETWORK_ID == 'f') return;
-			if(Config.dev)Logger.Log('[CRAFT] Grid preview: ' + Item.getName(eventData.item.id, eventData.item.data) + ' x' + (eventData.count||1), 'RefinedStorageDebug');
-			var constructedCraft = RSNetworks[this.data.NETWORK_ID].info.constructCraft(eventData.item, eventData.count);
-			if(constructedCraft){
-				if(Config.dev)Logger.Log('[CRAFT] Grid preview result: craftable=' + constructedCraft.craftable + ' crafts=' + (constructedCraft.crafts?constructedCraft.crafts.length:0), 'RefinedStorageDebug');
-				var craftsData = constructedCraft.crafts ? constructedCraft.crafts.map(function(c){ return {completedIngridients: c.completedIngridients, craftable: c.craftable}; }) : [];
-				Logger.Log('[GRID] Preview: craftable=' + constructedCraft.craftable + ' error=' + (constructedCraft.errorType || 'none') + ' results=' + (constructedCraft.results ? constructedCraft.results.length : 0) + ' ingridients=' + (constructedCraft.ingridients ? constructedCraft.ingridients.length : 0), 'RS_DEBUG');
-				this.container.sendEvent(connectedClient, "openCraftPreview", {results: constructedCraft.results, ingridients: constructedCraft.ingridients, craftable: constructedCraft.craftable, crafts: craftsData, errorType: constructedCraft.errorType || null});
-			}
+			GridEvents.craftPreview(this, eventData, connectedClient);
 		},
 		provideConstructedCraft: function(eventData, connectedClient){
-			if(!eventData.item || !eventData.count || this.data.NETWORK_ID == 'f') return;
-			Logger.Log('[GRID] CraftRequest: ' + Item.getName(eventData.item.id, eventData.item.data) + ' x' + (eventData.count||1) + ' netId=' + this.data.NETWORK_ID, 'RS_DEBUG');
-			if(Config.dev)Logger.Log('[CRAFT] Grid start: ' + Item.getName(eventData.item.id, eventData.item.data) + ' x' + (eventData.count||1), 'RefinedStorageDebug');
-			var constructedCraft = RSNetworks[this.data.NETWORK_ID].info.constructCraft(eventData.item, eventData.count);
-			if(Config.dev)Logger.Log('[CRAFT] Grid start result: craftable=' + (constructedCraft?constructedCraft.craftable:'false') + ' providingCrafts=' + RSNetworks[this.data.NETWORK_ID].info.providingCrafts.length, 'RefinedStorageDebug');
-			if(constructedCraft && constructedCraft.craftable){
-				RSNetworks[this.data.NETWORK_ID].info.provideCraft(constructedCraft);
-				this.items();
-				this.refreshGui(false, false, true);
-			}
+			GridEvents.provideConstructedCraft(this, eventData, connectedClient);
 		}
 	},
 	events: {
 		pushDeleteEvents: function(packetData, packetExtra, connectedClient) {
 			this.data.pushDeleteEvents[connectedClient.getPlayerUid()] = packetData.pushDeleteEvents;
-			if(Config.dev)Logger.Log('Getted pushDeleteEvents from: ' + connectedClient.getPlayerUid() + ' : ' + JSON.stringify(packetData.pushDeleteEvents), 'RefinedStorageDebug');
 		}
 	}
 })

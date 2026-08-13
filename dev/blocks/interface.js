@@ -12,9 +12,6 @@ RS_blocks.push(BlockID.RS_interface);
 EnergyUse[BlockID['RS_interface']] = Config.energy_uses.interface;
 
 var elementsGUI_interface = {};
-var interfaceData = {
-	getSelectedSlot: function(){}
-};
 function initInterfaceElements(){
 
 	var slotsSize = 60;
@@ -218,8 +215,6 @@ for(var asdl = 0; asdl < 9; asdl++){
 	importSlotsMap[asdl] = 'slot_import'+asdl;
 }
 
-var inv_elements_interfaceGUI = interfaceGUI.getWindow('inventory').getContent();
-
 RefinedStorage.createTile(BlockID.RS_interface, {
 	defaultValues: {
 		ticks: 0,
@@ -280,29 +275,6 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 		}
 		this.container.sendChanges();
 	},
-	/* post_update_network: function(net_id){
-		if(net_id == 'f') return;
-		var ths = this;
-		RSNetworks[net_id][this.coords_id()].pushItemFunc = function(item, count){
-			return ths.pushItemFunc(item, count);
-		}
-	},
-	pushItemFunc: function(item, count){
-		if(Config.dev)Logger.Log('Redirection item to interface: id: ' + item.id + ', count: ' + count + ' (' + item.count + '), data: ' + item.data + (item.extra ? ', extra: ' + item.extra.getValue() : ''), 'RefinedStorageDebug');
-		for(var i in this.data.importItems){
-			var _item = this.data.importItems[i];
-			if(!_item || _item.id == 0) continue;
-			var maxStack = Math.min(Item.getMaxStack(item.id), _item.count);
-			var slot = this.container.getSlot('slot_output' + i);
-			if(slot.count < maxStack && (item.id == _item.id && (!this.data.useDamage ? true : item.data == _item.data) && (!this.data.useNbt ? true : item.extra == _item.extra) && (slot.id == 0 || (slot.id == item.id && slot.data == item.data && slot.extra == item.extra)))){
-				var _count = Math.min(maxStack - count, count);
-				if(_count <= 0) continue;
-				count -= _count;
-				this.container.setSlot('slot_output' + i, item.id, slot.count + _count, item.data, item.extra);
-			}
-		}
-		return count;
-	}, */
 	pre_created: function(){
 		this.data.importItems = [{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null}];
 	},
@@ -325,30 +297,6 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 		var res = RSNetworks[this.data.NETWORK_ID].info.deleteItem(item, count);
 		if(this.post_deleteItem)this.post_deleteItem(item, count, res);
 		return res;
-	},
-	originalItems: function(){
-		if (!this.isWorkAllowed()) {
-			return [];
-		}
-		return RSNetworks[this.data.NETWORK_ID].info.items;
-	},
-	originalItemsMap: function(){
-		if (!this.isWorkAllowed()) {
-			return [];
-		}
-		return RSNetworks[this.data.NETWORK_ID].info.items_map;
-	},
-	originalOnlyItemsMap: function(){
-		if (!this.isWorkAllowed()) {
-			return {};
-		}
-		return RSNetworks[this.data.NETWORK_ID].info.just_items_map;
-	},
-	originalOnlyItemsExtraMap: function(){
-		if (!this.isWorkAllowed()) {
-			return {};
-		}
-		return RSNetworks[this.data.NETWORK_ID].info.just_items_map_extra;
 	},
     refreshModel: function(){
 		if(!this.networkEntity) return Logger.Log(Item.getName(this.blockInfo.id, this.blockInfo.data) + ' model on: ' + cts(this) + ' cannot be displayed');
@@ -404,12 +352,10 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 	},
 	client:{
 		refreshModel: function(eventData, packetExtra) {
-			if(Config.dev)Logger.Log('Local refreshing Interface model: isActive: ' + this.networkData.getBoolean('isActive'), 'RefinedStorageDebug');
 			RefinedStorage.mapTexture(this, this.networkData.getBoolean('isActive') ? 'interface_on' : 'interface_off');
 		},
 		events: {
 			refreshModel: function(eventData, packetExtra) {
-				if(Config.dev)Logger.Log('Event refreshing Interface model: isActive: ' + eventData.isActive, 'RefinedStorageDebug');
 				RefinedStorage.mapTexture(this, eventData.isActive ? 'interface_on' : 'interface_off');
 			}
 		},
@@ -419,13 +365,6 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 				content.elements["image_redstone"].bitmap = 'redstone_GUI_' + (eventData.redstone_mode || 0);
 				content.elements["image_damage"].bitmap = eventData.useDamage ? 'RS_damage_on' : 'RS_damage_off';
 				content.elements["image_nbt"].bitmap = eventData.useNbt ? 'RS_nbt_on' : 'RS_nbt_off';
-				/* var elementIns = window.getElements().get('slot_input0'); 
-				var clazz = elementIns.getClass(); 
-				var field = clazz.getDeclaredField("currentSelectedSlot");
-				field.setAccessible(true);
-				interfaceData.getSelectedSlot = function(name){
-					return name ? field.get(elementIns).description.name : field.get(elementIns);
-				} */
 			}
 		}
 	},

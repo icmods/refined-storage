@@ -343,7 +343,3 @@ Translation.addTranslation("Hollow covering", {"de":"Hohle Fassaden","ru":"По�
 Translation.addTranslation("Craft a Hollow Cover to hide cables, but still let cable through", {"de":"Stelle eine hohle Fassade her um Kabel zu verstecken, aber weiterhin durchleiten zu können","ru":"Создайте полый корпус, чтобы скрыть кабели, но все же пропустите кабель","zh":"合成【空心伪装板】来隐藏线缆并不阻碍线缆穿过"});
 Translation.addTranslation("Binding", {"de":"Verbundsstoff","ru":"Связка","zh":"粘合物"});
 Translation.addTranslation("Craft Processor Binding to craft the various processors", {"de":"Stelle Prozessor Rohmaterial her, um Prozessoren zu bauen.","ru":"Создайте связанный процессор, чтобы обрабатывать различные процессоры","zh":"合成【处理器粘合物】来制作各种处理器"});
-/* Translation.addTranslation("Open Wireless Grid", {});
-Translation.addTranslation("Open Wireless Fluid Grid", {});
-Translation.addTranslation("Open Portable Grid", {});
-Translation.addTranslation("Open Wireless Crafting Monitor", {}); */

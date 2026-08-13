@@ -1,16 +1,13 @@
 function loadControllerClient(tile) {
-	if(Config.dev)Logger.Log('Loaded Controller client tile: energy: ' + tile.networkData.getInt('energy') + ' ; isActive: ' + tile.networkData.getBoolean('isActive'), 'RefinedStorageDebug');
 	if(tile.refreshModel)tile.refreshModel();
 }
 
 function refreshControllerModel(tile) {
-	if(Config.dev)Logger.Log('Local refreshing Controller model: energy: ' + tile.networkData.getInt('energy') + ' ; isActive: ' + tile.networkData.getBoolean('isActive'), 'RefinedStorageDebug');
 	var newTexture = getControllerTexture(getEnergyScaled(100, tile.networkData.getInt('energy')), tile.networkData.getBoolean('isActive'));
 	RefinedStorage.mapTexture(tile, newTexture);
 }
 
 function handleControllerModelEvent(tile, eventData) {
-	if(Config.dev)Logger.Log('Event refreshing Controller model: energy: ' + eventData.energy + ' ; isActive: ' + eventData.isActive, 'RefinedStorageDebug');
 	var newTexture = getControllerTexture(getEnergyScaled(100, eventData.energy), eventData.isActive);
 	RefinedStorage.mapTexture(eventData.coords, newTexture);
 }

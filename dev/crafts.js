@@ -185,4 +185,34 @@ Callback.addCallback("PreLoaded", function () {
 		"rsr",
 		"ihi"
 	], ['s', BlockID['RSmachine_casing'], 0, 'i', ItemID.quartz_enriched_iron, -1, 'h', 410, -1, 'r', 331, -1]);//TODO: remake craft
+
+	Recipes.addShaped({id: ItemID.RSpattern, count: 1, data: 0}, [
+		"grg",
+		"rgr",
+		"eee"
+	], ['g', 20, -1, 'r', 331, -1, 'e', ItemID.quartz_enriched_iron, -1]);
+	Recipes.addShaped({id: ItemID.RSpattern, count: 1, data: 0}, [
+		"grg",
+		"rgr",
+		"eee"
+	], ['g', 241, -1, 'r', 331, -1, 'e', ItemID.quartz_enriched_iron, -1]);
+
+	Recipes.addShapeless({id: BlockID['RS_pattern_grid'], count: 1, data: 0}, [{id: BlockID['RS_grid'], count: 1, data: -1}, {id: ItemID.advanced_processor, count: 1, data: -1}, {id: ItemID.RSpattern, count: 1, data: -1}]);
+
+	Recipes.addShaped({id: BlockID['RS_crafter'], count: 1, data: 0}, [
+		"ece",
+		"ama",
+		"ede"
+	], ['e', ItemID.quartz_enriched_iron, -1, 'c', ItemID.construction_core, -1, 'a', ItemID.advanced_processor, -1, 'm', BlockID['RSmachine_casing'], -1, 'd', ItemID.destruction_core, -1]);
+
+	Recipes.addShaped({id: BlockID['RS_craftingMonitor'], count: 1, data: 0}, [
+		"pag",
+		"emg",
+		"pag"
+	], ['p', ItemID.improved_processor, -1, 'a', ItemID.RSpattern, -1, 'g', 20, -1, 'e', ItemID.quartz_enriched_iron, -1, 'm', BlockID['RSmachine_casing'], -1]);
+	Recipes.addShaped({id: BlockID['RS_craftingMonitor'], count: 1, data: 0}, [
+		"pag",
+		"emg",
+		"pag"
+	], ['p', ItemID.improved_processor, -1, 'a', ItemID.RSpattern, -1, 'g', 241, -1, 'e', ItemID.quartz_enriched_iron, -1, 'm', BlockID['RSmachine_casing'], -1]);
 });

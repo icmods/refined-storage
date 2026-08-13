@@ -222,7 +222,6 @@ function buildStorageSlots(ctx) {
 						}
 						var _count = 1;
 						var updateFull = false;
-						if(Config.dev)Logger.Log('Deleting slot: ' + slot + ' ; num: ' + this.num + '(' + _num + ') ; lastPage: ' + ctx.gridData.lastPage + ' ; count: ' + _count + ' ; x_count: ' + ctx.x_count, 'RefinedStorageDebug');
 						var elements_ = itemContainer.getUiAdapter().getWindow().getWindow('main').getElements();
 						if(slotItem.count == _count) {
 							itemContainer.setSlot(slot, 0, 0, 0);
@@ -249,7 +248,7 @@ function buildStorageSlots(ctx) {
 							}
 						}
 						ctx.gridData.setItemInfoSlot(slot, itemContainer);
-						var asdgfasdasddsad; var map = (asdgfasdasddsad = ctx.gridData.networkData.getString('deleteItemsMap', 'null')) != 'null' ? JSON.parse(asdgfasdasddsad) : [];
+						var map = (jsonMap_ = ctx.gridData.networkData.getString('deleteItemsMap', 'null')) != 'null' ? JSON.parse(jsonMap_) : [];
 						if(map.indexOf(slot) == -1){
 							map.push(slot);
 							ctx.gridData.networkData.putString('deleteItemsMap', JSON.stringify(map));
@@ -282,7 +281,6 @@ function buildStorageSlots(ctx) {
 						var this_item = searchItem(slotItem.id, slotItem.data, false, true);
 						var _count = this_item && this_item.count < maxStack && this_item.extra == slotItem.extra ? Math.min(slotItem.count, maxStack - this_item.count) : Math.min(slotItem.count, maxStack);
 						var updateFull = false;
-						if(Config.dev)Logger.Log('Deleting slot: ' + slot + ' ; num: ' + this.num + '(' + _num + ') ; lastPage: ' + ctx.gridData.lastPage + ' ; count: ' + _count + ' ; x_count: ' + ctx.x_count, 'RefinedStorageDebug');
 						var elements_ = itemContainer.getUiAdapter().getWindow().getWindow('main').getElements();
 						if(slotItem.count <= _count) {
 							itemContainer.setSlot(slot, 0, 0, 0);
@@ -310,7 +308,7 @@ function buildStorageSlots(ctx) {
 						}
 						ctx.gridData.setItemInfoSlot(slot, itemContainer);
 						ctx.gridData.lowPriority = true;
-						var asdgfasdasddsad; var map = (asdgfasdasddsad = ctx.gridData.networkData.getString('deleteItemsMap', 'null')) != 'null' ? JSON.parse(asdgfasdasddsad) : [];
+						var map = (jsonMap_ = ctx.gridData.networkData.getString('deleteItemsMap', 'null')) != 'null' ? JSON.parse(jsonMap_) : [];
 						if(map.indexOf(slot) == -1){
 							map.push(slot);
 							ctx.gridData.networkData.putString('deleteItemsMap', JSON.stringify(map));

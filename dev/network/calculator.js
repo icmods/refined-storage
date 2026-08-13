@@ -10,7 +10,6 @@ var CraftingCalculator = {
 			item.data = info.craftsIDS[item.id][0];
 		}
 		var itemUid = item.id + '_' + item.data;
-		Logger.Log('[CALC] Request: ' + Item.getName(item.id, item.data) + ' x' + quantity + ' uid=' + itemUid, 'RS_DEBUG');
 		if (!info.crafts[itemUid]) {
 			return { craftable: false, errorType: "NO_PATTERN" };
 		}
@@ -19,7 +18,6 @@ var CraftingCalculator = {
 		for (var i = 0; i < info.items.length; i++) {
 			storageCopy[info.items_map[i]] = info.items[i].count;
 		}
-		Logger.Log('[CALC] Snapshot: ' + info.items.length + ' types storage=' + info.storage + ' stored=' + info.stored + ' copyKeys=' + Object.keys(storageCopy).length, 'RS_DEBUG');
 
 		var visited = {};
 		var plan = {
@@ -34,7 +32,6 @@ var CraftingCalculator = {
 		var baseCount = rootPatterns[0] && rootPatterns[0].result && rootPatterns[0].result[0]
 			? rootPatterns[0].result[0].count : 1;
 		var multiplier = quantity > baseCount ? Math.ceil(quantity / baseCount) : undefined;
-		Logger.Log('[CALC] Pattern: ' + itemUid + ' variants=' + rootPatterns.length + ' baseCount=' + baseCount + ' multiplier=' + (multiplier || 1), 'RS_DEBUG');
 
 		var error = null;
 		try {
@@ -54,14 +51,23 @@ var CraftingCalculator = {
 		for (var k in plan.missing) { hasMissing = true; break; }
 
 		if (hasMissing) {
-			return {
-				craftable: false,
-				errorType: "MISSING",
-				plan: plan,
-				results: [],
-				ingridients: [],
-				crafts: []
-			};
+			var fullCrafts = this._buildFullCrafts(item, itemUid, quantity, baseCount, multiplier, info, plan);
+			fullCrafts.craftable = false;
+			fullCrafts.errorType = "MISSING";
+			if (fullCrafts.crafts) {
+				for (var ci = 0; ci < fullCrafts.crafts.length; ci++) {
+					var cra = fullCrafts.crafts[ci];
+					if (!cra.completedIngridients) continue;
+					for (var ii = 0; ii < cra.completedIngridients.length; ii++) {
+						var ing = cra.completedIngridients[ii];
+						var ingUid = ing.id + '_' + ing.data;
+						ing.count = plan.toTake[ingUid] || 0;
+						ing.need = plan.missing[ingUid] || 0;
+						ing.craft = plan.toCraft[ingUid] || 0;
+					}
+				}
+			}
+			return fullCrafts;
 		}
 
 		var fullCrafts = this._buildFullCrafts(item, itemUid, quantity, baseCount, multiplier, info, plan);
@@ -69,7 +75,6 @@ var CraftingCalculator = {
 		fullCrafts.craftable = true;
 		fullCrafts.toReserveItems = plan.toReserve;
 		fullCrafts.plan = plan;
-		Logger.Log('[CALC] Result: craftable=true nodes=' + plan.nodes.length + ' toReserve=' + Object.keys(plan.toReserve).length + ' toCraft=' + Object.keys(plan.toCraft).length + ' missing=' + Object.keys(plan.missing).length, 'RS_DEBUG');
 
 		return fullCrafts;
 	},
@@ -104,7 +109,6 @@ var CraftingCalculator = {
 
 			var ingUid = getItemUid(ingr);
 			var needed = ingr.count * m;
-			Logger.Log('[CALC] Ingredient: ' + ingUid + ' needed=' + needed + ' inStorage=' + (storageCopy[ingUid] || 0) + ' pattern=' + patternUid + ' depth=' + Object.keys(visited).length, 'RS_DEBUG');
 
 			var fromStorage = storageCopy[ingUid] || 0;
 			if (fromStorage > 0) {
@@ -120,10 +124,9 @@ var CraftingCalculator = {
 					var subPattern = info.crafts[ingUid][0];
 					var subBase = subPattern.result && subPattern.result[0] ? subPattern.result[0].count : 1;
 					var subQty = Math.ceil(needed / subBase);
-					var subMultiplier = subQty > subBase ? Math.ceil(subQty / subBase) : undefined;
 
 					this._calculateInternal(
-						ingUid, subMultiplier, storageCopy, info, visited, startTime, timeout, plan
+						ingUid, subQty, storageCopy, info, visited, startTime, timeout, plan
 					);
 
 					plan.toCraft[ingUid] = (plan.toCraft[ingUid] || 0) + subQty * subBase;
@@ -196,7 +199,6 @@ var CraftingCalculator = {
 		var pattern = info.crafts[itemUid][0];
 
 		var allIngridients = [];
-		var toTakeMap = {};
 		for (var uid in plan.toTake) {
 			var parts = uid.split('_');
 			allIngridients.push({ id: parseInt(parts[0]), data: parseInt(parts[1]), count: plan.toTake[uid] });
@@ -247,7 +249,6 @@ var CraftingCalculator = {
 				oneCountIngridients: oneCountIngridients,
 				completedIngridients: completedIngridients,
 				craft: nodePattern,
-				needCrafts: [],
 				isRoot: (node.patternUid === itemUid)
 			});
 		}
@@ -258,11 +259,6 @@ var CraftingCalculator = {
 			results: results,
 			ingridients: allIngridients,
 			crafts: crafts,
-			currentCrafts: [],
-			providedCrafts: [],
-			completedCrafts: [],
-			withoutMachineChecked: {},
-			taked: {},
 			toReserveItems: plan.toReserve,
 			plan: plan
 		};

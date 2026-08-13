@@ -657,40 +657,62 @@ preCraftCountGUI.forceRefresh();
 preCraftGUI.forceRefresh();
 
 function createCraftPreviewPostData(_data){
-	var newData = [];
-	for(var i in _data.results){
-		var result = _data.results[i];
-		var toCraft = Translation.translate("To craft") + ": " + (result.count || 1);
-		var available = result.count > 0 ? Translation.translate("Available") + ": " + result.count : "";
-		newData.push([{id: result.id, data: result.data}, toCraft, available]);
+	var subCraftOutputs = {};
+	if(_data.crafts)for(var ci = 0; ci < _data.crafts.length; ci++){
+		var cra = _data.crafts[ci];
+		if(cra && cra.result && cra.result.id) subCraftOutputs[cra.result.id + '_' + cra.result.data] = cra.result.count;
 	}
+	var aggregated = {};
 	if(_data.crafts)for(var ci = 0; ci < _data.crafts.length; ci++){
 		var cra = _data.crafts[ci];
 		if(!cra || !cra.completedIngridients) continue;
 		for(var ii = 0; ii < cra.completedIngridients.length; ii++){
 			var ing = cra.completedIngridients[ii];
 			if(!ing || !ing.id) continue;
-			var label = "";
-			if(ing.need > 0){
-				label = Translation.translate("Available") + ": " + (ing.count || 0) + " / " + Translation.translate("Missing") + ": " + ing.need;
-				newData.unshift([{id: ing.id, data: ing.data, need: ing.need}, label, ""]);
-			} else {
-				label = Translation.translate("Available") + ": " + (ing.count || 0);
-				newData.push([{id: ing.id, data: ing.data}, label, ""]);
-			}
+			var uid = ing.id + '_' + ing.data;
+			if(!aggregated[uid]) aggregated[uid] = {id: ing.id, data: ing.data, count: 0, need: 0, craft: 0};
+			aggregated[uid].count += (ing.count || 0);
+			aggregated[uid].need += (ing.need || 0);
+			aggregated[uid].craft += (ing.craft || 0);
 		}
 	}
+	var toCraftRows = [];
+	var missingRows = [];
+	var availableRows = [];
+	for(var uid in aggregated){
+		var ing = aggregated[uid];
+		var isSubOutput = !!subCraftOutputs[uid];
+		var craftCount = ing.craft > 0 ? ing.craft : (isSubOutput && ing.need <= 0 ? ing.count : 0);
+		if(craftCount > 0 && ing.need <= 0){
+			var l1 = Translation.translate("To craft") + ": " + craftCount;
+			var l2 = ing.count > 0 ? Translation.translate("Available") + ": " + ing.count : "";
+			toCraftRows.push([{id: ing.id, data: ing.data}, l1, l2]);
+		} else if(ing.need > 0){
+			if(ing.count > 0){
+				missingRows.push([{id: ing.id, data: ing.data, need: ing.need}, Translation.translate("Available") + ": " + ing.count, Translation.translate("Missing") + ": " + ing.need]);
+			} else {
+				missingRows.push([{id: ing.id, data: ing.data, need: ing.need}, Translation.translate("Missing") + ": " + ing.need, ""]);
+			}
+		} else if(ing.count > 0){
+			availableRows.push([{id: ing.id, data: ing.data}, Translation.translate("Available") + ": " + ing.count, ""]);
+		}
+	}
+	var newData = toCraftRows.slice();
+	if(_data.results)for(var ri = 0; ri < _data.results.length; ri++){
+		var result = _data.results[ri];
+		newData.push([{id: result.id, data: result.data}, Translation.translate("To craft") + ": " + (result.count || 1), ""]);
+	}
+	newData = newData.concat(missingRows, availableRows);
 	return newData;
 }
 
 function openCraftPreview(container, _data){
 	preCraftdata.container = container;
 	preCraftdata.craftable = _data.craftable;
-	if (_data.errorType) {
+	if (_data.errorType && _data.errorType !== "MISSING") {
 		var errorMsg = Translation.translate("Request failed");
 		if (_data.errorType === "RECURSIVE") errorMsg += "\n" + Translation.translate("One of the crafting ingredients ended up needing") + "\n" + Translation.translate("itself.");
 		if (_data.errorType === "TOO_COMPLEX") errorMsg += "\n" + Translation.translate("The crafting task calculation was too complex") + "\n" + Translation.translate("and was stopped to avoid server strain.");
-		if (_data.errorType === "MISSING") errorMsg += "\n" + Translation.translate("Missing") + ": " + Translation.translate("ingredients");
 		alert(errorMsg);
 	}
 	var postData = createCraftPreviewPostData(_data);

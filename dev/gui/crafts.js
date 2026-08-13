@@ -63,7 +63,7 @@ function buildCraftsSection(ctx) {
 							var craft_ident = this.num + ((ctx.gridData.lastCraftsPage || 1) - 1) * ctx.elements[dataPrefix + "x_count"];
 							var craft = ctx.gridData.crafts[craft_ident];
 							ctx.onSelectCraft(craft, itemContainer);
-						} catch (eer) { alert(JSON.stringify(eer)); }
+						} catch (eer) { if(Config.dev) Logger.Log('Craft slot onClick error: ' + JSON.stringify(eer), 'RefinedStorageDebug'); }
 					},
 					onLongClick: function (itemContainerUiHandler, itemContainer, element) {
 					}

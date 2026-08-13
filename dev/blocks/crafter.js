@@ -1,13 +1,4 @@
 IDRegistry.genBlockID("RS_crafter");
-Block.createBlockWithRotation("RS_crafter", [
-	{
-		name: "Crafter",
-		texture: [['stone', 0]],
-		inCreative: true
-	}
-])
-RS_blocks.push(BlockID.RS_crafter);
-EnergyUse[BlockID['RS_crafter']] = Config.energy_uses.crafter || 4;
 
 var _crafterOff = [
 	["RScrafter_bot", 0], ["RScrafter_top", 0], ["RScrafter_bottom", 0],
@@ -21,18 +12,61 @@ var _crafterOn = [
 function getCrafterTexture(variation, _active){
 	var base = _active ? _crafterOn : _crafterOff;
 	variation = variation || 0;
+	if (variation == 4) {
+		return [base[3], base[2], [base[1][0], 4], [base[0][0], 4], [base[4][0], 4], [base[5][0], 4]];
+	}
+	if (variation == 5) {
+		return [base[2], base[3], [base[0][0], 5], [base[1][0], 5], [base[4][0], 5], [base[5][0], 5]];
+	}
 	return [[base[0], [base[1][0], variation], base[2], base[3], base[4], base[5]], [base[0], [base[1][0], variation], base[3], base[2], base[5], base[4]], [base[0], [base[1][0], variation], base[5], base[4], base[2], base[3]], [base[0], [base[1][0], variation], base[4], base[5], base[3], base[2]]][variation];
 }
 
-for (var ibc = 0; ibc < 4; ibc++) {
+var crafterVariations = [];
+for (var cvi = 0; cvi < 6; cvi++) {
+	crafterVariations.push({
+		name: "Crafter",
+		texture: getCrafterTexture(cvi, false),
+		inCreative: cvi == 0
+	});
+}
+Block.createBlock("RS_crafter", crafterVariations);
+Block.registerPlaceFunction("RS_crafter", function(coords, item, block, player, blockSource){
+	if(!World.canTileBeReplaced(block.id, block.data)){
+		var relBlock = blockSource.getBlock(coords.relative.x, coords.relative.y, coords.relative.z);
+		if (World.canTileBeReplaced(relBlock.id, relBlock.data)){
+			coords = coords.relative;
+		} else return;
+	}
+	var ppos = Entity.getPosition(player);
+	var dx = ppos.x - (coords.x + 0.5);
+	var dy = ppos.y - (coords.y + 0.5);
+	var dz = ppos.z - (coords.z + 0.5);
+	var ax = Math.abs(dx), ay = Math.abs(dy), az = Math.abs(dz);
+	var meta;
+	if (ay >= ax && ay >= az) meta = dy > 0 ? 5 : 4;
+	else if (ax >= az) meta = dx > 0 ? 2 : 3;
+	else meta = dz > 0 ? 0 : 1;
+	blockSource.setBlock(coords.x, coords.y, coords.z, item.id, meta);
+	return coords;
+});
+
+var crafterFrontSideByMeta = { 0: 3, 1: 2, 2: 5, 3: 4, 4: 0, 5: 1 };
+function getCrafterFrontSide(tile){
+	var meta = tile && tile.data ? tile.data.block_data : undefined;
+	return crafterFrontSideByMeta[meta] != undefined ? crafterFrontSideByMeta[meta] : 0;
+}
+RS_blocks.push(BlockID.RS_crafter);
+EnergyUse[BlockID['RS_crafter']] = Config.energy_uses.crafter || 4;
+
+for (var ibc = 0; ibc < 6; ibc++) {
 	var render = new ICRender.Model();
 	var model = BlockRenderer.createTexturedBlock(getCrafterTexture(ibc, false));
 	render.addEntry(model);
 	BlockRenderer.enableCoordMapping(BlockID["RS_crafter"], ibc, render);
 }
-for (var ibc = 4; ibc < 8; ibc++) {
+for (var ibc = 6; ibc < 12; ibc++) {
 	var render = new ICRender.Model();
-	var model = BlockRenderer.createTexturedBlock(getCrafterTexture(ibc - 4, true));
+	var model = BlockRenderer.createTexturedBlock(getCrafterTexture(ibc - 6, true));
 	render.addEntry(model);
 	BlockRenderer.enableCoordMapping(BlockID["RS_crafter"], ibc, render);
 }
@@ -113,11 +147,8 @@ RefinedStorage.createTile(BlockID.RS_crafter, {
 		patternsCount: 0,
 		speed: 10,
 		crafts: {},
-		successfulCrafts: [],
-		itemsToPush: [],
 		redstone_mode: 0,
-		redstone_power: false,
-		_requestedCrafts: {}
+		redstone_power: false
 	},
 	upgradesSlots: ["slot_upgrades0", "slot_upgrades1", "slot_upgrades2", "slot_upgrades3"],
 	blockInfo: { id: BlockID.RS_crafter },
@@ -160,7 +191,6 @@ RefinedStorage.createTile(BlockID.RS_crafter, {
 		return {isProcessed: isProcessed, inputs: inputs, outputs: outputs};
 	},
 	addCraft: function(slot, extra){
-		Logger.Log('[CRAFT] addCraft: slot=' + slot + ' netId=' + (this.data ? this.data.NETWORK_ID : 'N/A'), 'RS_DEBUG');
 		var item = extra ? {extra: extra} : this.container.getSlot(slot);
 		if (!item || !item.extra) return false;
 		var pattern = this.parsePatternExtra(item.extra);
@@ -176,7 +206,6 @@ RefinedStorage.createTile(BlockID.RS_crafter, {
 			if(!info.craftsIDS[craft.result[ri].id]) info.craftsIDS[craft.result[ri].id] = [];
 			if(info.craftsIDS[craft.result[ri].id].indexOf(craft.result[ri].data) == -1) info.craftsIDS[craft.result[ri].id].push(craft.result[ri].data);
 			info.addPatternContainer(resultUid, cts(this));
-			Logger.Log('[CRAFT] addCraft registered: resultUid=' + resultUid + ' containers=' + (info.patternToContainers[resultUid] ? info.patternToContainers[resultUid].length : 0), 'RS_DEBUG');
 		}
 		this.data.crafts[slot] = craft;
 		this.data.patternsCount = Object.keys(this.data.crafts).length;
@@ -203,68 +232,11 @@ RefinedStorage.createTile(BlockID.RS_crafter, {
 				if(info.craftsIDS[craft.result[ri].id].length == 0) delete info.craftsIDS[craft.result[ri].id];
 			}
 			info.removePatternContainer(resultUid, cts(this));
-			Logger.Log('[CRAFT] removeCraft: resultUid=' + resultUid + ' remainingContainers=' + (info.patternToContainers[resultUid] ? info.patternToContainers[resultUid].length : 0), 'RS_DEBUG');
 		}
 		delete this.data.crafts[slot];
 		this.data.patternsCount = Object.keys(this.data.crafts).length;
 		if(Config.dev)Logger.Log('Crafter removed craft: [' + craft.result[0].id + ',' + craft.result[0].data + '] from ' + slot, 'RefinedStorageDebug');
 		info.refreshOpenedGrids(true);
-	},
-	provideCraft: function(craft){
-		var netId = this.data.NETWORK_ID;
-		if (netId == 'f' || !RSNetworks[netId]) return;
-		var info = RSNetworks[netId].info;
-		this.data.successfulCrafts = this.data.successfulCrafts || [];
-		if (!craft.isProcessed){
-			for(var i = 0; i < craft.completedIngridients.length; i++){
-				var ingr = craft.completedIngridients[i];
-				info.deleteItem(ingr, ingr.count || 1, true, ['autocraft']);
-			}
-			for(var ri = 0; ri < craft.result.length; ri++){
-				var result = copyItem(craft.result[ri]);
-				var pushed = info.pushItem(result, result.count || 1, false, ['fromCrafter']);
-				if(pushed > 0) info.deleteItem(result, result.count - pushed, true, ['autocraft']);
-			}
-		} else {
-			this.data.successfulCrafts.push(craft.result[0]);
-		}
-		this.setWorkingState(true);
-	},
-	setWorkingState: function(state){
-		var netId = this.data.NETWORK_ID;
-		if (netId == 'f' || !RSNetworks[netId]) return;
-		Logger.Log('[CRAFT] setWorkingState: state=' + state + ' coords=' + cts(this), 'RS_DEBUG');
-		var key = cts(this);
-		if(RSNetworks[netId][key]) RSNetworks[netId][key].isWorking = state;
-	},
-	tick: function(){
-		if (!this.isWorkAllowed()) return;
-		Logger.Log('[CRAFT] tick: active=' + this.data.isActive + ' speed=' + (this.data.speed || 10) + ' lastTick=' + this.data.lastTick + ' successful=' + (this.data.successfulCrafts ? this.data.successfulCrafts.length : 0) + ' patterns=' + Object.keys(this.data.crafts || {}).length, 'RS_DEBUG');
-		var spd = this.data.speed || 10;
-		var cooldown = Math.max(1, spd);
-		var upgrades = Math.floor(Math.max(0, 10 - spd) / 2);
-		var maxCrafts = 1 + upgrades;
-		var curTick = World.getThreadTime();
-		if (this.data.lastTick == null || curTick - this.data.lastTick < cooldown) return;
-		this.data.lastTick = curTick;
-		var netId = this.data.NETWORK_ID;
-		if (netId == 'f' || !RSNetworks[netId]) return;
-		var info = RSNetworks[netId].info;
-		for (var mc = 0; mc < maxCrafts; mc++) {
-			if (this.data.successfulCrafts && this.data.successfulCrafts.length > 0) {
-				var item = this.data.successfulCrafts[this.data.successfulCrafts.length - 1];
-				var pushed = info.pushItem(item, item.count || 1, false, ['fromCrafter']);
-				if (pushed == 0) this.data.successfulCrafts.pop();
-			}
-			if (this.data.itemsToPush && this.data.itemsToPush.length > 0) {
-				var item = this.data.itemsToPush[this.data.itemsToPush.length - 1];
-				var pushed = info.pushItem(item, item.count || 1, false);
-				if (pushed == 0) this.data.itemsToPush.pop();
-			}
-		}
-		if ((!this.data.successfulCrafts || this.data.successfulCrafts.length == 0) && (!this.data.itemsToPush || this.data.itemsToPush.length == 0)){
-			this.setWorkingState(false);
-		}
 	},
 	post_update_network: function(net_id, _first){
 		if (net_id == 'f') {
@@ -285,6 +257,7 @@ RefinedStorage.createTile(BlockID.RS_crafter, {
 			}
 			return;
 		}
+		this.data.lastCraftTick = null;
 		var info = RSNetworks[net_id].info;
 		for(var s in this.data.crafts){
 			var craft = this.data.crafts[s];
@@ -298,7 +271,6 @@ RefinedStorage.createTile(BlockID.RS_crafter, {
 				if(slotItem) this.addCraft(s, slotItem.extra);
 			}
 		}
-		if(this.data._requestedCrafts) this.data._requestedCrafts = {};
 	},
 	refreshRedstoneMode: function(){
 		if(this.data.redstone_mode === 0) return this.setActive(true);
@@ -338,8 +310,6 @@ RefinedStorage.createTile(BlockID.RS_crafter, {
 	},
 	pre_destroy: function(){
 		for(var s in this.data.crafts) this.removeCraft(s);
-		if(this.data.successfulCrafts)for(var i = 0; i < this.data.successfulCrafts.length; i++) Player.addItemToInventory(this.data.successfulCrafts[i].id, this.data.successfulCrafts[i].count, this.data.successfulCrafts[i].data, null, true);
-		if(this.data.itemsToPush)for(var i = 0; i < this.data.itemsToPush.length; i++) Player.addItemToInventory(this.data.itemsToPush[i].id, this.data.itemsToPush[i].count, this.data.itemsToPush[i].data, null, true);
 	},
 	containerEvents: {
 		updateRedstoneMode: function(eventData, connectedClient) {

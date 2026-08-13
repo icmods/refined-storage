@@ -224,9 +224,6 @@ function initDDelements() {
 		scale: cons*0.7/20,
 		clicker: {
 			onClick: function (position, container, tileEntity, window, canvas, scale) {
-				/* tileEntity.data.access_type = tileEntity.data.access_type >= 2 ? 0 : tileEntity.data.access_type + 1;
-				elementsGUI_dd["image_access_type"].bitmap = 'RS_dd_access_' + tileEntity.data.access_type;
-				tileEntity.refreshRedstoneMode(); */
 			},
 			onLongClick: function (position, container, tileEntity, window, canvas, scale) {
 			}
@@ -398,19 +395,6 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 		};
 		this.container.sendEvent("refreshGui", _data);
 	},
-	getItems: function () {
-		if (!this.isWorkAllowed()) return {};
-		var items = {};
-		for (var i = 0; i < 8; i++) {
-			var item2 = this.container.getSlot('slot' + i);
-			if (!Disk.items[item2.id+''] || !item2.extra) continue;
-			var disk_data = Disk.getDiskData(item2);
-			for(var i in disk_data.items){
-				items['' + disk_data.items[i].id] = { data: disk_data.items[i].data, count: disk_data.items[i].count, name: Item.getName(disk_data.items[i].id, 0) };
-			}
-		}
-		return items;
-	},
 	post_destroy: function(){
 		if(RSNetworks && RSNetworks[this.data.LAST_NETWORK_ID] && RSNetworks[this.data.LAST_NETWORK_ID].info)RSNetworks[this.data.LAST_NETWORK_ID].info.updateItems();
 	},
@@ -420,7 +404,6 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 				if(elem)elem.storage = Number(elem.storage);
 				return elem;
 			}) : [{id: 0, data: 0, storage: 0, items_stored: 0},{id: 0, data: 0, storage: 0, items_stored: 0},{id: 0, data: 0, storage: 0, items_stored: 0},{id: 0, data: 0, storage: 0, items_stored: 0},{id: 0, data: 0, storage: 0, items_stored: 0},{id: 0, data: 0, storage: 0, items_stored: 0},{id: 0, data: 0, storage: 0, items_stored: 0},{id: 0, data: 0, storage: 0, items_stored: 0}];
-			if(Config.dev)Logger.Log('Local refreshing DiskDrive model: block_data: ' + this.networkData.getInt('block_data') + ' ; isActive: ' + this.networkData.getBoolean('isActive') + ' ; disks_data: ' + JSON.stringify(disks_data), 'RefinedStorageDebug');
 			mapDisks(this, this.networkData.getInt('block_data') || 0, disks_data, this.networkData.getBoolean('isActive'));
 		},
 		events: {
@@ -429,7 +412,6 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 					if(elem)elem.storage = Number(elem.storage);
 					return elem;
 				}) : [{id: 0, data: 0, storage: 0, items_stored: 0},{id: 0, data: 0, storage: 0, items_stored: 0},{id: 0, data: 0, storage: 0, items_stored: 0},{id: 0, data: 0, storage: 0, items_stored: 0},{id: 0, data: 0, storage: 0, items_stored: 0},{id: 0, data: 0, storage: 0, items_stored: 0},{id: 0, data: 0, storage: 0, items_stored: 0},{id: 0, data: 0, storage: 0, items_stored: 0}];
-				if(Config.dev)Logger.Log('Event refreshing DiskDrive model: block_data: ' + eventData.block_data + ' ; isActive: ' + eventData.isActive + ' ; disks_data: ' + JSON.stringify(disks_data), 'RefinedStorageDebug');
 				mapDisks(eventData.coords, eventData.block_data, disks_data, eventData.isActive);
 			}
 		},

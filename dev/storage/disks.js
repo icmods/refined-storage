@@ -48,16 +48,6 @@ const Disk = {
 		}
 		return data;
 	},
-	getDefaultExtra: function(storage){
-		var extra = new ItemExtraData();
-		var data = {
-			storage: storage,
-			items_stored: 0,
-			items: {}
-		}
-		extra.putSerializable('disk_data', data);
-		return extra;
-	},
 	items: {},
 	register: function (name, texture, storage, registerItem) {
 		for (var i in this.items) {
@@ -72,7 +62,6 @@ const Disk = {
 			Item.createItem(itemIDName, name, {
 				name: texture,
 			}, {
-				//isTech: true,
 				stack: 1
 			});
 		}
@@ -84,19 +73,5 @@ const Disk = {
 		});
 		this.items[ItemID[itemIDName]] = { name: name, texture: texture, storage: storage };
 		return ItemID[itemIDName];
-	},
-	update: function (item) {
-		var diskData = this.getDiskData(item);
-		var items_stored = 0;
-		for (var i in diskData.items) {
-			var item = diskData.items[i];
-			if (!item) return alert('Wow, this is a bad disk');
-			items_stored += item.count;
-		}
-		diskData.items_stored = items_stored;
-	},
-	freeSpace: function (item) {
-		var diskData = this.getDiskData(item);
-		return diskData.storage - diskData.items_stored;
 	}
 }

@@ -32,24 +32,6 @@ const UpgradeRegistry = {
 		return ItemID[itemIDName];
 	},
 	/**
-	 * Get upgrade data
-	 * @param {number|string} id item id or string id(nameID) of upgrade
-	 * @returns {object|undefined} return upgrade data or undefined if upgrade with this id is not registered
-	 */
-	getData: function(id){
-		var upgrade = this.upgrades[id] || this.stringIDUpgrades[id];
-		if(upgrade) return upgrade;
-	},
-	/**
-	 * Get item string id
-	 * @param {number|string} id item id or string id(nameID) of upgrade
-	 * @returns {string|undefined} return item string id or undefined if upgrade with this id is not registered
-	 */
-	getNameID: function(id){
-		var upgrade = this.upgrades[id] || this.stringIDUpgrades[id];
-		if(upgrade) return upgrade.nameID;
-	},
-	/**
 	 * Get upgrade energy usage
 	 * @param {number|string} id item id or string id(nameID) of upgrade
 	 * @returns {object|undefined} return upgrade energy usage or undefined if upgrade with this id is not registered

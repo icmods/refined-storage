@@ -39,7 +39,6 @@ const searchController_net = function (net_id) {
 }
 
 function set_net_for_blocks(_coords, net_id, _self, _first, _defaultActive, _forced, _func) {
-	if(Config.dev)Logger.Log('Set net for blocks: coords: ' + cts(_coords) + ' ; net_id: ' + net_id + ' ; _self: ' + _self + ' ; _first: ' + _first + ' ; _defaultActive: ' + _defaultActive + ' ; _forced: ' + _forced, 'RefinedStorageDebug');
 	var blockSource_ = _coords.blockSource;
 	var outCoords = [];
 	outCoords.push(cts(_coords));
@@ -73,7 +72,7 @@ function set_net_for_blocks(_coords, net_id, _self, _first, _defaultActive, _for
 				_search(coordss);
 			} else if (isRsBlock) {
 				var tile = World.getTileEntity(coordss.x, coordss.y, coordss.z, blockSource_) || World.addTileEntity(coordss.x, coordss.y, coordss.z, blockSource_);
-				if (bck.id == BlockID.RS_crafter) Logger.Log('[TOPO] Crafter connected: ' + cts(coordss) + ' to net=' + net_id, 'RS_DEBUG');
+				
 				if (tile) {
 					if(!_forced && net_id == 'f' && !compareCoords(_coords, tile.data.controller_coords || {})) continue;
 					tile.data.controller_coords = {x: _coords.x, y: _coords.y, z: _coords.z};
@@ -116,37 +115,6 @@ function set_net_for_blocks(_coords, net_id, _self, _first, _defaultActive, _for
 			}
 		}
 	}
-}
-
-function set_is_active_for_blocks(_coords, _state, isController) {
-	var blockSource_ = _coords.blockSource;
-	var outCoords = [];
-	outCoords.push(cts(_coords));
-	function _search(coords) {
-		for (var i in sides) {
-			var coordss = {};
-			coordss.x = coords.x + sides[i][0];
-			coordss.y = coords.y + sides[i][1];
-			coordss.z = coords.z + sides[i][2];
-			if (outCoords.indexOf(cts(coordss)) != -1) continue;
-			outCoords.push(cts(coordss));
-			var bck = {id: blockSource_.getBlockId(coordss.x, coordss.y, coordss.z)};
-			if (bck.id == BlockID.RS_controller) {
-				continue;
-			} else if (RS_blocks.indexOf(bck.id) != -1) {
-				var tile = World.getTileEntity(coordss.x, coordss.y, coordss.z, blockSource_);
-				if (tile) {
-					if(isController && !_state) 
-						tile.data.controllerOff = true;
-					else
-						tile.data.controllerOff = false;
-					tile.setActive(_state);
-				}
-				_search(coordss);
-			}
-		}
-	}
-	_search(_coords);
 }
 
 function set_is_active_for_blocks_net(net_id, _state, isController, _blockSource) {
@@ -236,7 +204,7 @@ Callback.addCallback('BlockChanged', function(coords, oldBlock, newBlock, _block
 	}
 	var isOldBlock = RS_blocks.indexOf(oldBlock.id) != -1;
 	var isNewBlock = RS_blocks.indexOf(newBlock.id) != -1;
-	if (oldBlock.id == BlockID.RS_crafter) Logger.Log('[TOPO] Crafter DISCONNECTED: ' + cts(coords), 'RS_DEBUG');
+
 	if(oldBlock.id != BlockID.RS_controller && isOldBlock)for(var i in sides){
 		var zCoords = {
 			x: coords.x + sides[i][0],

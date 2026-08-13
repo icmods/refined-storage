@@ -9,8 +9,6 @@ Callback.addCallback('PostLoaded', function(){
 
 const EnergyUse = {}
 
-var temp_data = {};
-
 var _savedCraftingTasks = {};
 
 Saver.addSavesScope("RSCraftingTasks",
@@ -33,14 +31,12 @@ Saver.addSavesScope("RSCraftingTasks",
 				}
 			}
 		}
-		Logger.Log('[PERS] Save: networks=' + RSNetworks.length + ' keys=' + Object.keys(tasks).length, 'RS_DEBUG');
 		return { tasks: tasks };
 	}
 );
 
 function restoreCraftingTasks(controllerTile) {
 	var key = controllerTile.x + ',' + controllerTile.y + ',' + controllerTile.z;
-	Logger.Log('[PERS] Restore: key=' + key + ' hasData=' + !!_savedCraftingTasks[key], 'RS_DEBUG');
 	var saved = _savedCraftingTasks[key];
 	if (!saved || saved.length === 0) return;
 	var info = RSNetworks[controllerTile.data.NETWORK_ID].info;
@@ -59,7 +55,6 @@ function restoreCraftingTasks(controllerTile) {
 }
 
 Callback.addCallback("LevelLeft", function () {
-	temp_data = {};
 	RSNetworks = [];
 	_savedCraftingTasks = {};
 });

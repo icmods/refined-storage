@@ -5,8 +5,6 @@ Item.createItem("RSpattern", "Pattern", {
 	stack: 1
 });
 
-EnergyUse['pattern'] = Config.energy_uses.crafterPerPattern || 1;
-
 Item.registerNameOverrideFunction(ItemID["RSpattern"], function(item, name){
 	if(!item.extra) return name;
 	var isProcessed = item.extra.getBoolean('isProcessed');

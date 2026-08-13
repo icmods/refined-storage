@@ -13,20 +13,6 @@ Block.createBlock("RS_cable", [
 RS_blocks.push(BlockID['RS_cable']);
 EnergyUse[BlockID['RS_cable']] = Config.energy_uses.cable;
 
-/* Block.registerPlaceFunction('RS_cable', function(coords, item, block){
-	var coords = World.canTileBeReplaced(block.id, block.data) ? coords : coords.relative;
-	var relBlock = World.getBlock(coords.x, coords.y, coords.z);
-	if (relBlock.id != 0 && relBlock.id != 9 && relBlock.id != 11) return;
-    World.setBlock(coords.x, coords.y, coords.z, BlockID.RS_cable, 0);
-	Player.decreaseCarriedItem(1);
-	if(_controllerCoords_ = searchController(coords)){
-		var tile  = World.getTileEntity(_controllerCoords_.x, _controllerCoords_.y, _controllerCoords_.z);
-		if(tile){
-			tile.updateControllerNetwork();
-		}
-	}
-}); */
-
 (function () {
 	var width = 1/4;
 

@@ -7,6 +7,7 @@ network/info.js
 network/calculator.js
 network/task.js
 network/scheduler.js
+network/grid_events.js
 
 storage/disks.js
 
