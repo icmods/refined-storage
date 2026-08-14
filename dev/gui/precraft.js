@@ -9,15 +9,20 @@ var preCraftdata = {
 	container: null,
 	craftable: true,
 	craftCount: 1,
-	selectedItem: null
+	selectedItem: null,
+	page: 0,
+	postData: [],
+	swipeY: null,
+	swipeSum: 0
 }
 
 function preCraftSwitchPage(page, _data, container){
-	page -= 1;
+	page = Math.max(0, Math.min(page - 1, Math.ceil((_data ? _data.length : 0) / 12) - 1));
+	preCraftdata.page = page;
 	var elements_ = preCraftGUI.getElements();
 	var content_ = preCraftGUI.getContent();
-	for (var i = page * 3; i < page * 3 + 12; i++) {
-		var a = i - (page * 3);
+	for (var i = page * 12; i < page * 12 + 12; i++) {
+		var a = i - (page * 12);
 		var item = _data[i] || [{ id: 0, data: 0, need: 0}, '', ''];
 		elements_.get("mitemCount" + a).setBinding('text', item[1]);
 		elements_.get("aitemCount" + a).setBinding('text', item[2]);
@@ -26,6 +31,17 @@ function preCraftSwitchPage(page, _data, container){
 		slot.curData = item[0].data;
 		slot.curCount = item[0].id ? 1 : 0;
 		content_.elements["colorFrame" + a].bitmap = item[0].need ? 'craftPreviewErrorBG' : 'empty1';
+	}
+	var totalPages = Math.max(1, Math.ceil((_data ? _data.length : 0) / 12));
+	if (totalPages > 1) {
+		var sf = preCraftGUI_elements["slider_frame"];
+		var sb = preCraftGUI_elements["slider_button"];
+		var btnH = (sf.width - 2 * sf.scale) / 12 * 15;
+		var range = sf.y + sf.height - sf.scale - btnH - (sf.y + sf.scale);
+		var ratio = totalPages > 1 ? page / (totalPages - 1) : 0;
+		sb.y = sf.y + sf.scale + ratio * range;
+	} else {
+		preCraftGUI_elements["slider_button"].y = preCraftGUI_elements["slider_button"].start_y;
 	}
 	preCraftGUI.forceRefresh();
 }
@@ -99,7 +115,19 @@ var preCraftGUI = new UI.Window({
 		width: 0,
 		height: craftsMeshHeight,
 		bitmap: "slider4",
-		scale: 3.8
+		scale: 3.8,
+		onTouchEvent: function(element, event) {
+			if (event.type == 'CLICK') {
+				var totalPages = Math.max(1, Math.ceil((preCraftdata.postData ? preCraftdata.postData.length : 0) / 12));
+				var sf = preCraftGUI_elements["slider_frame"];
+				var sb = preCraftGUI_elements["slider_button"];
+				var btnH = (sf.width - 2 * sf.scale) / 12 * 15;
+				var range = sf.y + sf.height - sf.scale - btnH - (sf.y + sf.scale);
+				var ratio = range > 0 ? (event.y - (sf.y + sf.scale)) / range : 0;
+				ratio = Math.max(0, Math.min(1, ratio));
+				preCraftSwitchPage(Math.round(ratio * (totalPages - 1)) + 1, preCraftdata.postData);
+			}
+		}
 	}
 	slider_frame_border *= preCraftGUI_elements["slider_frame"].scale;
 	preCraftGUI_elements["slider_frame"].width = preCraftGUI_elements["slider_frame"].scale*14
@@ -112,6 +140,35 @@ var preCraftGUI = new UI.Window({
 		z: 200,
 		bitmap: 'slider_buttonOff',
 		scale: preCraftGUI_elements["slider_frame"].scale
+	}
+	preCraftGUI_elements["preCraft_swipe"] = {
+		type: "frame",
+		x: preCraftGUI_elements['craftsMesh'].x,
+		y: preCraftGUI_elements['craftsMesh'].y,
+		z: -200,
+		width: craftsMeshWidth,
+		height: craftsMeshHeight,
+		bitmap: "empty1",
+		onTouchEvent: function(element, event) {
+			if (event.type == 'DOWN') {
+				preCraftdata.swipeY = event.y;
+				preCraftdata.swipeSum = 0;
+			}
+			if (preCraftdata.swipeY && event.type == 'MOVE') {
+				var d = event.y - preCraftdata.swipeY;
+				preCraftdata.swipeSum += Math.abs(d);
+				if (Math.abs(d) > 7 || preCraftdata.swipeSum > 15) {
+					var inc = d > 0 ? -1 : 1;
+					preCraftSwitchPage(preCraftdata.page + inc + 1, preCraftdata.postData);
+					preCraftdata.swipeY = event.y;
+					preCraftdata.swipeSum = 0;
+				}
+			}
+			if (event.type == 'UP' || event.type == 'CLICK') {
+				preCraftdata.swipeY = null;
+				preCraftdata.swipeSum = 0;
+			}
+		}
 	}
 	var craftsMeshPartWidth = craftsMeshWidth/3;
 	var craftsMeshPartHeight = craftsMeshHeight/4;
@@ -716,6 +773,7 @@ function openCraftPreview(container, _data){
 		alert(errorMsg);
 	}
 	var postData = createCraftPreviewPostData(_data);
+	preCraftdata.postData = postData;
 	if (_data.results && _data.results[0]) preSelectCraftItem(_data.results[0]);
 	preCraftSwitchPage(1, postData);
 	preCraftCountGUI.close();
