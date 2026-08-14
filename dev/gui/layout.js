@@ -278,7 +278,7 @@ function buildStorageSlots(ctx) {
 							return;
 						}
 						var maxStack = Item.getMaxStack(slotItem.id);
-						var this_item = searchItem(slotItem.id, slotItem.data, false, true);
+						var this_item = searchInventory(Player, slotItem.id, slotItem.data, -1, false, true);
 						var _count = this_item && this_item.count < maxStack && this_item.extra == slotItem.extra ? Math.min(slotItem.count, maxStack - this_item.count) : Math.min(slotItem.count, maxStack);
 						var updateFull = false;
 						var elements_ = itemContainer.getUiAdapter().getWindow().getWindow('main').getElements();

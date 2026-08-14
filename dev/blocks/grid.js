@@ -10,9 +10,7 @@ const _gridTexture = [
 ];
 
 function getGridTexture(variation, _active){
-	variation = variation || 0;
-	var i = _active ? 1 : 0;
-	return [[_gridTexture[0], [_gridTexture[1][0], 0], _gridTexture[2], [_gridTexture[3][0], i], _gridTexture[4], _gridTexture[5]], [_gridTexture[0], [_gridTexture[1][0], 1], [_gridTexture[3][0], i], _gridTexture[2], _gridTexture[5], _gridTexture[4]], [_gridTexture[0], [_gridTexture[1][0], 2], _gridTexture[5], _gridTexture[4], _gridTexture[2], [_gridTexture[3][0], i]], [_gridTexture[0], [_gridTexture[1][0], 3], _gridTexture[4], _gridTexture[5], [_gridTexture[3][0], i], _gridTexture[2]]][variation];
+	return getRotatableTexture(_gridTexture, variation, _active);
 }
 
 IDRegistry.genBlockID("RS_grid");
@@ -123,6 +121,81 @@ inv_elements.elements["_CLICKFRAME_"] = {
 }
 
 var gridFuncs = makePageHelpers(_elementsGUI_grid, {countX: "x_count", countY: "y_count", maxY: "max_y", slider: "slider_button"});
+
+function gridOpenGui(container, window, content, eventData){
+	if(!content || !window || !window.isOpened()) return;
+	eventData.disksStorage = Number(eventData.disksStorage);
+	Object.assign(gridData, eventData);
+	gridData.updateGui = function(refresh, updateFilters, nonlocal){
+		delete container.slots.bindings;
+		delete container.slots.slots;
+		gridData.networkData = SyncedNetworkData.getClientSyncedData(eventData.name);
+		if(updateFilters || refresh){
+			var _slotKeys = [];
+			for(var i in container.slots)if(i[0] >= 0 && container.slots[i].id != 0)_slotKeys.push(i);
+			gridData.slotsKeys = _slotKeys;
+			if(!refresh)gridData.textSearch = false;
+			var millis = 0;
+			if(Config.dev)millis = java.lang.System.currentTimeMillis();
+			gridData.slotsKeys = RefinedStorage.sortItems(eventData.sort, eventData.reverse_filter, gridData.textSearch || null, container, gridData.slotsKeys);
+			if(gridData.selectedItemInfoSlot)gridData.setItemInfoSlot(gridData.selectedItemInfoSlot, container);
+		}
+		content.elements["image_filter"].bitmap = 'RS_filter' + (eventData.sort + 1);
+		content.elements["image_filter"].x = content.elements["filter_button"].x + (content.elements["filter_button"].scale * 20 - filter_size_map[eventData.sort]) / 2;
+		if (eventData.reverse_filter) {
+			content.elements["image_reverse_filter"].bitmap = 'RS_arrow_up';
+		} else {
+			content.elements["image_reverse_filter"].bitmap = 'RS_arrow_down';
+		}
+		content.elements["search_text"].text = gridData.textSearch ? gridData.textSearch : Translation.translate('Search');
+		content.elements["image_redstone"].bitmap = 'redstone_GUI_' + (eventData.redstone_mode || 0);
+		var slots_count = content.elements.slots_count;
+		content.elements["slider_button"].bitmap = gridData.slotsKeys.length <= gridData.slots_count ? 'slider_buttonOff' : 'slider_buttonOn';
+		if (!eventData.isWorkAllowed) {
+			for (var i = 0; i < slots_count; i++) {
+				content.elements['slot' + i].bitmap = 'classic_darken_slot';
+			}
+			content.elements["slider_button"].bitmap = 'slider_buttonOff';
+		} else if (content.elements['slot0'].bitmap == 'classic_darken_slot') {
+			for (var i = 0; i < slots_count; i++) {
+				content.elements['slot' + i].bitmap = 'classic_slot';
+			}
+		}
+		gridSwitchPage(refresh ? gridData.lastPage : 1, container, true);
+	}
+	if(gridData.lowPriority){
+		gridData.lowPriority = false;
+		var craftsThread = java.lang.Thread({
+			run: function(){
+				try {
+					gridData.updateGui(eventData.refresh, eventData.updateFilters, true);
+				} catch(err){
+					alert('Sorry, i broke :_(' + JSON.stringify(err));
+				}
+			}
+		});
+		craftsThread.setPriority(java.lang.Thread.MIN_PRIORITY);
+		craftsThread.start();
+	} else {
+		gridData.updateGui(eventData.refresh, eventData.updateFilters, true);
+	}
+}
+
+function buildGridPayload(tile, first, updateFilters){
+	return {
+		name: tile.networkData.getName() + '',
+		isActive: tile.data.isActive,
+		NETWORK_ID: tile.data.NETWORK_ID,
+		redstone_mode: tile.data.redstone_mode,
+		sort: tile.data.sort,
+		reverse_filter: tile.data.reverse_filter,
+		refresh: !first,
+		updateFilters: first || updateFilters,
+		disksStorage: tile.getDisksStorage() + "",
+		disksStored: tile.getDisksStored(),
+		isWorkAllowed: tile.isWorkAllowed()
+	};
+}
 
 RefinedStorage.createTile(BlockID.RS_grid, {
 	defaultValues: {
@@ -306,19 +379,7 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		this.sendPacket("refreshModel", {block_data: this.data.block_data, isActive: this.data.isActive, coords: {x: this.x, y: this.y, z: this.z, dimension: this.dimension}});
 	},
 	refreshGui: function(first, client, updateFilters){
-		var _data = {
-			name: this.networkData.getName() + '', 
-			isActive: this.data.isActive, 
-			NETWORK_ID: this.data.NETWORK_ID,
-			redstone_mode: this.data.redstone_mode,
-			sort: this.data.sort,
-			reverse_filter: this.data.reverse_filter,
-			refresh: !first,
-			updateFilters: first || updateFilters,
-			disksStorage: this.getDisksStorage() + "",
-			disksStored: this.getDisksStored(),
-			isWorkAllowed: this.isWorkAllowed()
-		};
+		var _data = buildGridPayload(this, first, updateFilters);
 		if(client){
 			this.container.sendEvent(client, "openGui", _data);
 		} else {
@@ -352,62 +413,7 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		},
 		containerEvents: {
 			openGui: function(container, window, content, eventData){
-				if(!content || !window || !window.isOpened()) return;
-				eventData.disksStorage = Number(eventData.disksStorage);
-				Object.assign(gridData, eventData);
-				gridData.updateGui = function(refresh, updateFilters, nonlocal){
-					delete container.slots.bindings;
-					delete container.slots.slots;
-					gridData.networkData = SyncedNetworkData.getClientSyncedData(eventData.name);
-					if(updateFilters || refresh){
-						var _slotKeys = [];
-						for(var i in container.slots)if(i[0] >= 0 && container.slots[i].id != 0)_slotKeys.push(i);
-						gridData.slotsKeys = _slotKeys;
-						if(!refresh)gridData.textSearch = false;
-						var millis = 0;
-						if(Config.dev)millis = java.lang.System.currentTimeMillis();
-						gridData.slotsKeys = RefinedStorage.sortItems(eventData.sort, eventData.reverse_filter, gridData.textSearch || null, container, gridData.slotsKeys);
-						if(gridData.selectedItemInfoSlot)gridData.setItemInfoSlot(gridData.selectedItemInfoSlot, container);
-					}
-					content.elements["image_filter"].bitmap = 'RS_filter' + (eventData.sort + 1);
-					content.elements["image_filter"].x = content.elements["filter_button"].x + (content.elements["filter_button"].scale * 20 - filter_size_map[eventData.sort]) / 2;
-					if (eventData.reverse_filter) {
-						content.elements["image_reverse_filter"].bitmap = 'RS_arrow_up';
-					} else {
-						content.elements["image_reverse_filter"].bitmap = 'RS_arrow_down';
-					}
-					content.elements["search_text"].text = gridData.textSearch ? gridData.textSearch : Translation.translate('Search');
-					content.elements["image_redstone"].bitmap = 'redstone_GUI_' + (eventData.redstone_mode || 0);
-					var slots_count = content.elements.slots_count;
-					content.elements["slider_button"].bitmap = gridData.slotsKeys.length <= gridData.slots_count ? 'slider_buttonOff' : 'slider_buttonOn';
-					if (!eventData.isWorkAllowed) {
-						for (var i = 0; i < slots_count; i++) {
-							content.elements['slot' + i].bitmap = 'classic_darken_slot';
-						}
-						content.elements["slider_button"].bitmap = 'slider_buttonOff';
-					} else if (content.elements['slot0'].bitmap == 'classic_darken_slot') {
-						for (var i = 0; i < slots_count; i++) {
-							content.elements['slot' + i].bitmap = 'classic_slot';
-						}
-					}
-					gridSwitchPage(refresh ? gridData.lastPage : 1, container, true);
-				}
-				if(gridData.lowPriority){
-					gridData.lowPriority = false;
-					var craftsThread = java.lang.Thread({
-						run: function(){
-							try {
-								gridData.updateGui(eventData.refresh, eventData.updateFilters, true);
-							} catch(err){
-								alert('Sorry, i broke :_(' + JSON.stringify(err));
-							}
-						}
-					});
-					craftsThread.setPriority(java.lang.Thread.MIN_PRIORITY);
-					craftsThread.start();
-				} else {
-					gridData.updateGui(eventData.refresh, eventData.updateFilters, true);
-				}
+				gridOpenGui(container, window, content, eventData);
 			},
 			openCraftPreview: function(container, window, content, eventData){
 				openCraftPreview(container, eventData);

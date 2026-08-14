@@ -35,6 +35,8 @@ items/disk.js
 items/craftItems.js
 items/upgrades.js
 items/pattern.js
+items/wirelessGrid.js
+items/wirelessCraftingMonitor.js
 
 blocks/diskDrive.js
 blocks/controller.js
@@ -46,6 +48,7 @@ blocks/crafting_monitor.js
 blocks/cable.js
 blocks/craftBlocks.js
 blocks/interface.js
+blocks/wireless_transmitter.js
 
 crafts.js
 shared.js

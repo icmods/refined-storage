@@ -19,9 +19,7 @@ var _monitorTexture = [
 ];
 
 function getCraftingMonitorTexture(variation, _active){
-	variation = variation || 0;
-	var i = _active ? 1 : 0;
-	return [[_monitorTexture[0], [_monitorTexture[1][0], 0], _monitorTexture[2], [_monitorTexture[3][0], i], _monitorTexture[4], _monitorTexture[5]], [_monitorTexture[0], [_monitorTexture[1][0], 1], [_monitorTexture[3][0], i], _monitorTexture[2], _monitorTexture[5], _monitorTexture[4]], [_monitorTexture[0], [_monitorTexture[1][0], 2], _monitorTexture[5], _monitorTexture[4], _monitorTexture[2], [_monitorTexture[3][0], i]], [_monitorTexture[0], [_monitorTexture[1][0], 3], _monitorTexture[4], _monitorTexture[5], [_monitorTexture[3][0], i], _monitorTexture[2]]][variation];
+	return getRotatableTexture(_monitorTexture, variation, _active);
 }
 
 for (var izxc = 0; izxc < 4; izxc++) {
@@ -117,6 +115,71 @@ function craftingMonitorSwitchPage(page){
 }
 
 var _elementsGUI_craftingMonitor = {};
+function makeMonitorListener(tile, refreshFlag, changedTaskFlag) {
+	refreshFlag = refreshFlag || 'refreshCurPage';
+	changedTaskFlag = changedTaskFlag || '_changedTaskId';
+	return function (info, task) {
+		if (task) tile.data[changedTaskFlag] = task.id;
+		tile.data[refreshFlag] = true;
+	};
+}
+
+function buildCraftingMonitorPayload(tile, tasks, first, providingCraft, changedTaskFlag) {
+	changedTaskFlag = changedTaskFlag || '_changedTaskId';
+	var info = RSNetworks[tile.data.NETWORK_ID] && RSNetworks[tile.data.NETWORK_ID].info;
+	var changedTask = null;
+	if (tile.data[changedTaskFlag]) {
+		for (var cti = 0; cti < tasks.length; cti++) {
+			if (tasks[cti].id === tile.data[changedTaskFlag]) { changedTask = tasks[cti]; break; }
+		}
+		tile.data[changedTaskFlag] = null;
+	}
+	var tasksToSend = tasks;
+	if (providingCraft) tasksToSend = [providingCraft];
+	else if (changedTask) tasksToSend = [changedTask];
+	var mapped = [];
+	for (var mti = 0; mti < tasksToSend.length; mti++) {
+		var mt = tasksToSend[mti];
+		mapped.push({
+			id: mt.id,
+			results: mt.results || [],
+			elements: info ? info.buildMonitorElements(mt) : [],
+			totalSteps: mt.totalSteps || 0,
+			currentStep: mt.currentStep || 0
+		});
+	}
+	return {
+		name: tile.networkData.getName() + '',
+		isActive: tile.data.isActive,
+		NETWORK_ID: tile.data.NETWORK_ID,
+		redstone_mode: tile.data.redstone_mode,
+		providingCrafts: tile.isWorkAllowed() ? mapped : [],
+		refresh: !first,
+		first: first
+	};
+}
+
+function craftingMonitorOpenGui(container, window, content, eventData){
+	if(!content || !window || !window.isOpened()) return;
+	craftingMonitorData.container = container;
+	var incoming = eventData.providingCrafts;
+	if (eventData.refresh && craftingMonitorData.providingCrafts && incoming.length === 1 && incoming[0].id) {
+		var found = false;
+		for (var i = 0; i < craftingMonitorData.providingCrafts.length; i++) {
+			if (craftingMonitorData.providingCrafts[i].id === incoming[0].id) {
+				craftingMonitorData.providingCrafts[i] = incoming[0];
+				found = true;
+				break;
+			}
+		}
+		if (!found) craftingMonitorData.providingCrafts.push(incoming[0]);
+	} else {
+		craftingMonitorData.providingCrafts = incoming;
+	}
+	var page = eventData.refresh ? craftingMonitorData.page : 1;
+	craftingMonitorSwitchPage(page);
+}
+
 var craftingMonitorGUI = new UI.StandartWindow({
 	standart: {
 		header: {
@@ -367,17 +430,7 @@ RefinedStorage.createTile(BlockID.RS_craftingMonitor, {
 		return craftingMonitorGUI;
 	},
 	pre_init: function(){
-		var tile = this;
-		tile._monitorListener = function(info, task) {
-			for(var ti=0; ti<info.craftingTasks.length; ti++){
-				var t = info.craftingTasks[ti];
-				if(t.nodes) for(var ni=0; ni<t.nodes.length; ni++){
-					var n = t.nodes[ni];
-				}
-			}
-			if (task) tile.data._changedTaskId = task.id;
-			tile.data.refreshCurPage = true;
-		};
+		this._monitorListener = makeMonitorListener(this, 'refreshCurPage', '_changedTaskId');
 	},
 	onWindowOpen: function(container, client){
 		if(this.data.NETWORK_ID == 'f' || !RSNetworks[this.data.NETWORK_ID]) return;
@@ -401,46 +454,18 @@ RefinedStorage.createTile(BlockID.RS_craftingMonitor, {
 			}
 		}
 	},
+	post_destroy: function(){
+		if (this.data.LAST_NETWORK_ID != 'f' && RSNetworks[this.data.LAST_NETWORK_ID]) {
+			var oldInfo = RSNetworks[this.data.LAST_NETWORK_ID].info;
+			if (oldInfo && oldInfo.removeMonitorListener) {
+				oldInfo.removeMonitorListener(this._monitorListener);
+			}
+		}
+	},
 	refreshGui: function(first, client, providingCraft){
 		if(this.data.NETWORK_ID == 'f' || !RSNetworks[this.data.NETWORK_ID] || !RSNetworks[this.data.NETWORK_ID].info) return;
 		var info = RSNetworks[this.data.NETWORK_ID].info;
-		var rawTasks = info.providingCrafts;
-		var changedTask = null;
-		if (this.data._changedTaskId) {
-			for (var cti = 0; cti < rawTasks.length; cti++) {
-				if (rawTasks[cti].id === this.data._changedTaskId) { changedTask = rawTasks[cti]; break; }
-			}
-			this.data._changedTaskId = null;
-		}
-		for(var ri=0; ri<rawTasks.length; ri++){
-			var rt = rawTasks[ri];
-			if(rt.nodes) for(var rni=0; rni<rt.nodes.length; rni++){
-				var rn = rt.nodes[rni];
-			}
-		}
-		var tasksToSend = rawTasks;
-		if (providingCraft) tasksToSend = [providingCraft];
-		else if (changedTask) tasksToSend = [changedTask];
-		var mapped = [];
-		for (var mti = 0; mti < tasksToSend.length; mti++) {
-			var mt = tasksToSend[mti];
-			mapped.push({
-				id: mt.id,
-				results: mt.results || [],
-				elements: info.buildMonitorElements(mt),
-				totalSteps: mt.totalSteps || 0,
-				currentStep: mt.currentStep || 0
-			});
-		}
-		var _data = {
-			name: this.networkData.getName() + '',
-			isActive: this.data.isActive,
-			NETWORK_ID: this.data.NETWORK_ID,
-			redstone_mode: this.data.redstone_mode,
-			providingCrafts: this.isWorkAllowed() ? mapped : [],
-			refresh: !first,
-			first: first
-		};
+		var _data = buildCraftingMonitorPayload(this, info.providingCrafts, first, providingCraft);
 		if(client){
 			this.container.sendEvent(client, "openGui", _data);
 		} else {
@@ -452,20 +477,15 @@ RefinedStorage.createTile(BlockID.RS_craftingMonitor, {
 		this.sendPacket("refreshModel", {block_data: this.data.block_data, isActive: this.data.isActive, coords: {x: this.x, y: this.y, z: this.z}});
 	},
 	containerEvents: {
-		cancelTask: function(container, client, data) {
+		cancelTask: function(eventData, connectedClient) {
 			var info = RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID].info;
-			if (info && data && data.taskId) {
-				info.cancelTask(data.taskId);
+			if (info && eventData && eventData.taskId) {
+				info.cancelTask(eventData.taskId);
 			}
 		},
-		cancelAllTasks: function(container, client, data) {
+		cancelAllTasks: function(eventData, connectedClient) {
 			var info = RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID].info;
-			if (info && info.craftingTasks) {
-				var tasks = info.craftingTasks.slice();
-				for (var i = 0; i < tasks.length; i++) {
-					info.cancelTask(tasks[i].id);
-				}
-			}
+			if (info) info.cancelAllTasks();
 		}
 	},
 	tick: function(){
@@ -491,24 +511,7 @@ RefinedStorage.createTile(BlockID.RS_craftingMonitor, {
 		},
 		containerEvents: {
 			openGui: function(container, window, content, eventData){
-				if(!content || !window || !window.isOpened()) return;
-				craftingMonitorData.container = container;
-				var incoming = eventData.providingCrafts;
-				if (eventData.refresh && craftingMonitorData.providingCrafts && incoming.length === 1 && incoming[0].id) {
-					var found = false;
-					for (var i = 0; i < craftingMonitorData.providingCrafts.length; i++) {
-						if (craftingMonitorData.providingCrafts[i].id === incoming[0].id) {
-							craftingMonitorData.providingCrafts[i] = incoming[0];
-							found = true;
-							break;
-						}
-					}
-					if (!found) craftingMonitorData.providingCrafts.push(incoming[0]);
-				} else {
-					craftingMonitorData.providingCrafts = incoming;
-				}
-				var page = eventData.refresh ? craftingMonitorData.page : 1;
-				craftingMonitorSwitchPage(page);
+				craftingMonitorOpenGui(container, window, content, eventData);
 			}
 		}
 	}

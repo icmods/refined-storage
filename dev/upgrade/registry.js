@@ -32,12 +32,20 @@ const UpgradeRegistry = {
 		return ItemID[itemIDName];
 	},
 	/**
+	 * Get upgrade params by numeric or string id
+	 * @param {number|string} id item id or string id(nameID) of upgrade
+	 * @returns {object|undefined} return upgrade params or undefined if upgrade with this id is not registered
+	 */
+	get: function(id){
+		return this.upgrades[id] || this.stringIDUpgrades[id];
+	},
+	/**
 	 * Get upgrade energy usage
 	 * @param {number|string} id item id or string id(nameID) of upgrade
 	 * @returns {object|undefined} return upgrade energy usage or undefined if upgrade with this id is not registered
 	 */
 	getEnergyUsage: function(id){
-		var upgrade = this.upgrades[id] || this.stringIDUpgrades[id];
+		var upgrade = this.get(id);
 		if(upgrade) return upgrade.usage;
 		return 0;
 	}

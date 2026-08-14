@@ -1,5 +1,5 @@
 ModAPI.registerAPI("RefinedStorageAPI", {
-    apiVersion: '1.1',
+    apiVersion: '1.3',
     requireGlobal: function (command) {
         return eval(command);
     },
@@ -11,14 +11,15 @@ ModAPI.registerAPI("RefinedStorageAPI", {
 
     networks: _RS.networks,
     pattern: _RS.pattern,
+    crafters: _RS.crafters,
     disks: _RS.disks,
     blocks: _RS.blocks,
     upgrades: _RS.upgrades,
     energy: _RS.energy,
     config: _RS.config,
     ui: _RS.ui,
-    getBlocks: function() { return RS_blocks; },
-    getNetworks: function() { return RSNetworks; },
+    getBlocks: function() { return _RS.getBlocks(); },
+    getNetworks: function() { return _RS.getNetworks(); },
     getNetworksInfo: function() { return _RS.getNetworksInfo(); },
     on: function(event, callback) { return _RS.on(event, callback); }
 });

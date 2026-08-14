@@ -13,6 +13,13 @@ const searchItem = function (id, data, extra, list, reverse, playerUid) {
 		playerUid = reverse; reverse = list; list = extra;
 		extra = -1;
 	}
+	return searchInventory(player, id, data, extra, list, reverse);
+}
+
+const searchInventory = function (player, id, data, extra, list, reverse) {
+	if(typeof(data) != "number")data = -1;
+	if(typeof(id) != "number")id = -1;
+	if(extra === undefined)extra = -1;
 	if(reverse){
 		if(list){
 			var itemsList = [];

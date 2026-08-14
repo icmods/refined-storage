@@ -1,4 +1,15 @@
 Callback.addCallback("PreLoaded", function () {
+	function addShapedGlassDual(result, mask, data) {
+		var glasses = [20, 241];
+		for (var gi = 0; gi < glasses.length; gi++) {
+			var _data = data.slice();
+			for (var k = 0; k < _data.length; k += 3) {
+				if (_data[k] == 'g') _data[k + 1] = glasses[gi];
+			}
+			Recipes.addShaped(result, mask, _data);
+		}
+	}
+
 	Recipes.addFurnace(406, 0, ItemID.silicon, 0);
 	Recipes.addFurnace(ItemID.raw_basic_processor, 0, ItemID.basic_processor, 0);
 	Recipes.addFurnace(ItemID.raw_improved_processor, 0, ItemID.improved_processor, 0);
@@ -38,71 +49,24 @@ Callback.addCallback("PreLoaded", function () {
 		"sr ",
 		"   "
 	], ['d', 264, -1, 'b', ItemID.processor_binding, -1, 's', ItemID.silicon, -1, 'r', 331, -1]);
-	Recipes.addShaped({id: ItemID.raw_advanced_processor, count: 1, data: 0}, [
-		"bd ",
-		"sr ",
-		"   "
-	], ['d', 264, -1, 'b', ItemID.processor_binding, -1, 's', ItemID.silicon, -1, 'r', 331, -1]);
-	Recipes.addShaped({id: ItemID.storage_housing, count: 1, data: 0}, [
-		"grg",
+	addShapedGlassDual({id: ItemID.storage_housing, count: 1, data: 0}, ["grg",
 		"r r",
-		"qqq"
-	], ['g', 20, -1, 'q', ItemID.quartz_enriched_iron, -1, 'r', 331, -1]);
-	Recipes.addShaped({id: ItemID.storage_housing, count: 1, data: 0}, [
-		"grg",
-		"r r",
-		"qqq"
-	], ['g', 241, -1, 'q', ItemID.quartz_enriched_iron, -1, 'r', 331, -1]);
-	Recipes.addShaped({id: ItemID['storageDisk1000'], count: 1, data: 0}, [
-		"grg",
+		"qqq"], ['g', 20, -1, 'q', ItemID.quartz_enriched_iron, -1, 'r', 331, -1]);
+	addShapedGlassDual({id: ItemID['storageDisk1000'], count: 1, data: 0}, ["grg",
 		"rdr",
-		"qqq"
-	], ['d', ItemID['1k_storage_part'], -1, 'g', 20, -1, 'q', ItemID.quartz_enriched_iron, -1, 'r', 331, -1]);
-	Recipes.addShaped({id: ItemID['storageDisk1000'], count: 1, data: 0}, [
-		"grg",
+		"qqq"], ['d', ItemID['1k_storage_part'], -1, 'g', 20, -1, 'q', ItemID.quartz_enriched_iron, -1, 'r', 331, -1]);
+	addShapedGlassDual({id: ItemID['storageDisk4000'], count: 1, data: 0}, ["grg",
 		"rdr",
-		"qqq"
-	], ['d', ItemID['1k_storage_part'], -1, 'g', 241, -1, 'q', ItemID.quartz_enriched_iron, -1, 'r', 331, -1]);
-	Recipes.addShaped({id: ItemID['storageDisk4000'], count: 1, data: 0}, [
-		"grg",
+		"qqq"], ['d', ItemID['4k_storage_part'], -1, 'g', 20, -1, 'q', ItemID.quartz_enriched_iron, -1, 'r', 331, -1]);
+	addShapedGlassDual({id: ItemID['storageDisk16000'], count: 1, data: 0}, ["grg",
 		"rdr",
-		"qqq"
-	], ['d', ItemID['4k_storage_part'], -1, 'g', 20, -1, 'q', ItemID.quartz_enriched_iron, -1, 'r', 331, -1]);
-	Recipes.addShaped({id: ItemID['storageDisk4000'], count: 1, data: 0}, [
-		"grg",
+		"qqq"], ['d', ItemID['16k_storage_part'], -1, 'g', 20, -1, 'q', ItemID.quartz_enriched_iron, -1, 'r', 331, -1]);
+	addShapedGlassDual({id: ItemID['storageDisk64000'], count: 1, data: 0}, ["grg",
 		"rdr",
-		"qqq"
-	], ['d', ItemID['4k_storage_part'], -1, 'g', 241, -1, 'q', ItemID.quartz_enriched_iron, -1, 'r', 331, -1]);
-	Recipes.addShaped({id: ItemID['storageDisk16000'], count: 1, data: 0}, [
+		"qqq"], ['d', ItemID['64k_storage_part'], -1, 'g', 20, -1, 'q', ItemID.quartz_enriched_iron, -1, 'r', 331, -1]);
+	addShapedGlassDual({id: ItemID['1k_storage_part'], count: 1, data: 0}, ["sqs",
 		"grg",
-		"rdr",
-		"qqq"
-	], ['d', ItemID['16k_storage_part'], -1, 'g', 20, -1, 'q', ItemID.quartz_enriched_iron, -1, 'r', 331, -1]);
-	Recipes.addShaped({id: ItemID['storageDisk16000'], count: 1, data: 0}, [
-		"grg",
-		"rdr",
-		"qqq"
-	], ['d', ItemID['16k_storage_part'], -1, 'g', 241, -1, 'q', ItemID.quartz_enriched_iron, -1, 'r', 331, -1]);
-	Recipes.addShaped({id: ItemID['storageDisk64000'], count: 1, data: 0}, [
-		"grg",
-		"rdr",
-		"qqq"
-	], ['d', ItemID['64k_storage_part'], -1, 'g', 20, -1, 'q', ItemID.quartz_enriched_iron, -1, 'r', 331, -1]);
-	Recipes.addShaped({id: ItemID['storageDisk64000'], count: 1, data: 0}, [
-		"grg",
-		"rdr",
-		"qqq"
-	], ['d', ItemID['64k_storage_part'], -1, 'g', 241, -1, 'q', ItemID.quartz_enriched_iron, -1, 'r', 331, -1]);
-	Recipes.addShaped({id: ItemID['1k_storage_part'], count: 1, data: 0}, [
-		"sqs",
-		"grg",
-		"sgs"
-	], ['q', ItemID.quartz_enriched_iron, -1, 'g', 20, -1, 's', ItemID.silicon, -1, 'r', 331, -1]);
-	Recipes.addShaped({id: ItemID['1k_storage_part'], count: 1, data: 0}, [
-		"sqs",
-		"grg",
-		"sgs"
-	], ['q', ItemID.quartz_enriched_iron, -1, 'g', 241, -1, 's', ItemID.silicon, -1, 'r', 331, -1]);
+		"sgs"], ['q', ItemID.quartz_enriched_iron, -1, 'g', 20, -1, 's', ItemID.silicon, -1, 'r', 331, -1]);
 	Recipes.addShaped({id: ItemID['4k_storage_part'], count: 1, data: 0}, [
 		"sqs",
 		"grg",
@@ -140,16 +104,9 @@ Callback.addCallback("PreLoaded", function () {
 		"grg",
 		"sgs"
 	], ['q', ItemID.advanced_processor, -1, 'g', ItemID.silicon, -1, 's', ItemID.quartz_enriched_iron, -1, 'r', BlockID['RSmachine_casing'], -1]);
-	Recipes.addShaped({id: BlockID['RS_grid'], count: 1, data: 0}, [
-		"pog",
+	addShapedGlassDual({id: BlockID['RS_grid'], count: 1, data: 0}, ["pog",
 		"qcg",
-		"plg"
-	], ['q', ItemID.quartz_enriched_iron, -1, 'c', BlockID['RSmachine_casing'], -1, 'g', 20, -1, 'o', ItemID.construction_core, -1, 'l', ItemID.destruction_core, -1, 'p', ItemID.improved_processor, -1]);
-	Recipes.addShaped({id: BlockID['RS_grid'], count: 1, data: 0}, [
-		"pog",
-		"qcg",
-		"plg"
-	], ['q', ItemID.quartz_enriched_iron, -1, 'c', BlockID['RSmachine_casing'], -1, 'g', 241, -1, 'o', ItemID.construction_core, -1, 'l', ItemID.destruction_core, -1, 'p', ItemID.improved_processor, -1]);
+		"plg"], ['q', ItemID.quartz_enriched_iron, -1, 'c', BlockID['RSmachine_casing'], -1, 'g', 20, -1, 'o', ItemID.construction_core, -1, 'l', ItemID.destruction_core, -1, 'p', ItemID.improved_processor, -1]);
 	Recipes.addShaped({id: BlockID['RS_crafting_grid'], count: 1, data: 0}, [
 		"ga",
 		"c  ",
@@ -165,16 +122,9 @@ Callback.addCallback("PreLoaded", function () {
 		"ici",
 		"iai"
 	], ['a', ItemID.advanced_processor, -1, 'c', BlockID['RSmachine_casing'], -1, 'i', 265, -1, 'h', 130, -1]);
-	Recipes.addShaped({id: BlockID['RS_cable'], count: 12, data: 0}, [
-		"iii",
+	addShapedGlassDual({id: BlockID['RS_cable'], count: 12, data: 0}, ["iii",
 		"grg",
-		"iii"
-	], ['g', 20, -1, 'r', 331, -1, 'i', ItemID.quartz_enriched_iron, -1]);
-	Recipes.addShaped({id: BlockID['RS_cable'], count: 12, data: 0}, [
-		"iii",
-		"grg",
-		"iii"
-	], ['g', 241, -1, 'r', 331, -1, 'i', ItemID.quartz_enriched_iron, -1]);
+		"iii"], ['g', 20, -1, 'r', 331, -1, 'i', ItemID.quartz_enriched_iron, -1]);
 	Recipes.addShaped({id: BlockID['RSmachine_casing'], count: 1, data: 0}, [
 		"iii",
 		"isi",
@@ -186,16 +136,9 @@ Callback.addCallback("PreLoaded", function () {
 		"ihi"
 	], ['s', BlockID['RSmachine_casing'], 0, 'i', ItemID.quartz_enriched_iron, -1, 'h', 410, -1, 'r', 331, -1]);//TODO: remake craft
 
-	Recipes.addShaped({id: ItemID.RSpattern, count: 1, data: 0}, [
-		"grg",
+	addShapedGlassDual({id: ItemID.RSpattern, count: 1, data: 0}, ["grg",
 		"rgr",
-		"eee"
-	], ['g', 20, -1, 'r', 331, -1, 'e', ItemID.quartz_enriched_iron, -1]);
-	Recipes.addShaped({id: ItemID.RSpattern, count: 1, data: 0}, [
-		"grg",
-		"rgr",
-		"eee"
-	], ['g', 241, -1, 'r', 331, -1, 'e', ItemID.quartz_enriched_iron, -1]);
+		"eee"], ['g', 20, -1, 'r', 331, -1, 'e', ItemID.quartz_enriched_iron, -1]);
 
 	Recipes.addShapeless({id: BlockID['RS_pattern_grid'], count: 1, data: 0}, [{id: BlockID['RS_grid'], count: 1, data: -1}, {id: ItemID.advanced_processor, count: 1, data: -1}, {id: ItemID.RSpattern, count: 1, data: -1}]);
 
@@ -205,14 +148,38 @@ Callback.addCallback("PreLoaded", function () {
 		"ede"
 	], ['e', ItemID.quartz_enriched_iron, -1, 'c', ItemID.construction_core, -1, 'a', ItemID.advanced_processor, -1, 'm', BlockID['RSmachine_casing'], -1, 'd', ItemID.destruction_core, -1]);
 
-	Recipes.addShaped({id: BlockID['RS_craftingMonitor'], count: 1, data: 0}, [
-		"pag",
+	addShapedGlassDual({id: BlockID['RS_craftingMonitor'], count: 1, data: 0}, ["pag",
 		"emg",
-		"pag"
-	], ['p', ItemID.improved_processor, -1, 'a', ItemID.RSpattern, -1, 'g', 20, -1, 'e', ItemID.quartz_enriched_iron, -1, 'm', BlockID['RSmachine_casing'], -1]);
-	Recipes.addShaped({id: BlockID['RS_craftingMonitor'], count: 1, data: 0}, [
-		"pag",
-		"emg",
-		"pag"
-	], ['p', ItemID.improved_processor, -1, 'a', ItemID.RSpattern, -1, 'g', 241, -1, 'e', ItemID.quartz_enriched_iron, -1, 'm', BlockID['RSmachine_casing'], -1]);
+		"pag"], ['p', ItemID.improved_processor, -1, 'a', ItemID.RSpattern, -1, 'g', 20, -1, 'e', ItemID.quartz_enriched_iron, -1, 'm', BlockID['RSmachine_casing'], -1]);
+
+	Recipes.addShaped({id: ItemID['RSRangeUpgrade'], count: 1, data: 0}, [
+		"epe",
+		"pup",
+		"eee"
+	], ['e', ItemID.quartz_enriched_iron, -1, 'p', 368, -1, 'u', ItemID.rs_upgrade, -1]);
+	Recipes.addShaped({id: BlockID['RS_wireless_transmitter'], count: 1, data: 0}, [
+		"epe",
+		"eme",
+		"eae"
+	], ['e', ItemID.quartz_enriched_iron, -1, 'p', 368, -1, 'm', BlockID['RSmachine_casing'], -1, 'a', ItemID.advanced_processor, -1]);
+	Recipes.addShaped({id: ItemID['RSwirelessGrid'], count: 1, data: 0}, [
+		"epe",
+		"ege",
+		"eae"
+	], ['e', ItemID.quartz_enriched_iron, -1, 'p', 368, -1, 'g', BlockID['RS_grid'], -1, 'a', ItemID.advanced_processor, -1], function (api, field, result, player) {
+		if (RSChargeRegistry) {
+			result.data = 27;
+			result.extra = new ItemExtraData().putInt('energy', 0);
+		}
+	});
+	Recipes.addShaped({id: ItemID['RSwirelessCraftingMonitor'], count: 1, data: 0}, [
+		"epe",
+		"eme",
+		"eae"
+	], ['e', ItemID.quartz_enriched_iron, -1, 'p', 368, -1, 'm', BlockID['RS_craftingMonitor'], -1, 'a', ItemID.advanced_processor, -1], function (api, field, result, player) {
+		if (RSChargeRegistry) {
+			result.data = 27;
+			result.extra = new ItemExtraData().putInt('energy', 0);
+		}
+	});
 });

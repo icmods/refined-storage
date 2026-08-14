@@ -11,6 +11,33 @@ const EnergyUse = {}
 
 var _savedCraftingTasks = {};
 
+var RSpendingReconnect = {};
+var RSreconnectTicks = 0;
+
+function rsAddReconnectPending(tile) {
+	RSpendingReconnect[tile.coords_id()] = { x: tile.x, y: tile.y, z: tile.z, blockSource: tile.blockSource };
+}
+
+Callback.addCallback("tick", function () {
+	RSreconnectTicks++;
+	if (RSreconnectTicks < 20) return;
+	RSreconnectTicks = 0;
+	for (var cid in RSpendingReconnect) {
+		var entry = RSpendingReconnect[cid];
+		var tile = World.getTileEntity(entry.x, entry.y, entry.z, entry.blockSource);
+		if (!tile) { delete RSpendingReconnect[cid]; continue; }
+		if (tile.data.NETWORK_ID != 'f' && RSNetworks[tile.data.NETWORK_ID] && RSNetworks[tile.data.NETWORK_ID][cid]) {
+			delete RSpendingReconnect[cid];
+			continue;
+		}
+		var controller = searchController(tile, false);
+		if (controller) {
+			var cTile = World.getTileEntity(controller.x, controller.y, controller.z, entry.blockSource);
+			if (cTile) cTile.data.updateControllerNetwork = true;
+		}
+	}
+});
+
 Saver.addSavesScope("RSCraftingTasks",
 	function read(scope){
 		_savedCraftingTasks = scope && scope.tasks ? scope.tasks : {};
@@ -57,4 +84,6 @@ function restoreCraftingTasks(controllerTile) {
 Callback.addCallback("LevelLeft", function () {
 	RSNetworks = [];
 	_savedCraftingTasks = {};
+	RSpendingReconnect = {};
+	RSreconnectTicks = 0;
 });

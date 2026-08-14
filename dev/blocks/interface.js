@@ -326,6 +326,7 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 		if(screenName == 'main')return interfaceGUI;
 	},
 	post_init: function(){
+		recountUpgrades(this);
 		for(var i = 0; i < 9; i++){
 			var ths = this;
 			this.container.setSlotAddTransferPolicy('slot_import' + i, {

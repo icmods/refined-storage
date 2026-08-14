@@ -308,6 +308,9 @@ RefinedStorage.createTile(BlockID.RS_crafter, {
 			})("slot_pattern" + i);
 		}
 	},
+	post_init: function(){
+		recountUpgrades(this);
+	},
 	pre_destroy: function(){
 		for(var s in this.data.crafts) this.removeCraft(s);
 	},

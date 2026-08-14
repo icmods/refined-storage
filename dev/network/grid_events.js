@@ -29,7 +29,7 @@ var GridEvents = {
 		tile.refreshGui(false, false, true);
 	},
 
-	processPushDeleteEvents: function(tile) {
+	processPushDeleteEvents: function(tile, onEventHandled) {
 		for(var p in tile.data.pushDeleteEvents){
 			var player = new PlayerActor(Number(p));
 			for(var i in tile.data.pushDeleteEvents[p]){
@@ -50,6 +50,7 @@ var GridEvents = {
 					if((_index = tile.originalItemsMap().indexOf(getItemUid(item))) != -1)tile.container.markSlotDirty(_index+'slot');
 					tile.items();
 					tile.refreshGui(false, false, item.count <= count || event.updateFull);
+					if(onEventHandled)onEventHandled(Number(p), 'push');
 					delete tile.data.pushDeleteEvents[p][i];
 				}
 				if(event.type == 'delete'){
@@ -64,6 +65,7 @@ var GridEvents = {
 						tile.items();
 						tile.refreshGui(false, false, item.count <= count || event.updateFull);
 					}
+					if(onEventHandled)onEventHandled(Number(p), 'delete');
 					delete tile.data.pushDeleteEvents[p][i];
 				}
 			}

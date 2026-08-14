@@ -485,29 +485,11 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		}
 	},
 	containerEvents: {
-		updateRedstoneMode: function(eventData, connectedClient) {
-			if(this.data.redstone_mode == undefined) this.data.redstone_mode = 0;
-			this.data.redstone_mode = this.data.redstone_mode >= 2 ? 0 : this.data.redstone_mode + 1;
-			if(!this.refreshRedstoneMode()) this.refreshGui();
-		},
 		craftPreview: function(eventData, connectedClient) {
-			if (this.data.NETWORK_ID == 'f') return;
-			var info = RSNetworks[this.data.NETWORK_ID].info;
-			var result = info.constructCraft(eventData.item, eventData.count || 1);
-			var craftsData = result.crafts ? result.crafts.map(function(c){ return {completedIngridients: c.completedIngridients, result: c.result, craftable: c.craftable}; }) : [];
-			this.container.sendEvent(connectedClient, "openCraftPreview", {
-				results: result.results,
-				ingridients: result.ingridients,
-				craftable: result.craftable,
-				crafts: craftsData,
-				errorType: result.errorType || null
-			});
+			GridEvents.craftPreview(this, eventData, connectedClient);
 		},
 		provideConstructedCraft: function(eventData, connectedClient) {
-			if (this.data.NETWORK_ID == 'f') return;
-			var info = RSNetworks[this.data.NETWORK_ID].info;
-			var result = info.constructCraft(eventData.item, eventData.count || 1);
-			if (result.craftable) info.provideCraft(result);
+			GridEvents.provideConstructedCraft(this, eventData, connectedClient);
 		}
 	}
 })

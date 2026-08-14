@@ -95,8 +95,51 @@ var _RS = {
 		}
 	},
 
+	crafters: {
+		getFrontSide: function(tile) { return getCrafterFrontSide(tile); },
+		getPatternContainers: function(netId, uid) {
+			var info = RSNetworks[netId] && RSNetworks[netId].info;
+			return info ? info.getPatternContainers(uid) : [];
+		},
+		registerPattern: function(netId, coordsId, pattern) {
+			var info = RSNetworks[netId] && RSNetworks[netId].info;
+			if (!info || !pattern || !pattern.outputs || !coordsId) return null;
+			var craft = {
+				id: 'addon',
+				coordsId: coordsId,
+				isProcessed: !!pattern.isProcessed,
+				oredictEnabled: !!pattern.oredictEnabled,
+				ingridients: pattern.inputs || [],
+				result: pattern.outputs
+			};
+			for (var ri = 0; ri < craft.result.length; ri++) {
+				var resultUid = craft.result[ri].id + '_' + craft.result[ri].data;
+				if (!info.crafts[resultUid]) info.crafts[resultUid] = [];
+				info.crafts[resultUid].push(craft);
+				if (!info.craftsIDS[craft.result[ri].id]) info.craftsIDS[craft.result[ri].id] = [];
+				if (info.craftsIDS[craft.result[ri].id].indexOf(craft.result[ri].data) == -1) info.craftsIDS[craft.result[ri].id].push(craft.result[ri].data);
+				info.addPatternContainer(resultUid, coordsId);
+			}
+			return craft;
+		},
+		unregisterPattern: function(netId, coordsId, craft) {
+			var info = RSNetworks[netId] && RSNetworks[netId].info;
+			if (!info || !craft) return;
+			for (var ri = 0; ri < craft.result.length; ri++) {
+				var resultUid = craft.result[ri].id + '_' + craft.result[ri].data;
+				if (info.crafts[resultUid]) {
+					var idx = info.crafts[resultUid].indexOf(craft);
+					if (idx != -1) info.crafts[resultUid].splice(idx, 1);
+					if (info.crafts[resultUid].length == 0) delete info.crafts[resultUid];
+				}
+				info.removePatternContainer(resultUid, coordsId);
+			}
+		}
+	},
+
 	disks: {
 		get: function(index) { return DiskData[index]; },
+		getByItem: function(item) { return Disk.getDiskData(item); },
 		register: function(name, texture, storage, registerItem) { return Disk.register(name, texture, storage, registerItem); }
 	},
 
@@ -113,7 +156,12 @@ var _RS = {
 
 	energy: {
 		set: function(blockId, value) { EnergyUse[blockId] = value; },
-		get: function(blockId) { return EnergyUse[blockId]; }
+		get: function(blockId) { return EnergyUse[blockId]; },
+		usage: function(netId, blockSource) {
+			if (!RSNetworks[netId]) return null;
+			var result = computeNetMap(netId, blockSource);
+			return result ? result.usage : null;
+		}
 	},
 
 	config: {
@@ -156,8 +204,5 @@ var _RS = {
 		buildPushDeleteEvents: function(networkData) { return buildPushDeleteEvents(networkData); },
 		openCraftPreview: function(container, data) { openCraftPreview(container, data); },
 		createCraftPreviewPostData: function(data) { return createCraftPreviewPostData(data); }
-	},
-
-	getBlocks: function() { return RS_blocks; },
-	getNetworks: function() { return RSNetworks; }
+	}
 };

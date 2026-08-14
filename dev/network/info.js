@@ -181,19 +181,6 @@ var NetworkInfo = {
 					}
 				}
 			},
-			addItemAddedListener: function(func, priority){
-				if(typeof func != 'function') return false;
-				priority = priority || 0;
-				func.priority = priority;
-				for(var i in this.itemAddListeners){
-					if(this.itemAddListeners[i].priority < priority){
-						this.itemAddListeners.splice(i,0,func);
-						return true;
-					}
-				}
-				this.itemAddListeners.push(func);
-				return true;
-			},
 			refreshOpenedGrids: function(_full){
 				for(var i in this.openedGrids){
 					var __coords = this.openedGrids[i];
@@ -520,7 +507,13 @@ var NetworkInfo = {
 				if(Config.dev)Logger.Log('[CRAFT] Task ' + taskId + ' cancelled', 'RefinedStorageDebug');
 				return true;
 			},
-			getTask: function(taskId) {
+			cancelAllTasks: function() {
+			var tasks = this.craftingTasks.slice();
+			for (var i = 0; i < tasks.length; i++) {
+				this.cancelTask(tasks[i].id);
+			}
+		},
+		getTask: function(taskId) {
 				for (var i = 0; i < this.craftingTasks.length; i++) {
 					if (this.craftingTasks[i].id === taskId) return this.craftingTasks[i];
 				}

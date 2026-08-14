@@ -63,8 +63,18 @@ const RefinedStorage = {
 				if(this.pre_init)this.pre_init();
 				if(this.data.energy || this.data.energy === 0)this.networkData.putInt('energy', this.data.energy);
 				if(!this.data.createdCalled) {
-					this.data.NETWORK_ID = 'f';
-					this.setActive(false);
+					if(this.data.NETWORK_ID == 'f' || !RSNetworks[this.data.NETWORK_ID] || !RSNetworks[this.data.NETWORK_ID][this.coords_id()]) {
+						this.data.NETWORK_ID = 'f';
+						this.setActive(false);
+						var controller = searchController(this, false);
+						if (controller) {
+							var cTile = World.getTileEntity(controller.x, controller.y, controller.z, this.blockSource);
+							if (cTile) {
+								cTile.data.updateControllerNetwork = true;
+							}
+						}
+						if (this.data.NETWORK_ID == 'f') rsAddReconnectPending(this);
+					}
 				} else {
 					var controller = searchController(this, false);
 					if (controller) {
@@ -106,7 +116,7 @@ const RefinedStorage = {
 						transfer: function(itemContainer, slot, id, count, data, extra, player){
 							count = 1;
 							var upgrade;
-							if(!(upgrade = UpgradeRegistry.upgrades[id]) || itemContainer.getSlot(slot).id != 0) return 0
+							if(!(upgrade = UpgradeRegistry.get(id)) || itemContainer.getSlot(slot).id != 0) return 0
 							if(tile.data.upgrades[upgrade.nameID]){
 								if(upgrade.maxStack && tile.data.upgrades[upgrade.nameID] >= upgrade.maxStack) return 0;
 								tile.data.upgrades[upgrade.nameID]++;
@@ -119,7 +129,7 @@ const RefinedStorage = {
 					})
 					this.container.setSlotGetTransferPolicy(this.upgradesSlots[i], {
 						transfer: function(itemContainer, slot, id, count, data, extra, player){
-							if(!(upgrade = UpgradeRegistry.upgrades[id])) return 0
+							if(!(upgrade = UpgradeRegistry.get(id))) return 0
 							if(tile.data.upgrades[upgrade.nameID])tile.data.upgrades[upgrade.nameID]--
 							if(upgrade.deleteFunc)upgrade.deleteFunc(tile, {id: id, count: count, data: data, extra: extra}, itemContainer, slot, player);
 							return count;
@@ -503,3 +513,27 @@ function testButtons(elementsS_, initFunc_){
 		}
 	}
 };
+
+function getRotatableTexture(base, variation, _active){
+	variation = variation || 0;
+	var i = _active ? 1 : 0;
+	return [[base[0], [base[1][0], 0], base[2], [base[3][0], i], base[4], base[5]], [base[0], [base[1][0], 1], [base[3][0], i], base[2], base[5], base[4]], [base[0], [base[1][0], 2], base[5], base[4], base[2], [base[3][0], i]], [base[0], [base[1][0], 3], base[4], base[5], [base[3][0], i], base[2]]][variation];
+}
+
+function getNetworkInfo(tile) {
+	if (!tile || tile.data.NETWORK_ID == 'f' || !RSNetworks[tile.data.NETWORK_ID]) return null;
+	return RSNetworks[tile.data.NETWORK_ID].info || null;
+}
+
+function recountUpgrades(tile) {
+	if (!tile.upgradesSlots) return;
+	tile.data.upgrades = {};
+	for (var i = 0; i < tile.upgradesSlots.length; i++) {
+		var slot = tile.container.getSlot(tile.upgradesSlots[i]);
+		var upgrade;
+		if (slot.id != 0 && (upgrade = UpgradeRegistry.get(slot.id))) {
+			if (tile.data.upgrades[upgrade.nameID]) tile.data.upgrades[upgrade.nameID]++;
+			else tile.data.upgrades[upgrade.nameID] = 1;
+		}
+	}
+}

@@ -92,7 +92,7 @@ patternGridFuncs.craftsPages = craftsPageHelpers.getPages;
 patternGridFuncs.getCraftsPageFromCoords = craftsPageHelpers.getPageFromCoords;
 patternGridFuncs.getCraftsCoordsFromPage = craftsPageHelpers.getCoordsFromPage;
 patternGridFuncs.updateCrafts = function(items, craftsTextSearch, onlyItemsMap, _object){
-		var inventoryItems = searchItem(-1, -1, true);
+		var inventoryItems = searchInventory(Player, -1, -1, -1, true);
 		var inventoryOnlyItemsMap = {};
 		for(var i in inventoryItems){
 			if(inventoryOnlyItemsMap[inventoryItems[i].id])
@@ -774,25 +774,10 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 		return true;
 	},
 	refreshGui: function(first, client, updateFilters, updateCrafts){
-		var _data = {
-			name: this.networkData.getName() + '',
-			isActive: this.data.isActive,
-			NETWORK_ID: this.data.NETWORK_ID,
-			redstone_mode: this.data.redstone_mode,
-			sort: this.data.sort,
-			reverse_filter: this.data.reverse_filter,
-			refresh: !first,
-			updateFilters: first || updateFilters,
-			updateCrafts: first || updateCrafts,
-			disksStorage: this.getDisksStorage() + '',
-			disksStored: this.getDisksStored(),
-			isWorkAllowed: this.isWorkAllowed(),
-			craftsTextSearch: this.data.craftsTextSearch,
-			first: first,
-			patternMode: this.data.patternMode,
-			oredictMode: this.data.oredictMode,
-			craftSlots: this.data.craftSlots || []
-		};
+		var _data = buildCraftingGridPayload(this, first, updateFilters, updateCrafts);
+		_data.patternMode = this.data.patternMode;
+		_data.oredictMode = this.data.oredictMode;
+		_data.craftSlots = this.data.craftSlots || [];
 		if(client){
 			this.container.sendEvent(client, "openGui", _data);
 		} else {
@@ -807,11 +792,6 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 		return patternGridGUI;
 	},
 	containerEvents: {
-		updateRedstoneMode: function(eventData, connectedClient){
-			if(this.data.redstone_mode == undefined) this.data.redstone_mode = 0;
-			this.data.redstone_mode = this.data.redstone_mode >= 2 ? 0 : this.data.redstone_mode + 1;
-			if(!this.refreshRedstoneMode()) this.refreshGui();
-		},
 		updateFilter: function(eventData, connectedClient){
 			GridEvents.updateFilter(this);
 		},
