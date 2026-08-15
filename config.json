@@ -1,26 +1,54 @@
 {
-	"enabled":true,
-	"dev":false,
-	"controller":{
-		"usesEnergy":true,
-		"energyCapacity":32000,
-		"controllerMaxReceive":2147483647
-	},
-	"energy_uses":{
-		"controller":0,
-		"diskDrive":0,
-		"diskDrivePerDisk":1,
-		"grid":2,
-		"craftingGrid":4,
-		"cable":0,
-		"interface":3,
-		"upgrades":{
-		  "speed":2,
-		  "stack":12,
-		  "silkTouch":15,
-		  "range":8,
-		  "fortune":10,
-		  "crafting":5
-		}
-	}
+  "enabled": true,
+  "dev": false,
+  "parallelCrafting (Java like)": false,
+  "controller": {
+    "usesEnergy": true,
+    "energyCapacity": 32000,
+    "controllerMaxReceive": 2147483647
+  },
+  "energy_uses": {
+    "controller": 0,
+    "diskDrive": 0,
+    "diskDrivePerDisk": 1,
+    "grid": 2,
+    "craftingGrid": 4,
+    "patternGrid": 4,
+    "craftingMonitor": 8,
+    "crafter": 4,
+    "crafterPerPattern": 1,
+    "cable": 0,
+    "interface": 3,
+    "wirelessTransmitter": 8,
+    "upgrades": {
+      "speed": 2,
+      "stack": 12,
+      "silkTouch": 15,
+      "range": 8,
+      "fortune": 10,
+      "crafting": 5
+    }
+  },
+  "wirelessTransmitter": {
+    "baseRange": 16,
+    "rangePerUpgrade": 8
+  },
+  "wirelessGrid": {
+    "capacity": 3200,
+    "openUsage": 30,
+    "extractUsage": 5,
+    "insertUsage": 5
+  },
+  "wirelessCraftingMonitor": {
+    "capacity": 3200,
+    "openUsage": 30,
+    "cancelUsage": 5,
+    "cancelAllUsage": 10
+  },
+  "wirelessCraftingGrid": {
+    "capacity": 3200,
+    "openUsage": 30,
+    "extractUsage": 5,
+    "insertUsage": 5
+  }
 }
