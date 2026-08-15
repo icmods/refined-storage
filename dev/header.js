@@ -1,11 +1,7 @@
-const DISPLAY = UI.getContext().getWindow().getWindowManager().getDefaultDisplay();
 const WorkbenchRecipes = WRAP_JAVA('com.zhekasmirnov.innercore.api.mod.recipes.workbench.WorkbenchRecipeRegistry');
 const WorkbenchFieldAPI = WRAP_JAVA('com.zhekasmirnov.innercore.api.mod.recipes.workbench.WorkbenchFieldAPI');
-const zhekaCompiler = WRAP_JAVA('com.zhekasmirnov.innercore.mod.executable.Compiler');
 const ScriptableObjectHelper = WRAP_JAVA('com.zhekasmirnov.innercore.api.mod.ScriptableObjectHelper');
 const JavaFONT = WRAP_JAVA('com.zhekasmirnov.innercore.api.mod.ui.types.Font');
-const JavaRect = android.graphics.Rect;
-const _setTip = ModAPI.requireGlobal("MCSystem.setLoadingTip");
 var RSJava = WRAP_JAVA('org.innercore.icmods.refined_storage.RefinedStorage');
 
 IMPORT("EnergyNet");
@@ -14,13 +10,8 @@ IMPORT("StorageInterface");
 var Config = {
 	reload: function () {
 		var reload = Config.reload;
-		var write = Config.write;
 		Config = FileTools.ReadJSON(__dir__ + 'config.json');
 		Config.reload = reload;
-		Config.write = write;
-	},
-	write: function(){
-		FileTools.WriteJSON(__dir__ + 'config.json', this, true);
 	}
 }
 Config.reload();
@@ -33,360 +24,6 @@ const RSgroup = ICRender.getGroup("RefinedStoragePECable");
 
 const GUIs = [];
 
-const runOnUiThread = function(func_, _interval){
-	if(_interval)return function(){
-		return UI.getContext().runOnUiThread(new java.lang.Runnable({
-			run: func_
-		}));
-	};
-	return UI.getContext().runOnUiThread(new java.lang.Runnable({
-		run: func_
-	}));
-}
-
-const searchController = function (_coords, _self, _blockSource) {
-	if(!_blockSource) _blockSource = _coords.blockSource;
-	var outCoords = [];
-	outCoords.push(cts(_coords));
-	var s = false;
-	function _search(coords) {
-		var coordss = {};
-		for (var i in sides) {
-			coordss.x = coords.x + sides[i][0];
-			coordss.y = coords.y + sides[i][1];
-			coordss.z = coords.z + sides[i][2];
-			if (outCoords.indexOf(cts(coordss)) != -1) continue;
-			outCoords.push(cts(coordss));
-			var bck = _blockSource.getBlock(coordss.x, coordss.y, coordss.z);
-			if (bck.id == BlockID.RS_controller) {
-				s = coordss;
-				return;
-			} else if (RS_blocks.indexOf(bck.id) != -1) {
-				_search(coordss);
-			}
-		}
-	}
-	if(_self){
-		var bck = _blockSource.getBlock(_coords.x, _coords.y, _coords.z);
-		if (bck.id == BlockID.RS_controller) {
-			s = _coords;
-			return s;
-		}
-	}
-	_search(_coords);
-	return s;
-}
-
-const searchController_net = function (net_id) {
-	if (net_id == 'f') return false;
-	for (var i in RSNetworks[net_id]) {
-		if (i != 'info' && RSNetworks[net_id][i].id == BlockID.RS_controller) return RSNetworks[net_id][i].coords;
-	}
-}
-
-function set_net_for_blocks(_coords, net_id, _self, _first, _defaultActive, _forced, _func) {
-	if(Config.dev)Logger.Log('Set net for blocks: coords: ' + cts(_coords) + ' ; net_id: ' + net_id + ' ; _self: ' + _self + ' ; _first: ' + _first + ' ; _defaultActive: ' + _defaultActive + ' ; _forced: ' + _forced, 'RefinedStorageDebug');
-	var blockSource_ = _coords.blockSource;
-	var outCoords = [];
-	outCoords.push(cts(_coords));
-	var cableDeleting = [];
-	function _search(coords) {
-		for (var i in sides) {
-			var coordss = {};
-			coordss.x = coords.x + sides[i][0];
-			coordss.y = coords.y + sides[i][1];
-			coordss.z = coords.z + sides[i][2];
-			if (outCoords.indexOf(cts(coordss)) != -1) continue;
-			outCoords.push(cts(coordss));
-			var bck = blockSource_.getBlock(coordss.x, coordss.y, coordss.z);
-			var isRsBlock = (RS_blocks.indexOf(bck.id) != -1);
-			if (bck.id == BlockID.RS_controller) {
-				if(net_id == 'f') continue;
-				if(InnerCore_pack.packVersionCode < 120) blockSource_.destroyBlock(coordss.x, coordss.y, coordss.z, true);
-				else blockSource_.breakBlock(coordss.x, coordss.y, coordss.z, true);
-                if(InnerCore_pack.packVersionCode <= 110)Block.onBlockDestroyed(coordss, bck, false, Player.get());
-				continue;
-			} else if (bck.id == BlockID.RS_cable) {
-				if(net_id != 'f' && RSNetworks[net_id]){
-					RSNetworks[net_id][cts(coordss)] = {
-						id: BlockID.RS_cable,
-						coords: coordss,
-						isActive: true
-					}
-				} else {
-					cableDeleting.push(cts(coordss));
-				}
-				_search(coordss);
-			} else if (isRsBlock) {
-				var tile = World.getTileEntity(coordss.x, coordss.y, coordss.z, blockSource_) || World.addTileEntity(coordss.x, coordss.y, coordss.z, blockSource_);
-				if (tile) {
-					if(!_forced && net_id == 'f' && !compareCoords(_coords, tile.data.controller_coords || {})) continue;
-					tile.data.controller_coords = {x: _coords.x, y: _coords.y, z: _coords.z};
-					tile.update_network(net_id, _first || (_defaultActive != undefined));
-					if(_defaultActive)tile.setActive(_defaultActive);
-				}
-				_search(coordss);
-			}
-		}
-	}
-	if(_self){
-		var bck = {id: blockSource_.getBlockId(_coords.x, _coords.y, _coords.z)};
-		var isRsBlock = RS_blocks.indexOf(bck.id) != -1;
-		if (isRsBlock && bck.id != BlockID.RS_controller) {
-			if (bck.id == BlockID.RS_cable) {
-				if(net_id != 'f' && RSNetworks[net_id]){
-					RSNetworks[net_id][cts(_coords)] = {
-						id: BlockID.RS_cable,
-						coords: _coords,
-						isActive: true
-					}
-				} else {
-					cableDeleting.push(cts(_coords));
-				}
-			} else {
-				var tile = World.getTileEntity(_coords.x, _coords.y, _coords.z, blockSource_) || World.addTileEntity(_coords.x, _coords.y, _coords.z, blockSource_);
-				if (tile) {
-					tile.data.controller_coords = {x: _coords.x, y: _coords.y, z: _coords.z};
-					tile.update_network(net_id, _first || (_defaultActive != undefined));
-					if(_defaultActive)tile.setActive(_defaultActive);
-				}
-			}
-		}
-	}
-	_search(_coords);
-	if(cableDeleting.length > 0){
-		for(var i in RSNetworks){
-			for(var k in cableDeleting){
-				if(RSNetworks[i][cableDeleting[k]]) delete RSNetworks[i][cableDeleting[k]];
-			}
-		}
-	}
-}
-
-function set_is_active_for_blocks(_coords, _state, isController) {
-	var blockSource_ = _coords.blockSource;
-	var outCoords = [];
-	outCoords.push(cts(_coords));
-	function _search(coords) {
-		for (var i in sides) {
-			var coordss = {};
-			coordss.x = coords.x + sides[i][0];
-			coordss.y = coords.y + sides[i][1];
-			coordss.z = coords.z + sides[i][2];
-			if (outCoords.indexOf(cts(coordss)) != -1) continue;
-			outCoords.push(cts(coordss));
-			var bck = {id: blockSource_.getBlockId(coordss.x, coordss.y, coordss.z)};
-			if (bck.id == BlockID.RS_controller) {
-				continue;
-			} else if (RS_blocks.indexOf(bck.id) != -1) {
-				var tile = World.getTileEntity(coordss.x, coordss.y, coordss.z, blockSource_);
-				if (tile) {
-					if(isController && !_state) 
-						tile.data.controllerOff = true;
-					else
-						tile.data.controllerOff = false;
-					tile.setActive(_state);
-				}
-				_search(coordss);
-			}
-		}
-	}
-	_search(_coords);
-}
-
-function set_is_active_for_blocks_net(net_id, _state, isController, _blockSource) {
-	for(var i in RSNetworks[net_id]){
-		if(i != 'info' && RSNetworks[net_id][i].id != BlockID.RS_controller){
-			var tile = World.getTileEntity(RSNetworks[net_id][i].coords.x, RSNetworks[net_id][i].coords.y, RSNetworks[net_id][i].coords.z, _blockSource);
-			if (tile) {
-				if(isController) tile.data.controllerOff = !_state;
-				tile.setActive(_state);
-			}
-		}
-	}
-}
-
-function checkAndSetNetOnCoords(coords, update){
-	if(!(controllerCoords = searchController(coords, true)))set_net_for_blocks(coords, 'f', true, false, undefined, true);
-	if(update && controllerCoords && (tile = coords.blockSource.getTileEntity(controllerCoords.x, controllerCoords.y, controllerCoords.z)))tile.updateControllerNetwork();
-}
-
-function searchBlocksInNetwork(net_id, id){
-	var res = [];
-	if(!RSNetworks[net_id]) return res;
-	for(var i in RSNetworks[net_id]){
-		if(RSNetworks[net_id][i] && RSNetworks[net_id][i].id == id){
-			res.push(RSNetworks[net_id][i]);
-		}
-	}
-	return res;
-}
-
-var DiskData = [false];
-Saver.addSavesScope("RSDiskData",
-	function read(scope){
-		DiskData = scope && scope.DiskData ? scope.DiskData.map(function(elem){
-			if(elem){
-				if(elem.storage == 'Infinity')elem.storage = Infinity;
-				var itemsReplacing = [];
-				for(var i in elem.items){
-					if(elem.items[i].extra){
-						itemsReplacing.push([i, getItemUid(elem.items[i]), elem.items[i]]);
-					}
-				}
-				for(var i in itemsReplacing){
-					elem.items[itemsReplacing[i][1]] = itemsReplacing[i][2];
-					delete elem.items[itemsReplacing[i][0]];
-				}
-			}
-			return elem;
-		}) : [false];
-	},
-
-	function save(){
-		return {DiskData: DiskData.map(function(elem){
-			if(elem && elem.storage == Infinity){
-				elem = Object.assign({}, elem);
-				elem.storage = 'Infinity';
-			}
-			return elem;
-		})};
-	}
-);
-Callback.addCallback("LevelLeft", function(){
-	DiskData = [false];
-});
-
-const Disk = {
-	getDiskData: function(item){
-		if(!this.items[item.id]) return;
-		if(!DiskData)DiskData = [false];
-		if(item.data && !DiskData[item.data]) DiskData[item.data] = this.getDefaultData(this.items[item.id].storage);
-		return DiskData[item.data];
-	},
-	getDefaultData: function(storage){
-		var data = {
-			storage: storage,
-			items_stored: 0,
-			items: {}
-		}
-		return data;
-	},
-	getDefaultExtra: function(storage){
-		var extra = new ItemExtraData();
-		var data = {
-			storage: storage,
-			items_stored: 0,
-			items: {}
-		}
-		extra.putSerializable('disk_data', data);
-		return extra;
-	},
-	items: {},
-	register: function (name, texture, storage, registerItem) {
-		for (var i in this.items) {
-			if (this.items[i].storage == storage) {
-				log('Disk with such storage already exists');
-				return  -1;
-			}
-		}
-		var itemIDName = registerItem ? registerItem : "storageDisk" + storage;
-		if(registerItem == undefined){
-			IDRegistry.genItemID(itemIDName);
-			Item.createItem(itemIDName, name, {
-				name: texture,
-			}, {
-				//isTech: true,
-				stack: 1
-			});
-		}
-		Item.registerNameOverrideFunction(ItemID[itemIDName], function (item, name) {
-			var disk_data = DiskData[item.data];
-			if(!disk_data) return '§b' + name + "\n§7" + Translation.translate('Stored') + (storage != Infinity ? ': 0/' + storage : ': 0');
-			name += "\n§7" + Translation.translate('Stored') + ': ' + disk_data.items_stored + (disk_data.storage != Infinity ? '/' + disk_data.storage : '');
-			return name;
-		});
-		this.items[ItemID[itemIDName]] = { name: name, texture: texture, storage: storage };
-		return ItemID[itemIDName];
-	},
-	update: function (item) {
-		var diskData = this.getDiskData(item);
-		var items_stored = 0;
-		for (var i in diskData.items) {
-			var item = diskData.items[i];
-			if (!item) return alert('Wow, this is a bad disk');
-			items_stored += item.count;
-		}
-		diskData.items_stored = items_stored;
-	},
-	freeSpace: function (item) {
-		var diskData = this.getDiskData(item);
-		return diskData.storage - diskData.items_stored;
-	}
-}
-
-const UpgradeRegistry = {
-	upgrades: {},
-	stringIDUpgrades: {},
-	/**
-	 * Register new upgrade
-	 * @param {string} name name of upgrade, used as item name, used if registerItem is not defined
-	 * @param {string} nameID string id of the item
-	 * @param {string} texture texture name, used if registerItem is not defined
-	 * @param {object} params upgrade params
-	 * @param {number=} params.maxStack maximum amount of this upgrades in mechanism, if not defined then amount is infinity
-	 * @param {function(TileEntity, {id: number, count: number, data: number, extra: object}, ItemContainer, string, number)} params.addFunc Called on upgrade added to slot
-	 * @param {function(TileEntity, {id: number, count: number, data: number, extra: object}, ItemContainer, string, number)} params.deleteFunc Called on upgrade deleted from slot 
-	 * @param {string} usage energy usage
-	 * @param {string} registerItem if this parameter is defined then item not created, use it if you want to create your item
-	 * @returns {number} return item id
-	 */
-	register: function(name, nameID, texture, params, usage, registerItem){
-		var itemIDName = registerItem ? registerItem : nameID;
-		if(!registerItem){
-			IDRegistry.genItemID(itemIDName);
-			Item.createItem(itemIDName, name, {
-				name: texture,
-			}, {
-				//isTech: true,
-				stack: 64
-			});
-		}
-		params.nameID = itemIDName;
-		params.usage = usage || 0;
-		this.upgrades[ItemID[itemIDName]] = params;
-		this.stringIDUpgrades[itemIDName] = params;
-		return ItemID[itemIDName];
-	},
-	/**
-	 * Get upgrade data
-	 * @param {number|string} id item id or string id(nameID) of upgrade
-	 * @returns {object|undefined} return upgrade data or undefined if upgrade with this id is not registered
-	 */
-	getData: function(id){
-		var upgrade = this.upgrades[id] || this.stringIDUpgrades[id];
-		if(upgrade) return upgrade;
-	},
-	/**
-	 * Get item string id
-	 * @param {number|string} id item id or string id(nameID) of upgrade
-	 * @returns {string|undefined} return item string id or undefined if upgrade with this id is not registered
-	 */
-	getNameID: function(id){
-		var upgrade = this.upgrades[id] || this.stringIDUpgrades[id];
-		if(upgrade) return upgrade.nameID;
-	},
-	/**
-	 * Get upgrade energy usage
-	 * @param {number|string} id item id or string id(nameID) of upgrade
-	 * @returns {object|undefined} return upgrade energy usage or undefined if upgrade with this id is not registered
-	 */
-	getEnergyUsage: function(id){
-		var upgrade = this.upgrades[id] || this.stringIDUpgrades[id];
-		if(upgrade) return upgrade.usage;
-		return 0;
-	}
-}
 
 var itemsNamesMap = {};
 
@@ -397,103 +34,6 @@ const getItemName = function(id, data, extra){
 	return itemsNamesMap[itemUid];
 }
 
-var RSNetworks = [];
-
-var RSbannedItems = [0];
-
-const RS_blocks = [];
-Callback.addCallback('PostLoaded', function(){
-	for(var i in RS_blocks)World.setBlockChangeCallbackEnabled(RS_blocks[i], true);
-})
-World.setBlockChangeCallbackEnabled(535, true);
-World.setBlockChangeCallbackEnabled(250, true);
-World.setBlockChangeCallbackEnabled(34, true);
-var pistonsPoss = [
-	[0, -1, 0],
-	[0, 1, 0],
-	[0, 0, 1],
-	[0, 0, -1],
-	[1, 0, 0],
-	[-1, 0, 0]
-]
-var pistonsMove__ = {};
-var ignoredParams = ['NETWORK_ID','LAST_NETWORK_ID','controller_coords','createdCalled'];
-Callback.addCallback('BlockChanged', function(coords, oldBlock, newBlock, _blockSource){
-	//alert('Block changed from: ' + oldBlock.id + "|" + oldBlock.data + " ; to: " + newBlock.id + "|" + newBlock.data);
-	_blockSource = BlockSource.getDefaultForDimension(_blockSource);
-	coords.blockSource = _blockSource;
-	if(oldBlock.id == 535 || newBlock.id == 535 || newBlock.id == 34) {
-		var pistonBlockData = newBlock.id == 535 || newBlock.id == 34 ? newBlock.data : oldBlock.data;
-		var pistonPos = pistonsPoss[pistonBlockData];
-		var from_coords = oldBlock.id == 535 ? {
-			x: coords.x + pistonPos[0],
-			y: coords.y + pistonPos[1],
-			z: coords.z + pistonPos[2]
-		} : coords;
-		var to_coords = newBlock.id == 535 || newBlock.id == 34 ? {
-			x: coords.x + pistonPos[0],
-			y: coords.y + pistonPos[1],
-			z: coords.z + pistonPos[2]
-		} : coords;
-		var __tile = World.getTileEntity(from_coords.x, from_coords.y, from_coords.z, _blockSource);
-		if(__tile){
-			pistonsMove__[cts(to_coords)] = __tile;
-		}
-	}
-	if(oldBlock.id == 250) {
-		if((oldTileData = pistonsMove__[cts(coords)]) && (newTileData = World.addTileEntity(coords.x, coords.y, coords.z, _blockSource))){
-			for(var i in newTileData.data){
-				if(ignoredParams.indexOf(i) == -1){
-					newTileData.data[i] = oldTileData.data[i];
-				}
-			}
-			var unsaveableSlotsArray = Array.isArray(oldTileData.unsaveableSlots) ? oldTileData.unsaveableSlots : [];
-			if(!oldTileData.unsaveableSlots || unsaveableSlotsArray.length > 0)for(var i in oldTileData.container.slots){
-				if(unsaveableSlotsArray.length > 0 && unsaveableSlotsArray.indexOf(i) != -1) continue;
-				var _slot = oldTileData.container.slots[i];
-				newTileData.container.setSlot(i, _slot.id, _slot.count, _slot.data, _slot.extra);
-				oldTileData.container.setSlot(i, 0,0,0,null);
-			}
-			TileEntity.destroyTileEntity(oldTileData);
-			delete pistonsMove__[cts(coords)];
-		}
-	}
-	if (oldBlock.id == BlockID.RS_cable) {
-		for(var i in RSNetworks){
-			if(RSNetworks[i][cts(coords)]) delete RSNetworks[i][cts(coords)];
-		}
-	}
-	var isOldBlock = RS_blocks.indexOf(oldBlock.id) != -1;
-	var isNewBlock = RS_blocks.indexOf(newBlock.id) != -1;
-	/* if(isNewBlock && newBlock.id != BlockID.RS_cable){
-		var _newTile = World.getTileEntity(coords.x, coords.y, coords.z, _blockSource) || World.addTileEntity(coords.x, coords.y, coords.z, _blockSource);
-		if(newBlock.id == BlockID.RS_controller && newBlock.data == 3 && _newTile){
-			_newTile.data.isCreative = true;
-			_newTile.data.energy = Config.controller.energyCapacity;
-		}
-	} */
-	if(oldBlock.id != BlockID.RS_controller && isOldBlock)for(var i in sides){
-		var zCoords = {
-			x: coords.x + sides[i][0],
-			y: coords.y + sides[i][1],
-			z: coords.z + sides[i][2],
-			blockSource: _blockSource
-		}
-		checkAndSetNetOnCoords(zCoords);
-	}
-	if(newBlock.id == BlockID.RS_cable){
-		if((controllerCoords = searchController(coords, true)) && (tile = World.getTileEntity(controllerCoords.x, controllerCoords.y, controllerCoords.z, _blockSource)))tile.updateControllerNetwork();
-	}
-});
-
-const EnergyUse = {}
-
-var temp_data = {};
-
-Callback.addCallback("LevelLeft", function () {
-	temp_data = {};
-	RSNetworks = [];
-});
 
 const RefinedStorage = {
 	paramsMap: {},
@@ -509,31 +49,38 @@ const RefinedStorage = {
 		if(!params.client.load) params.client.load = function(){
 			if(this.pre_load)this.pre_load();
 			if(this.refreshModel)this.refreshModel();
-			if(this.post_load)this.pre_load();
+			if(this.post_load)this.post_load();
 		}
 		if(!params.client.unload) params.client.unload = function(){
 			if(this.pre_unload)this.pre_unload();
 			BlockRenderer.unmapAtCoords(this.x, this.y, this.z);
-			if(this.post_unload)this.pre_unload();
+			if(this.post_unload)this.post_unload();
 		}
 		if(!params.defaultValues.upgrades)params.defaultValues.upgrades = {};
 		if(!params.upgradesSlots)params.upgradesSlots = [];
 		if(!params.init){
 			params.init = function () {
-				//alert(cts(this) + ' : init');
 				if(this.pre_init)this.pre_init();
 				if(this.data.energy || this.data.energy === 0)this.networkData.putInt('energy', this.data.energy);
 				if(!this.data.createdCalled) {
-					this.data.NETWORK_ID = 'f';
-					this.setActive(false);
+					if(this.data.NETWORK_ID == 'f' || !RSNetworks[this.data.NETWORK_ID] || !RSNetworks[this.data.NETWORK_ID][this.coords_id()]) {
+						this.data.NETWORK_ID = 'f';
+						this.setActive(false);
+						var controller = searchController(this, false);
+						if (controller) {
+							var cTile = World.getTileEntity(controller.x, controller.y, controller.z, this.blockSource);
+							if (cTile) {
+								cTile.data.updateControllerNetwork = true;
+							}
+						}
+						if (this.data.NETWORK_ID == 'f') rsAddReconnectPending(this);
+					}
 				} else {
 					var controller = searchController(this, false);
 					if (controller) {
 						var tile = World.getTileEntity(controller.x, controller.y, controller.z, this.data.blockSource);
 						if (tile) {
 							tile.data.updateControllerNetwork = true;
-							//tile.updateControllerNetwork();
-							//if (this.post_created) this.post_created();
 						}
 					}
 				}
@@ -542,7 +89,6 @@ const RefinedStorage = {
 				this.blockInfo.data = this.data.block_data;
 				this.networkData.putInt('block_data', this.data.block_data);
 				this.networkData.putBoolean('isActive', this.data.isActive || false);
-				//if(this.refreshModel)this.refreshModel();
 				var tile = this;
 				this.container.addServerOpenListener({
 					onOpen: function(container, client){
@@ -569,26 +115,25 @@ const RefinedStorage = {
 					this.container.setSlotAddTransferPolicy(this.upgradesSlots[i], {
 						transfer: function(itemContainer, slot, id, count, data, extra, player){
 							count = 1;
-							if(!(upgrade = UpgradeRegistry.upgrades[id]) || itemContainer.getSlot(slot).id != 0) return 0
+							var upgrade;
+							if(!(upgrade = UpgradeRegistry.get(id)) || itemContainer.getSlot(slot).id != 0) return 0
 							if(tile.data.upgrades[upgrade.nameID]){
 								if(upgrade.maxStack && tile.data.upgrades[upgrade.nameID] >= upgrade.maxStack) return 0;
 								tile.data.upgrades[upgrade.nameID]++;
 							} else {
 								tile.data.upgrades[upgrade.nameID] = 1;
 							}
-							//var networkTile = tile.getNetworkTile();
-							//if(networkTile)networkTile.upgrades = tile.data.upgrades;
 							if(upgrade.addFunc)upgrade.addFunc(tile, {id: id, count: count, data: data, extra: extra}, itemContainer, slot, player);
+							if(getNetworkInfo(tile))getNetworkInfo(tile).netMapDirty = true;
 							return count;
 						}
 					})
 					this.container.setSlotGetTransferPolicy(this.upgradesSlots[i], {
 						transfer: function(itemContainer, slot, id, count, data, extra, player){
-							if(!(upgrade = UpgradeRegistry.upgrades[id])) return 0
+							if(!(upgrade = UpgradeRegistry.get(id))) return 0
 							if(tile.data.upgrades[upgrade.nameID])tile.data.upgrades[upgrade.nameID]--
-							//var networkTile = tile.getNetworkTile();
-							//if(networkTile)networkTile.upgrades = tile.data.upgrades;
 							if(upgrade.deleteFunc)upgrade.deleteFunc(tile, {id: id, count: count, data: data, extra: extra}, itemContainer, slot, player);
+							if(getNetworkInfo(tile))getNetworkInfo(tile).netMapDirty = true;
 							return count;
 						}
 					})
@@ -601,6 +146,7 @@ const RefinedStorage = {
 		if (!params.update_network) {
 			params.update_network = function (net_id, _first) {
 				if (this.pre_update_network) if(this.pre_update_network(net_id)) return true;
+				var netElement;
 				if(net_id == 'f' && RSNetworks[this.data.NETWORK_ID] && (netElement = RSNetworks[this.data.NETWORK_ID][cts(this)]) && netElement.id == this.blockInfo.id) delete RSNetworks[this.data.NETWORK_ID][cts(this)];
 				this.data.LAST_NETWORK_ID = this.data.NETWORK_ID;
 				this.data.NETWORK_ID = net_id;
@@ -626,8 +172,6 @@ const RefinedStorage = {
 		if (!params.created) {
 			params.created = function () {
 				if(!this.blockSource)this.blockSource = BlockSource.getDefaultForDimension(this.dimension);
-				//alert(cts(this) + ' : created');
-				//this.data.block_data = this.blockSource.getBlockData(this.x, this.y, this.z);
 				this.data.upgrades = {};
 				this.data.createdCalled = true;
 				if (this.pre_created) this.pre_created();
@@ -655,12 +199,13 @@ const RefinedStorage = {
 			params.redstone = function (params) {
 				this.data.last_redstone_event = params;
 				if(!this.data.redstone_mode) return;
-				if(this.redstoneAllowActive(params)){
+				var _activeState = this.redstoneAllowActive(params);
+				if(_activeState){
 					this.setActive(true);
 				} else {
 					this.setActive(false);
 				}
-				if (this.post_redstone) this.post_redstone(state);
+				if (this.post_redstone) this.post_redstone(_activeState);
 			}
 		}
 		if(!params.redstoneAllowActive){
@@ -703,7 +248,6 @@ const RefinedStorage = {
 				if(this.data.NETWORK_ID != 'f' && RSNetworks[this.data.NETWORK_ID]) delete RSNetworks[this.data.NETWORK_ID][cts(this)];
 				this.data.LAST_NETWORK_ID = this.data.NETWORK_ID;
 				this.data.NETWORK_ID = 'f';
-				//BlockRenderer.unmapAtCoords(this.x, this.y, this.z);
 				if(this.post_destroy) this.post_destroy(param1);
 			}
 		}
@@ -721,6 +265,7 @@ const RefinedStorage = {
 		}
 		if(!params.getNetworkTile){
 			params.getNetworkTile = function () {
+				var answ;
 				if(this.data.NETWORK_ID != "f" && RSNetworks[this.data.NETWORK_ID] && (answ = RSNetworks[this.data.NETWORK_ID][this.coords_id()])) return answ;
 			}
 		}
@@ -732,7 +277,15 @@ const RefinedStorage = {
 		if(!this.paramsMap[id1]) throw '[RefinedStorageError - RefinedStorage.copy] TileEntity with this id is not registered';
 		var params1 = Object.assign({}, this.paramsMap[id1]);
 		delete params1.tick;
-		TileEntity.registerPrototype(id2, Object.assign(params1, params));
+		for(var key in params){
+			if(key === 'defaultValues' && params1.defaultValues){
+				Object.assign(params1.defaultValues, params.defaultValues);
+			} else {
+				params1[key] = params[key];
+			}
+		}
+		this.paramsMap[id2] = params1;
+		TileEntity.registerPrototype(id2, params1);
 	},
 	mapTexture: function (coords, texture, meta) {
 		meta = meta || 0;
@@ -881,7 +434,6 @@ function testButtons(elementsS_, initFunc_){
 		clicker: {
 			onClick: function (itemContainerUiHandler, itemContainer, element) {
 				UIHeight -= 100;
-				//elementsS_['testText2'].text = UIHeight + '';
 				itemContainerUiHandler.setBinding('testText2', 'text', UIHeight + '');
 				UI.getScreenHeight = function(){
 					return UIHeight;
@@ -963,3 +515,29 @@ function testButtons(elementsS_, initFunc_){
 		}
 	}
 };
+
+function getRotatableTexture(base, variation, _active){
+	variation = variation || 0;
+	var i = _active ? 1 : 0;
+	return [[base[0], [base[1][0], 0], base[2], [base[3][0], i], base[4], base[5]], [base[0], [base[1][0], 1], [base[3][0], i], base[2], base[5], base[4]], [base[0], [base[1][0], 2], base[5], base[4], base[2], [base[3][0], i]], [base[0], [base[1][0], 3], base[4], base[5], [base[3][0], i], base[2]]][variation];
+}
+
+function getNetworkInfo(tile) {
+	if (!tile || tile.data.NETWORK_ID == 'f' || !RSNetworks[tile.data.NETWORK_ID]) return null;
+	return RSNetworks[tile.data.NETWORK_ID].info || null;
+}
+
+function recountUpgrades(tile) {
+	if (!tile.upgradesSlots) return;
+	tile.data.upgrades = {};
+	for (var i = 0; i < tile.upgradesSlots.length; i++) {
+		var slot = tile.container.getSlot(tile.upgradesSlots[i]);
+		var upgrade;
+		if (slot.id != 0 && (upgrade = UpgradeRegistry.get(slot.id))) {
+			if (tile.data.upgrades[upgrade.nameID]) tile.data.upgrades[upgrade.nameID]++;
+			else tile.data.upgrades[upgrade.nameID] = 1;
+		}
+	}
+	var _ni = getNetworkInfo(tile);
+	if (_ni) _ni.netMapDirty = true;
+}

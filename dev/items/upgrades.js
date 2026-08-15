@@ -15,3 +15,12 @@ UpgradeRegistry.register('Stack Upgrade', 'RSStackUpgrade', 'rs_stack_upgrade', 
         tileEntity.data.count = 1;
     }
 }, Config.energy_uses.upgrades['stack']);
+UpgradeRegistry.register('Range Upgrade', 'RSRangeUpgrade', 'rs_range_upgrade', {
+    maxStack: 4,
+    addFunc: function(tileEntity, item, container, slot, player){
+        if(tileEntity.refreshGui)tileEntity.refreshGui(false, false, false, 'main');
+    },
+    deleteFunc: function(tileEntity, item, container, slot, player){
+        if(tileEntity.refreshGui)tileEntity.refreshGui(false, false, false, 'main');
+    }
+}, Config.energy_uses.upgrades['range']);
