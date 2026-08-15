@@ -524,36 +524,20 @@ function craftingGridOpenGui(container, window, content, eventData){
 		}
 		craftingGridSwitchPage(refresh ? craftingGridData.lastPage : 1, container, true);
 		if(updateCrafts){
-			var crafts2Thread = java.lang.Thread({
-				run: function(){
-					try {
-						craftingGridData.isDarkenMap = {};
-						craftingGridData.crafts = craftingGridFuncs.updateCrafts(craftingGridData.slotsKeys, craftingGridData.craftsTextSearch, craftingGridData.originalOnlyItemsMap, container.slots);
-						craftingGridSwitchCraftsPage(refresh ? craftingGridData.lastCraftsPage : 1, container, true);
-					} catch(err){
-						alert('Error on sorting crafts: ' + JSON.stringify(err));
-					}
-				}
+			scheduleLowPrioritySort(function(){
+				craftingGridData.isDarkenMap = {};
+				craftingGridData.crafts = craftingGridFuncs.updateCrafts(craftingGridData.slotsKeys, craftingGridData.craftsTextSearch, craftingGridData.originalOnlyItemsMap, container.slots);
+				craftingGridSwitchCraftsPage(refresh ? craftingGridData.lastCraftsPage : 1, container, true);
 			});
-			crafts2Thread.setPriority(java.lang.Thread.MIN_PRIORITY);
-			crafts2Thread.start();
 		}
 	}
 	if(!eventData.refresh)craftingGridData.selectedRecipe = null;
 	for(var s = 0; s < 9; s++)content.elements['craft_slot' + s].parent = null;
 	if(craftingGridData.lowPriority){
 		craftingGridData.lowPriority = false;
-		var craftsThread = java.lang.Thread({
-			run: function(){
-				try {
-					craftingGridData.updateGui(eventData.refresh, eventData.updateFilters, eventData.updateCrafts, true);
-				} catch(err){
-					alert('Sorry, i broke :_(' + JSON.stringify(err));
-				}
-			}
+		scheduleLowPrioritySort(function(){
+			craftingGridData.updateGui(eventData.refresh, eventData.updateFilters, eventData.updateCrafts, true);
 		});
-		craftsThread.setPriority(java.lang.Thread.MIN_PRIORITY);
-		craftsThread.start();
 	} else {
 		craftingGridData.updateGui(eventData.refresh, eventData.updateFilters, eventData.updateCrafts, true);
 	}

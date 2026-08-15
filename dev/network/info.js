@@ -17,6 +17,7 @@ var NetworkInfo = {
 			itemRemoveListeners: [],
 			providingCrafts: [],
 			craftingTasks: [],
+			netMapDirty: false,
 			monitorListeners: [],
 			addMonitorListener: function(listener) {
 				if (this.monitorListeners.indexOf(listener) == -1) this.monitorListeners.push(listener);
@@ -26,6 +27,7 @@ var NetworkInfo = {
 				if (idx != -1) this.monitorListeners.splice(idx, 1);
 			},
 			notifyMonitorListeners: function(task) {
+				if (this.monitorListeners.length === 0) return;
 				for (var i = 0; i < this.monitorListeners.length; i++) {
 					if (this.monitorListeners[i]) this.monitorListeners[i](this, task || null);
 				}
@@ -307,8 +309,8 @@ var NetworkInfo = {
 								this.stored += count;
 								this.disk_map[i][k].items_stored += count;
 								disk_item.count += count;
-								this.trackInsertedItem(item, _origCount - count);
-								_RS._emit("itemInserted", {netId: this.net_id, item: item, count: _origCount - count, tags: tags});
+								this.trackInsertedItem(item, _origCount);
+								_RS._emit("itemInserted", {netId: this.net_id, item: item, count: _origCount, tags: tags});
 								if(!nonUpdate)this.refreshOpenedGrids();
 								return 0;
 							}
@@ -368,8 +370,8 @@ var NetworkInfo = {
 								extra: item.extra
 							}
 							this.disk_map[i][k].items_stored += count;
-							this.trackInsertedItem(item, _origCount - count);
-							_RS._emit("itemInserted", {netId: this.net_id, item: item, count: _origCount - count, tags: tags});
+							this.trackInsertedItem(item, _origCount);
+							_RS._emit("itemInserted", {netId: this.net_id, item: item, count: _origCount, tags: tags});
 							if(!nonUpdate)this.refreshOpenedGrids(true);
 							return 0;
 						}
@@ -383,7 +385,8 @@ var NetworkInfo = {
 				var itemUid = getItemUid(item);
 				var iItem;
 				if((iItem = this.items_map.indexOf(itemUid)) != -1){
-					return true;
+					var have = this.items[iItem] ? this.items[iItem].count : 0;
+					return have >= count;
 				} else {
 					return false;
 				}

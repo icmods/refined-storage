@@ -4,7 +4,8 @@ var GridEvents = {
 		var constructedCraft = RSNetworks[tile.data.NETWORK_ID].info.constructCraft(eventData.item, eventData.count);
 		if(constructedCraft){
 			var craftsData = constructedCraft.crafts ? constructedCraft.crafts.map(function(c){ return {completedIngridients: c.completedIngridients, result: c.result, craftable: c.craftable}; }) : [];
-			tile.container.sendEvent(connectedClient, "openCraftPreview", {results: constructedCraft.results, ingridients: constructedCraft.ingridients, craftable: constructedCraft.craftable, crafts: craftsData, errorType: constructedCraft.errorType || null});
+			var planData = constructedCraft.plan ? {toTake: constructedCraft.plan.toTake || {}, toCraft: constructedCraft.plan.toCraft || {}, missing: constructedCraft.plan.missing || {}} : null;
+			tile.container.sendEvent(connectedClient, "openCraftPreview", {results: constructedCraft.results, ingridients: constructedCraft.ingridients, craftable: constructedCraft.craftable, crafts: craftsData, plan: planData, errorType: constructedCraft.errorType || null});
 		}
 	},
 

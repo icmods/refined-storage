@@ -181,12 +181,16 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_wireless_transmitter, {
 			}
 		}
 		if (this.data.refreshMonitorPage) {
-			this.data.refreshMonitorPage = false;
-			var anyMonitor = false;
-			if (this.data.wirelessMonitorPlayers) {
-				for (var mk in this.data.wirelessMonitorPlayers) { anyMonitor = true; break; }
+			var _nowM = World.getThreadTime();
+			if (this.data.lastMonitorRefresh === undefined || _nowM - this.data.lastMonitorRefresh >= 5) {
+				this.data.lastMonitorRefresh = _nowM;
+				this.data.refreshMonitorPage = false;
+				var anyMonitor = false;
+				if (this.data.wirelessMonitorPlayers) {
+					for (var mk in this.data.wirelessMonitorPlayers) { anyMonitor = true; break; }
+				}
+				if (anyMonitor) this.refreshGui(false, false, false, 'monitor');
 			}
-			if (anyMonitor) this.refreshGui(false, false, false, 'monitor');
 		}
 		this.processPushDeleteEvents();
 	},

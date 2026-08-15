@@ -44,6 +44,8 @@ var gridData = {
 
 function gridSwitchPage(page, container, ignore, dontMoveSlider){
 	if(!container.getUiAdapter() || !container.getUiAdapter().getWindow() || !container.getUiAdapter().getWindow().isOpened()) return false;
+	var mainContent = container.getUiAdapter().getWindow().getWindow('main') && container.getUiAdapter().getWindow().getWindow('main').getContent();
+	if(!mainContent || !mainContent.elements) return false;
 	var slots = container.slots;
 	var slotsKeys = gridData.slotsKeys;
 	var slots_count = gridData.slots_count;
@@ -165,17 +167,9 @@ function gridOpenGui(container, window, content, eventData){
 	}
 	if(gridData.lowPriority){
 		gridData.lowPriority = false;
-		var craftsThread = java.lang.Thread({
-			run: function(){
-				try {
-					gridData.updateGui(eventData.refresh, eventData.updateFilters, true);
-				} catch(err){
-					alert('Sorry, i broke :_(' + JSON.stringify(err));
-				}
-			}
+		scheduleLowPrioritySort(function(){
+			gridData.updateGui(eventData.refresh, eventData.updateFilters, true);
 		});
-		craftsThread.setPriority(java.lang.Thread.MIN_PRIORITY);
-		craftsThread.start();
 	} else {
 		gridData.updateGui(eventData.refresh, eventData.updateFilters, true);
 	}

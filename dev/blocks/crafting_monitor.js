@@ -74,13 +74,15 @@ var craftingMonitorData = {
 };
 
 function craftingMonitorSwitchPage(page){
+	var mainWindow = craftingMonitorGUI.getWindow('main');
+	if(!mainWindow || !mainWindow.isOpened()) return;
+	var content_ = mainWindow.getContent();
 	page = Math.max(0, Math.min(page - 1, craftingMonitorData.providingCrafts.length - 1));
 	craftingMonitorData.page = page;
 	var _data = page != -1 && craftingMonitorData.providingCrafts[page] ? 
 		(craftingMonitorData.providingCrafts[page].postData = createProvidedCraftPostData(craftingMonitorData.providingCrafts[page])) 
 		: [];
 	var elements_ = craftingMonitorGUI.getElements();
-	var content_ = craftingMonitorGUI.getContent();
 		for (var i = page * 4; i < page * 4 + craftingMonitorData.slots; i++) {
 		var a = i - (page * 4);
 		var item = _data[i] || [{ id: 0, data: 0}, '', '', null];
@@ -490,8 +492,12 @@ RefinedStorage.createTile(BlockID.RS_craftingMonitor, {
 	},
 	tick: function(){
 		if(this.data.refreshCurPage){
-			this.data.refreshCurPage = false;
-			this.refreshGui(false);
+			var _now = World.getThreadTime();
+			if (this.data.lastMonitorRefresh === undefined || _now - this.data.lastMonitorRefresh >= 5) {
+				this.data.lastMonitorRefresh = _now;
+				this.data.refreshCurPage = false;
+				this.refreshGui(false);
+			}
 		}
 	},
 	client: {

@@ -1,68 +1,78 @@
 var CraftingScheduler = {
 
+	RETRY_THROTTLE: 3,
+
 	processTick: function(info, blockSource, networkTick) {
 		if (!info || !info.craftingTasks || info.craftingTasks.length === 0) return;
 
+		var parallel = Config['parallelCrafting (Java like)'] === true;
 
 		for (var ti = 0; ti < info.craftingTasks.length; ti++) {
 			var task = info.craftingTasks[ti];
 			if (!task || task.cancelled) continue;
 
-			if (task.reserveItems) {
-				task.reserveItems(info);
-			}
-
-			var readyNode = null;
-			for (var ni = 0; ni < (task.nodes || []).length; ni++) {
-				var node = task.nodes[ni];
-				if (node.done || node.remaining <= 0) continue;
-				readyNode = node;
-				break;
-			}
-
-			if (!readyNode) {
-				var allDone = true;
-				if (task.nodes) {
-					for (var ni = 0; ni < task.nodes.length; ni++) {
-						if (!task.nodes[ni].done) { allDone = false; break; }
-					}
+			if (parallel) {
+				for (var ni = 0; ni < (task.nodes || []).length; ni++) {
+					var node = task.nodes[ni];
+					if (node.done || node.remaining <= 0) continue;
+					if (node._lastTry != null && networkTick - node._lastTry < CraftingScheduler.RETRY_THROTTLE) continue;
+					CraftingScheduler._tryExecute(task, node, info, blockSource, networkTick);
 				}
-				if (allDone || !task.nodes || task.nodes.length === 0) {
-					CraftingScheduler._completeTask(task, info, ti);
-					ti--;
-				}
-				continue;
-			}
-
-			var containers = info.getPatternContainers(readyNode.patternUid);
-			if (containers.length === 0) continue;
-
-			var executed = false;
-			for (var ci = 0; ci < containers.length; ci++) {
-				var parts = containers[ci].split(',');
-				if (parts.length < 3) continue;
-				var cx = parseInt(parts[0]), cy = parseInt(parts[1]), cz = parseInt(parts[2]);
-				var crafter = World.getTileEntity(cx, cy, cz, blockSource);
-				if (!crafter || !crafter.data || !crafter.data.isActive) continue;
-
-				var speed = crafter.data.speed || 10;
-				var cooldown = Math.max(1, speed);
-				var tick = networkTick || 0;
-				if (crafter.data.lastCraftTick != null && tick - crafter.data.lastCraftTick < cooldown) continue;
-
-				var success = CraftingScheduler._executeOne(task, readyNode, crafter, info);
-				if (success) {
-					crafter.data.lastCraftTick = tick;
-					task.currentStep = (task.currentStep || 0) + 1;
-					info.notifyMonitorListeners(task);
-					if (task.currentStep % 5 === 0) _RS._emit("taskProgress", {netId: info.net_id, taskId: task.id, currentStep: task.currentStep, totalSteps: task.totalSteps || 0});
-					executed = true;
+			} else {
+				var readyNode = null;
+				for (var ni2 = 0; ni2 < (task.nodes || []).length; ni2++) {
+					var node2 = task.nodes[ni2];
+					if (node2.done || node2.remaining <= 0) continue;
+					readyNode = node2;
 					break;
 				}
+				if (readyNode && (readyNode._lastTry == null || networkTick - readyNode._lastTry >= CraftingScheduler.RETRY_THROTTLE)) {
+					CraftingScheduler._tryExecute(task, readyNode, info, blockSource, networkTick);
+				}
+			}
+
+			var allDone = true;
+			if (task.nodes) {
+				for (var ni3 = 0; ni3 < task.nodes.length; ni3++) {
+					if (!task.nodes[ni3].done) { allDone = false; break; }
+				}
+			}
+			if (allDone || !task.nodes || task.nodes.length === 0) {
+				CraftingScheduler._completeTask(task, info, ti);
+				ti--;
 			}
 		}
 
 		info.refreshOpenedGrids();
+	},
+
+	_tryExecute: function(task, node, info, blockSource, networkTick) {
+		var containers = info.getPatternContainers(node.patternUid);
+		if (containers.length === 0) return false;
+
+		for (var ci = 0; ci < containers.length; ci++) {
+			var parts = containers[ci].split(',');
+			if (parts.length < 3) continue;
+			var cx = parseInt(parts[0]), cy = parseInt(parts[1]), cz = parseInt(parts[2]);
+			var crafter = World.getTileEntity(cx, cy, cz, blockSource);
+			if (!crafter || !crafter.data || !crafter.data.isActive) continue;
+
+			var speed = crafter.data.speed || 10;
+			var cooldown = Math.max(1, speed);
+			var tick = networkTick || 0;
+			if (crafter.data.lastCraftTick != null && tick - crafter.data.lastCraftTick < cooldown) continue;
+
+			node._lastTry = tick;
+			var success = CraftingScheduler._executeOne(task, node, crafter, info);
+			if (success) {
+				crafter.data.lastCraftTick = tick;
+				task.currentStep = (task.currentStep || 0) + 1;
+				info.notifyMonitorListeners(task);
+				if (task.currentStep % 5 === 0) _RS._emit("taskProgress", {netId: info.net_id, taskId: task.id, currentStep: task.currentStep, totalSteps: task.totalSteps || 0});
+				return true;
+			}
+		}
+		return false;
 	},
 
 	_executeOne: function(task, node, crafter, info) {
@@ -81,23 +91,40 @@ var CraftingScheduler = {
 		}
 
 		var toCommit = [];
+		var neededByUid = {};
 		for (var ii = 0; ii < pattern.ingridients.length; ii++) {
 			var ingr = pattern.ingridients[ii];
 			if (!ingr || !ingr.id) continue;
 			var uid = getItemUid(ingr);
 			var needed = ingr.count || 1;
-			var fromBuffer = Math.min(needed, task.buffer[uid] || 0);
-			var fromStorage = needed - fromBuffer;
-			if (fromStorage > 0) {
-				if (!info.itemCanBeDeleted({ id: ingr.id, data: ingr.data, count: fromStorage }, fromStorage)) {
-					return false;
-				}
-			}
+			var nb = neededByUid[uid];
+			if (!nb) neededByUid[uid] = nb = { id: ingr.id, data: ingr.data, total: 0 };
+			nb.total += needed;
 			if (pattern.isProcessed) {
 				var canReceive = front.getReceivingItemCount({ id: ingr.id, data: ingr.data, count: needed, extra: null }, machineSide);
 				if (canReceive < needed) return false;
 			}
-			toCommit.push({ id: ingr.id, data: ingr.data, uid: uid, needed: needed, fromBuffer: fromBuffer, fromStorage: fromStorage });
+			toCommit.push({ id: ingr.id, data: ingr.data, uid: uid, needed: needed, fromBuffer: 0, fromStorage: 0 });
+		}
+
+		for (var cuid in neededByUid) {
+			var _nb = neededByUid[cuid];
+			_nb.bufAlloc = Math.min(_nb.total, task.buffer[cuid] || 0);
+			var _stor = _nb.total - _nb.bufAlloc;
+			if (_stor > 0) {
+				if (!info.itemCanBeDeleted({ id: _nb.id, data: _nb.data, count: _stor }, _stor)) {
+					return false;
+				}
+			}
+		}
+
+		for (var ci0 = 0; ci0 < toCommit.length; ci0++) {
+			var _slot = toCommit[ci0];
+			var _nb2 = neededByUid[_slot.uid];
+			var _fromBuf = Math.min(_slot.needed, _nb2.bufAlloc);
+			_nb2.bufAlloc -= _fromBuf;
+			_slot.fromBuffer = _fromBuf;
+			_slot.fromStorage = _slot.needed - _fromBuf;
 		}
 
 		for (var ci = 0; ci < toCommit.length; ci++) {
@@ -132,6 +159,7 @@ var CraftingScheduler = {
 
 		if (node.remaining <= 0 && (!pattern.isProcessed || task.outputsSatisfied(node))) {
 			node.done = true;
+			if (pattern.isProcessed && task.unregisterExpectedOutputs) task.unregisterExpectedOutputs(node);
 		}
 
 		return true;

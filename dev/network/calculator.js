@@ -18,6 +18,8 @@ var CraftingCalculator = {
 		for (var i = 0; i < info.items.length; i++) {
 			storageCopy[info.items_map[i]] = info.items[i].count;
 		}
+		var initialStorage = {};
+		for (var uid0 in storageCopy) initialStorage[uid0] = storageCopy[uid0];
 
 		var visited = {};
 		var plan = {
@@ -25,7 +27,9 @@ var CraftingCalculator = {
 			toReserve: {},
 			toCraft: {},
 			toTake: {},
-			missing: {}
+			missing: {},
+			_initialStorage: initialStorage,
+			_reservedReal: {}
 		};
 
 		var rootPatterns = info.crafts[itemUid];
@@ -54,19 +58,6 @@ var CraftingCalculator = {
 			var fullCrafts = this._buildFullCrafts(item, itemUid, quantity, baseCount, multiplier, info, plan);
 			fullCrafts.craftable = false;
 			fullCrafts.errorType = "MISSING";
-			if (fullCrafts.crafts) {
-				for (var ci = 0; ci < fullCrafts.crafts.length; ci++) {
-					var cra = fullCrafts.crafts[ci];
-					if (!cra.completedIngridients) continue;
-					for (var ii = 0; ii < cra.completedIngridients.length; ii++) {
-						var ing = cra.completedIngridients[ii];
-						var ingUid = ing.id + '_' + ing.data;
-						ing.count = plan.toTake[ingUid] || 0;
-						ing.need = plan.missing[ingUid] || 0;
-						ing.craft = plan.toCraft[ingUid] || 0;
-					}
-				}
-			}
 			return fullCrafts;
 		}
 
@@ -113,10 +104,13 @@ var CraftingCalculator = {
 			var fromStorage = storageCopy[ingUid] || 0;
 			if (fromStorage > 0) {
 				var take = Math.min(needed, fromStorage);
+				var realAvail = (plan._initialStorage[ingUid] || 0) - (plan._reservedReal[ingUid] || 0);
+				var takeReal = Math.max(0, Math.min(take, realAvail));
+				plan._reservedReal[ingUid] = (plan._reservedReal[ingUid] || 0) + takeReal;
 				storageCopy[ingUid] -= take;
-				plan.toReserve[ingUid] = (plan.toReserve[ingUid] || 0) + take;
-				plan.toTake[ingUid] = (plan.toTake[ingUid] || 0) + take;
 				needed -= take;
+				plan.toReserve[ingUid] = (plan.toReserve[ingUid] || 0) + takeReal;
+				plan.toTake[ingUid] = (plan.toTake[ingUid] || 0) + takeReal;
 			}
 
 			while (needed > 0) {
@@ -150,9 +144,12 @@ var CraftingCalculator = {
 					var altCount = storageCopy[altUids[ai]] || 0;
 					if (altCount > 0) {
 						var take3 = Math.min(needed, altCount);
+						var realAvail3 = (plan._initialStorage[altUids[ai]] || 0) - (plan._reservedReal[altUids[ai]] || 0);
+						var takeReal3 = Math.max(0, Math.min(take3, realAvail3));
+						plan._reservedReal[altUids[ai]] = (plan._reservedReal[altUids[ai]] || 0) + takeReal3;
 						storageCopy[altUids[ai]] -= take3;
-						plan.toReserve[altUids[ai]] = (plan.toReserve[altUids[ai]] || 0) + take3;
-						plan.toTake[altUids[ai]] = (plan.toTake[altUids[ai]] || 0) + take3;
+						plan.toReserve[altUids[ai]] = (plan.toReserve[altUids[ai]] || 0) + takeReal3;
+						plan.toTake[altUids[ai]] = (plan.toTake[altUids[ai]] || 0) + takeReal3;
 						needed -= take3;
 						foundAlt = true;
 						node.requirements.push({ uid: altUids[ai], count: take3, altUids: altUids });

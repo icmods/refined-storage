@@ -984,19 +984,11 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 					}
 					patternGridSwitchPage(refresh ? patternGridData.lastPage : 1, container, true);
 					if(updateCrafts){
-						var crafts2Thread = java.lang.Thread({
-							run: function(){
-								try {
-									patternGridData.isDarkenMap = {};
-									patternGridData.crafts = patternGridFuncs.updateCrafts(patternGridData.slotsKeys, patternGridData.craftsTextSearch, patternGridData.originalOnlyItemsMap, container.slots);
-									patternGridSwitchCraftsPage(refresh ? patternGridData.lastCraftsPage : 1, container, true);
-								} catch(err){
-									alert('Error on sorting crafts: ' + JSON.stringify(err));
-								}
-							}
+						scheduleLowPrioritySort(function(){
+							patternGridData.isDarkenMap = {};
+							patternGridData.crafts = patternGridFuncs.updateCrafts(patternGridData.slotsKeys, patternGridData.craftsTextSearch, patternGridData.originalOnlyItemsMap, container.slots);
+							patternGridSwitchCraftsPage(refresh ? patternGridData.lastCraftsPage : 1, container, true);
 						});
-						crafts2Thread.setPriority(java.lang.Thread.MIN_PRIORITY);
-						crafts2Thread.start();
 					}
 					moveCraftsSlots(patternGridData.patternMode);
 					patternGridData._settingSwitchState = true;
@@ -1010,14 +1002,9 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 				}
 				if(patternGridData.lowPriority){
 					patternGridData.lowPriority = false;
-					var thread1 = java.lang.Thread({
-						run: function(){
-							try { patternGridData.updateGui(eventData.refresh, eventData.updateFilters, eventData.updateCrafts, true); }
-							catch(err2){ alert('Error: ' + JSON.stringify(err2)); }
-						}
+					scheduleLowPrioritySort(function(){
+						patternGridData.updateGui(eventData.refresh, eventData.updateFilters, eventData.updateCrafts, true);
 					});
-					thread1.setPriority(java.lang.Thread.MIN_PRIORITY);
-					thread1.start();
 				} else {
 					patternGridData.updateGui(eventData.refresh, eventData.updateFilters, eventData.updateCrafts, true);
 				}

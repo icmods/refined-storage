@@ -36,6 +36,7 @@ var CraftingTask = {
 			nodes: nodes,
 			buffer: {},
 			toReserve: Object.assign({}, plan.toReserve || {}),
+			pendingOutputs: {},
 
 			reserveItems: function(info) {
 				for (var uid in this.toReserve) {
@@ -90,6 +91,31 @@ var CraftingTask = {
 					expected[uid] = (expected[uid] || 0) + node.quantity * (res.count || 1);
 				}
 				node.expectedByUid = expected;
+				this.registerExpectedOutputs(node);
+			},
+
+			registerExpectedOutputs: function(node) {
+				if (!node || node.__registered || !node.expectedByUid) return;
+				node.__registered = true;
+				var idx = this.nodes.indexOf(node);
+				if (idx == -1) return;
+				for (var uid in node.expectedByUid) {
+					if (!this.pendingOutputs[uid]) this.pendingOutputs[uid] = [];
+					if (this.pendingOutputs[uid].indexOf(idx) == -1) this.pendingOutputs[uid].push(idx);
+				}
+			},
+
+			unregisterExpectedOutputs: function(node) {
+				if (!node || !node.__registered) return;
+				node.__registered = false;
+				var idx = this.nodes.indexOf(node);
+				for (var uid in node.expectedByUid) {
+					var list = this.pendingOutputs[uid];
+					if (!list) continue;
+					var li = list.indexOf(idx);
+					if (li != -1) list.splice(li, 1);
+					if (list.length === 0) delete this.pendingOutputs[uid];
+				}
 			},
 
 			outputsSatisfied: function(node) {
@@ -103,9 +129,11 @@ var CraftingTask = {
 			onOutputArrived: function(uid, count) {
 				if (!this.nodes || count <= 0) return 0;
 				var consumed = 0;
-				for (var ni = 0; ni < this.nodes.length && count > 0; ni++) {
-					var node = this.nodes[ni];
-					if (!node || node.done || !node.isProcessing || !node.expectedByUid) continue;
+				var list = this.pendingOutputs[uid];
+				if (!list || list.length === 0) return 0;
+				for (var li = 0; li < list.length && count > 0; li++) {
+					var node = this.nodes[list[li]];
+					if (!node || node.done || !node.expectedByUid) continue;
 					var expected = node.expectedByUid[uid];
 					if (!expected) continue;
 					var received = node.receivedByUid[uid] || 0;
@@ -117,6 +145,8 @@ var CraftingTask = {
 					consumed += take;
 					if (this.outputsSatisfied(node)) {
 						node.done = true;
+						this.unregisterExpectedOutputs(node);
+						li--;
 					}
 				}
 				return consumed;
@@ -193,6 +223,7 @@ var CraftingTask = {
 				task.nodes[ni].expectedByUid = data.nodes[ni].expectedByUid || null;
 				task.nodes[ni].receivedByUid = data.nodes[ni].receivedByUid || {};
 			}
+			if (task.nodes[ni].expectedByUid) task.registerExpectedOutputs(task.nodes[ni]);
 		}
 		return task;
 	}

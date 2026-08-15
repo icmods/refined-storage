@@ -17,10 +17,11 @@ var preCraftdata = {
 }
 
 function preCraftSwitchPage(page, _data, container){
+	var content_ = preCraftGUI.getContent();
+	if(!content_ || !content_.elements) return;
 	page = Math.max(0, Math.min(page - 1, Math.ceil((_data ? _data.length : 0) / 12) - 1));
 	preCraftdata.page = page;
 	var elements_ = preCraftGUI.getElements();
-	var content_ = preCraftGUI.getContent();
 	for (var i = page * 12; i < page * 12 + 12; i++) {
 		var a = i - (page * 12);
 		var item = _data[i] || [{ id: 0, data: 0, need: 0}, '', ''];
@@ -714,6 +715,51 @@ preCraftCountGUI.forceRefresh();
 preCraftGUI.forceRefresh();
 
 function createCraftPreviewPostData(_data){
+	if(_data.plan){
+		var toCraftRows = [];
+		var missingRows = [];
+		var availableRows = [];
+		var toTake = _data.plan.toTake || {};
+		var toCraft = _data.plan.toCraft || {};
+		var missing = _data.plan.missing || {};
+		for(var uid in toTake){
+			var parts = uid.split('_');
+			var id = parseInt(parts[0]);
+			var data = parseInt(parts[1]);
+			if(missing[uid]){
+				missingRows.push([{id: id, data: data, need: missing[uid]}, Translation.translate("Available") + ": " + toTake[uid], Translation.translate("Missing") + ": " + missing[uid]]);
+			} else if(toCraft[uid]){
+				toCraftRows.push([{id: id, data: data}, Translation.translate("To craft") + ": " + toCraft[uid], Translation.translate("Available") + ": " + toTake[uid]]);
+			} else {
+				availableRows.push([{id: id, data: data}, Translation.translate("Available") + ": " + toTake[uid], ""]);
+			}
+		}
+		for(var uid in toCraft){
+			if(toTake[uid]) continue;
+			var parts = uid.split('_');
+			var id = parseInt(parts[0]);
+			var data = parseInt(parts[1]);
+			if(missing[uid]){
+				missingRows.push([{id: id, data: data, need: missing[uid]}, "", Translation.translate("Missing") + ": " + missing[uid]]);
+			} else {
+				toCraftRows.push([{id: id, data: data}, Translation.translate("To craft") + ": " + toCraft[uid], ""]);
+			}
+		}
+		for(var uid in missing){
+			if(toTake[uid] || toCraft[uid]) continue;
+			var parts = uid.split('_');
+			var id = parseInt(parts[0]);
+			var data = parseInt(parts[1]);
+			missingRows.push([{id: id, data: data, need: missing[uid]}, "", Translation.translate("Missing") + ": " + missing[uid]]);
+		}
+		var newData = toCraftRows.slice();
+		if(_data.results)for(var ri = 0; ri < _data.results.length; ri++){
+			var result = _data.results[ri];
+			newData.push([{id: result.id, data: result.data}, Translation.translate("To craft") + ": " + (result.count || 1), ""]);
+		}
+		newData = newData.concat(missingRows, availableRows);
+		return newData;
+	}
 	var subCraftOutputs = {};
 	if(_data.crafts)for(var ci = 0; ci < _data.crafts.length; ci++){
 		var cra = _data.crafts[ci];

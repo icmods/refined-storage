@@ -113,6 +113,38 @@ const jSetInterval = function (__fun, __mil) {
 	return timer;
 }
 
+const scheduleLowPrioritySort = (function () {
+	var pending = null;
+	var timer = null;
+	var running = false;
+	function run() {
+		if (running || !pending) return;
+		var fn = pending;
+		pending = null;
+		running = true;
+		try {
+			fn();
+		} catch (err) {
+			alert('Sorry, i broke :_(' + JSON.stringify(err));
+		}
+		running = false;
+		if (timer) {
+			timer.cancel();
+			timer = null;
+		}
+		if (pending) {
+			timer = new Timer();
+			timer.schedule(new TimerTask({ run: run }), 50);
+		}
+	}
+	return function (fn) {
+		pending = fn;
+		if (timer || running) return;
+		timer = new Timer();
+		timer.schedule(new TimerTask({ run: run }), 50);
+	};
+})();
+
 const sides = [
 	[1, 0, 0],
 	[-1, 0, 0],

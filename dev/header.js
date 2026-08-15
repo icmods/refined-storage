@@ -124,6 +124,7 @@ const RefinedStorage = {
 								tile.data.upgrades[upgrade.nameID] = 1;
 							}
 							if(upgrade.addFunc)upgrade.addFunc(tile, {id: id, count: count, data: data, extra: extra}, itemContainer, slot, player);
+							if(getNetworkInfo(tile))getNetworkInfo(tile).netMapDirty = true;
 							return count;
 						}
 					})
@@ -132,6 +133,7 @@ const RefinedStorage = {
 							if(!(upgrade = UpgradeRegistry.get(id))) return 0
 							if(tile.data.upgrades[upgrade.nameID])tile.data.upgrades[upgrade.nameID]--
 							if(upgrade.deleteFunc)upgrade.deleteFunc(tile, {id: id, count: count, data: data, extra: extra}, itemContainer, slot, player);
+							if(getNetworkInfo(tile))getNetworkInfo(tile).netMapDirty = true;
 							return count;
 						}
 					})
@@ -536,4 +538,6 @@ function recountUpgrades(tile) {
 			else tile.data.upgrades[upgrade.nameID] = 1;
 		}
 	}
+	var _ni = getNetworkInfo(tile);
+	if (_ni) _ni.netMapDirty = true;
 }

@@ -360,7 +360,10 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 			this.data.disks_percents[i] = diskPercent;
 		}
 		if(this.data.disks != disks || this.data.storage != storage || this.data.stored != stored) {
-			if(this.isWorkAllowed() && this.data.disks != disks)RSNetworks[this.data.NETWORK_ID].info.updateItems();
+			if(this.data.disks != disks){
+				if(this.isWorkAllowed() && RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID].info)RSNetworks[this.data.NETWORK_ID].info.updateItems();
+				if(RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID].info)RSNetworks[this.data.NETWORK_ID].info.netMapDirty = true;
+			}
 			this.networkData.putString('slots', JSON.stringify(diskDatas));
 			this.networkData.sendChanges();
 		}

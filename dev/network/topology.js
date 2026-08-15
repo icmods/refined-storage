@@ -127,6 +127,7 @@ function set_is_active_for_blocks_net(net_id, _state, isController, _blockSource
 			}
 		}
 	}
+	if (RSNetworks[net_id] && RSNetworks[net_id].info) RSNetworks[net_id].info.netMapDirty = true;
 }
 
 function checkAndSetNetOnCoords(coords, update){

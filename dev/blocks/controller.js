@@ -292,6 +292,9 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 	},
 	updateControllerNetwork: function(_first){
 		set_net_for_blocks(this, this.data.NETWORK_ID, false, _first, _first ? undefined : this.data.isActive);
+		if (this.data.NETWORK_ID != 'f' && RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID].info) {
+			RSNetworks[this.data.NETWORK_ID].info.netMapDirty = true;
+		}
 	},
 	click: function (id, count, data, coords, player, extra) {
 		if(Entity.getSneaking(player)) return false;
@@ -387,7 +390,17 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			this.updateControllerNetwork();
 			this.data.updateControllerNetwork = false;
 		}
-		this.updateNetMap();
+		var _info0 = (this.data.NETWORK_ID != 'f' && RSNetworks[this.data.NETWORK_ID]) ? RSNetworks[this.data.NETWORK_ID].info : null;
+		this.data.netMapTimer = (this.data.netMapTimer === undefined ? 0 : this.data.netMapTimer) - 1;
+		if ((_info0 && _info0.netMapDirty) || this.data.netMapTimer <= 0) {
+			this.updateNetMap();
+			this.data.netMapTimer = 20;
+			if (_info0) _info0.netMapDirty = false;
+			if (this.container.getNetworkEntity().getClients().iterator().hasNext() || this.data.containerUpdate) {
+				this.container.setText('usage', Translation.translate('Usage')+": " + this.data.usage + " FE/t");
+				this.data.containerUpdate = true;
+			}
+		}
 		if (this.data.energy >= this.data.usage && this.data.energy != 0){
 			this.setActive(true);
 			if(Config.controller.usesEnergy && !this.data.isCreative){
