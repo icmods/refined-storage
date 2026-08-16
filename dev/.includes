@@ -3,6 +3,7 @@ header.js
 
 network/state.js
 network/topology.js
+network/pattern_containers.js
 network/info.js
 network/calculator.js
 network/task.js

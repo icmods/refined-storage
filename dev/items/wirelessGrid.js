@@ -67,17 +67,39 @@ function rsDrainWirelessGrid(tile, playerUid, amount) {
 
 var rsWirelessGridLastOpen = {};
 
-function rsFindNearestTransmitter(playerUid, netId) {
+function rsGetTransmitterProperties(transmitter) {
+	var properties = { range: Config.wirelessTransmitter.baseRange, infiniteRange: false, crossDimension: false };
+	var upgrades = transmitter.upgrades || {};
+	for (var nameID in upgrades) {
+		var count = upgrades[nameID] || 0;
+		if (count <= 0) continue;
+		var upgrade = UpgradeRegistry.get(nameID);
+		if (!upgrade) continue;
+		if (upgrade.rangeBonus) properties.range += upgrade.rangeBonus * count;
+		if (upgrade.infiniteRange) properties.infiniteRange = true;
+		if (upgrade.crossDimension) properties.crossDimension = true;
+	}
+	return properties;
+}
+
+function rsFindNearestTransmitter(playerUid, netId, crossDimension) {
 	var transmitters = searchBlocksInNetwork(netId, BlockID.RS_wireless_transmitter);
-	var playerPos = Entity.getPosition(playerUid);
-	var best = null, bestDist = 0;
+	var playerPos = crossDimension ? null : Entity.getPosition(playerUid);
+	var best = null;
+	var bestDist = 0;
 	for (var i = 0; i < transmitters.length; i++) {
-		var t = transmitters[i];
-		if (!t.isActive) continue;
-		var range = Config.wirelessTransmitter.baseRange + ((t.upgrades && t.upgrades.RSRangeUpgrade) ? t.upgrades.RSRangeUpgrade : 0) * Config.wirelessTransmitter.rangePerUpgrade;
-		var dist = Entity.getDistanceBetweenCoords(t.coords, playerPos);
-		if (dist < range && (!best || dist < bestDist)) {
-			best = t;
+		var transmitter = transmitters[i];
+		if (!transmitter.isActive) continue;
+		var properties = rsGetTransmitterProperties(transmitter);
+		if (crossDimension) {
+			if (!properties.crossDimension || best) continue;
+			best = transmitter;
+			continue;
+		}
+		var dist = Entity.getDistanceBetweenCoords(transmitter.coords, playerPos);
+		if (!properties.infiniteRange && dist >= properties.range) continue;
+		if (!best || dist < bestDist) {
+			best = transmitter;
 			bestDist = dist;
 		}
 	}
@@ -110,16 +132,17 @@ function rsOpenWirelessTerminal(cfg) {
 	var extra = slotItem.extra;
 	var binding = { x: extra.getInt('controllerX', -1), y: extra.getInt('controllerY', -1), z: extra.getInt('controllerZ', -1) };
 	if (binding.x == -1) return log(Translation.translate(cfg.noBindMsg));
-	if (Entity.getDimension(playerUid) != extra.getInt('dimension', -1)) return log(Translation.translate(cfg.noRangeMsg));
+	var bindingDimension = extra.getInt('dimension', -1);
+	var crossDimension = Entity.getDimension(playerUid) != bindingDimension;
 	var netId = rsFindNetworkByBinding(binding);
 	if (netId == -1 || !RSNetworks[netId] || !RSNetworks[netId].info) return log(Translation.translate(cfg.noBindMsg));
-	var best = rsFindNearestTransmitter(playerUid, netId);
+	var best = rsFindNearestTransmitter(playerUid, netId, crossDimension);
 	if (!best) return log(Translation.translate(cfg.noRangeMsg));
 	var energy = extra.getInt('energy', 0);
 	if (energy <= cfg.config.openUsage) return log(Translation.translate(cfg.noEnergyMsg));
 	var client = Network.getClientForPlayer(playerUid);
 	if (!client) return;
-	var blockSource = BlockSource.getDefaultForActor(playerUid);
+	var blockSource = crossDimension ? BlockSource.getDefaultForDimension(bindingDimension) : BlockSource.getDefaultForActor(playerUid);
 	var tile = World.getTileEntity(best.coords.x, best.coords.y, best.coords.z, blockSource);
 	if (!tile || !tile.container) return log(Translation.translate(cfg.noRangeMsg));
 	if (!tile.data.openedScreens) tile.data.openedScreens = {};

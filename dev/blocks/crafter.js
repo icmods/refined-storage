@@ -55,6 +55,9 @@ function getCrafterFrontSide(tile){
 	var meta = tile && tile.data ? tile.data.block_data : undefined;
 	return crafterFrontSideByMeta[meta] != undefined ? crafterFrontSideByMeta[meta] : 0;
 }
+function craftMatches(craft, coordsId, id, isProcessed){
+	return craft && craft.coordsId === coordsId && craft.id === id && craft.isProcessed === isProcessed;
+}
 RS_blocks.push(BlockID.RS_crafter);
 EnergyUse[BlockID['RS_crafter']] = Config.energy_uses.crafter || 4;
 
@@ -84,7 +87,22 @@ var elementsGUI_crafter = {};
 			x: x + i*slotsSize,
 			y: screenHeight/2 - slotsSize/2,
 			size: slotsSize,
-			maxStackSize: 1
+			maxStackSize: 1,
+			onItemChanged: function(container){
+				updateCrafterOutputSlots(container);
+			}
+		};
+	}
+
+	for(var i = 0; i < 9; i++){
+		elementsGUI_crafter["output_pattern" + i] = {
+			type: "slot",
+			num: i,
+			x: x + i*slotsSize,
+			y: screenHeight/2 - slotsSize/2 - 50,
+			size: slotsSize,
+			visual: true,
+			bitmap: "empty"
 		};
 	}
 
@@ -138,6 +156,38 @@ var carfterGUI = new UI.StandartWindow({
 	elements: elementsGUI_crafter
 });
 GUIs.push(carfterGUI);
+
+function updateCrafterOutputSlots(container, content){
+	if(!container) return;
+	if(!content){
+		var uiAdapter = container.getUiAdapter && container.getUiAdapter();
+		var windowGroup = uiAdapter ? uiAdapter.getWindow() : null;
+		if(!windowGroup) return;
+		var mainWindow = windowGroup.getWindow('main');
+		if(!mainWindow || !mainWindow.isOpened()) return;
+		content = mainWindow.getContent();
+	}
+	if(!content || !content.elements) return;
+	for(var i = 0; i < 9; i++){
+		var outputElement = content.elements["output_pattern" + i];
+		if(!outputElement) continue;
+		var patternItem = container.slots ? container.slots["slot_pattern" + i] : null;
+		if(patternItem && patternItem.id == ItemID.RSpattern && patternItem.extra){
+			var resultString = patternItem.extra.getString('result0');
+			if(resultString){
+				var resultParts = resultString.split(',');
+				if(resultParts.length >= 3){
+					var resultId = parseInt(resultParts[0]);
+					if(resultId > 0){
+						outputElement.source = { id: resultId, count: parseInt(resultParts[1] || 1), data: parseInt(resultParts[2] || 0) };
+						continue;
+					}
+				}
+			}
+		}
+		outputElement.source = null;
+	}
+}
 
 RefinedStorage.createTile(BlockID.RS_crafter, {
 	useNetworkItemContainer: true,
@@ -195,50 +245,63 @@ RefinedStorage.createTile(BlockID.RS_crafter, {
 		if (!item || !item.extra) return false;
 		var pattern = this.parsePatternExtra(item.extra);
 		if (!pattern) return false;
+		var craft = { id: slot, coordsId: cts(this), isProcessed: pattern.isProcessed, oredictEnabled: item.extra.getBoolean('oredictEnabled'), ingridients: pattern.inputs, result: pattern.outputs };
+		this.data.crafts[slot] = craft;
+		this.data.patternsCount = Object.keys(this.data.crafts).length;
 		var netId = this.data.NETWORK_ID;
 		if (netId == 'f' || !RSNetworks[netId]) return false;
 		var info = RSNetworks[netId].info;
-		var craft = { id: slot, coordsId: cts(this), isProcessed: pattern.isProcessed, oredictEnabled: item.extra.getBoolean('oredictEnabled'), ingridients: pattern.inputs, result: pattern.outputs };
 		for(var ri = 0; ri < craft.result.length; ri++){
 			var resultUid = craft.result[ri].id + '_' + craft.result[ri].data;
 			if(!info.crafts[resultUid]) info.crafts[resultUid] = [];
-			info.crafts[resultUid].push(craft);
+			var exists = false;
+			for(var ci = 0; ci < info.crafts[resultUid].length; ci++){
+				if(craftMatches(info.crafts[resultUid][ci], cts(this), craft.id, craft.isProcessed)){
+					exists = true;
+					break;
+				}
+			}
+			if(!exists) info.crafts[resultUid].push(craft);
 			if(!info.craftsIDS[craft.result[ri].id]) info.craftsIDS[craft.result[ri].id] = [];
 			if(info.craftsIDS[craft.result[ri].id].indexOf(craft.result[ri].data) == -1) info.craftsIDS[craft.result[ri].id].push(craft.result[ri].data);
 			info.addPatternContainer(resultUid, cts(this));
 		}
-		this.data.crafts[slot] = craft;
-		this.data.patternsCount = Object.keys(this.data.crafts).length;
+		info.netMapDirty = true;
 		if(Config.dev)Logger.Log('Crafter registered craft: [' + craft.result[0].id + ',' + craft.result[0].data + '] at ' + slot + ' (isProcessed=' + craft.isProcessed + ')', 'RefinedStorageDebug');
 		info.refreshOpenedGrids(true);
 		return true;
 	},
 	removeCraft: function(slot){
+		var craft = this.data.crafts[slot];
+		if (!craft) return;
+		delete this.data.crafts[slot];
+		this.data.patternsCount = Object.keys(this.data.crafts).length;
 		var netId = this.data.NETWORK_ID;
 		if (netId == 'f' || !RSNetworks[netId]) return;
 		var info = RSNetworks[netId].info;
-		var craft = this.data.crafts[slot];
-		if (!craft) return;
 		for(var ri = 0; ri < craft.result.length; ri++){
 			var resultUid = craft.result[ri].id + '_' + craft.result[ri].data;
 			if(info.crafts[resultUid]){
-				var idx = info.crafts[resultUid].indexOf(craft);
-				if(idx != -1) info.crafts[resultUid].splice(idx, 1);
+				for(var ci = info.crafts[resultUid].length - 1; ci >= 0; ci--){
+					if(craftMatches(info.crafts[resultUid][ci], cts(this), craft.id, craft.isProcessed)){
+						info.crafts[resultUid].splice(ci, 1);
+					}
+				}
 				if(info.crafts[resultUid].length == 0) delete info.crafts[resultUid];
 			}
-			if(info.craftsIDS[craft.result[ri].id]){
+			if(!info.crafts[resultUid] && info.craftsIDS[craft.result[ri].id]){
 				var idIdx = info.craftsIDS[craft.result[ri].id].indexOf(craft.result[ri].data);
 				if(idIdx != -1) info.craftsIDS[craft.result[ri].id].splice(idIdx, 1);
 				if(info.craftsIDS[craft.result[ri].id].length == 0) delete info.craftsIDS[craft.result[ri].id];
 			}
 			info.removePatternContainer(resultUid, cts(this));
 		}
-		delete this.data.crafts[slot];
-		this.data.patternsCount = Object.keys(this.data.crafts).length;
+		info.netMapDirty = true;
 		if(Config.dev)Logger.Log('Crafter removed craft: [' + craft.result[0].id + ',' + craft.result[0].data + '] from ' + slot, 'RefinedStorageDebug');
 		info.refreshOpenedGrids(true);
 	},
 	post_update_network: function(net_id, _first){
+		var tile = this;
 		if (net_id == 'f') {
 			if(this.data.LAST_NETWORK_ID != 'f' && RSNetworks[this.data.LAST_NETWORK_ID]){
 				var oldInfo = RSNetworks[this.data.LAST_NETWORK_ID].info;
@@ -247,36 +310,68 @@ RefinedStorage.createTile(BlockID.RS_crafter, {
 					for(var ri = 0; ri < craft.result.length; ri++){
 						var resultUid = craft.result[ri].id + '_' + craft.result[ri].data;
 						if(oldInfo.crafts[resultUid]){
-							var idx = oldInfo.crafts[resultUid].indexOf(craft);
-							if(idx != -1) oldInfo.crafts[resultUid].splice(idx, 1);
+							for(var ci = oldInfo.crafts[resultUid].length - 1; ci >= 0; ci--){
+								if(craftMatches(oldInfo.crafts[resultUid][ci], cts(this), craft.id, craft.isProcessed)){
+									oldInfo.crafts[resultUid].splice(ci, 1);
+								}
+							}
 							if(oldInfo.crafts[resultUid].length == 0) delete oldInfo.crafts[resultUid];
+						}
+						if(!oldInfo.crafts[resultUid] && oldInfo.craftsIDS[craft.result[ri].id]){
+							var idIdx = oldInfo.craftsIDS[craft.result[ri].id].indexOf(craft.result[ri].data);
+							if(idIdx != -1) oldInfo.craftsIDS[craft.result[ri].id].splice(idIdx, 1);
+							if(oldInfo.craftsIDS[craft.result[ri].id].length == 0) delete oldInfo.craftsIDS[craft.result[ri].id];
 						}
 						oldInfo.removePatternContainer(resultUid, cts(this));
 					}
 				}
 			}
+			PatternContainerRegistry.unregister(this);
 			return;
 		}
-		this.data.lastCraftTick = null;
 		var info = RSNetworks[net_id].info;
 		for(var s in this.data.crafts){
 			var craft = this.data.crafts[s];
 			var exists = false;
 			for(var ri = 0; ri < craft.result.length; ri++){
 				var resultUid = craft.result[ri].id + '_' + craft.result[ri].data;
-				if(info.crafts[resultUid] && info.crafts[resultUid].indexOf(craft) != -1) exists = true;
+				if(info.crafts[resultUid]){
+					for(var ci = 0; ci < info.crafts[resultUid].length; ci++){
+						if(craftMatches(info.crafts[resultUid][ci], cts(this), craft.id, craft.isProcessed)){
+							exists = true;
+							break;
+						}
+					}
+				}
+				if(exists) break;
 			}
 			if(!exists){
 				var slotItem = this.container.getSlot(s);
 				if(slotItem) this.addCraft(s, slotItem.extra);
 			}
 		}
+		PatternContainerRegistry.register(this, {
+			containerId: 'crafter',
+			coordsId: cts(this),
+			getPatterns: function() {
+				var out = [];
+				for (var cs in tile.data.crafts) {
+					var slotItem = tile.container.getSlot(cs);
+					if (slotItem && slotItem.id == ItemID.RSpattern && slotItem.extra) out.push(tile.data.crafts[cs]);
+				}
+				return out;
+			},
+			getFrontSide: function(crafterTile) { return getCrafterFrontSide(crafterTile); },
+			getSpeed: function(crafterTile) { return crafterTile.data.speed || 10; },
+			getUpdateInterval: function(crafterTile) { return Math.max(1, crafterTile.data.speed || 10); },
+			getMaximumSuccessfulCraftingUpdates: function(crafterTile) { return Math.min(5, 1 + Math.floor((10 - Math.max(1, crafterTile.data.speed || 10)) / 2)); },
+			getUsage: function(crafterTile) { return (Config.energy_uses.crafterPerPattern || 1) * (crafterTile.data.patternsCount || 0); }
+		});
 	},
 	refreshRedstoneMode: function(){
-		if(this.data.redstone_mode === 0) return this.setActive(true);
-		if(this.data.redstone_mode === 1) return this.setActive(false);
-		if(this.data.redstone_mode === 2) return this.setActive(!this.data.redstone_power);
-		if(this.data.redstone_mode === 3) return this.setActive(!!this.data.redstone_power);
+		if(this.data.redstone_mode === 0 || this.data.redstone_mode === 3) return this.setActive(true);
+		var params = this.data.last_redstone_event || {power: 0};
+		return this.setActive(this.redstoneAllowActive(params));
 	},
 	refreshGui: function(first, client){
 		var _data = { name: this.networkData.getName() + '', isActive: this.data.isActive, NETWORK_ID: this.data.NETWORK_ID, redstone_mode: this.data.redstone_mode };
@@ -313,11 +408,12 @@ RefinedStorage.createTile(BlockID.RS_crafter, {
 	},
 	pre_destroy: function(){
 		for(var s in this.data.crafts) this.removeCraft(s);
+		PatternContainerRegistry.unregister(this);
 	},
 	containerEvents: {
 		updateRedstoneMode: function(eventData, connectedClient) {
 			if(this.data.redstone_mode == undefined) this.data.redstone_mode = 0;
-			this.data.redstone_mode = this.data.redstone_mode >= 3 ? 0 : this.data.redstone_mode + 1;
+			this.data.redstone_mode = this.data.redstone_mode >= 2 ? 0 : this.data.redstone_mode + 1;
 			this.refreshRedstoneMode();
 			this.refreshGui();
 		}
@@ -341,6 +437,7 @@ RefinedStorage.createTile(BlockID.RS_crafter, {
 			openGui: function(container, window, content, eventData){
 				if(!content || !window || !window.isOpened()) return;
 				if(content.elements["image_redstone"]) content.elements["image_redstone"].bitmap = 'redstone_GUI_' + (eventData.redstone_mode || 0);
+				updateCrafterOutputSlots(container, content);
 				window.getWindow('main').forceRefresh();
 			}
 		}

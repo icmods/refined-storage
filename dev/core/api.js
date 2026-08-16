@@ -23,17 +23,64 @@ var _RS = {
 		deleteItem: function(netId, item, count) { return RSNetworks[netId] && RSNetworks[netId].info.deleteItem(item, count); },
 		searchController: function(coords, self) { return searchController(coords, self); },
 		searchBlocks: function(netId, blockId) { return searchBlocksInNetwork(netId, blockId); },
+		getController: function(netId) { return searchController_net(netId); },
 		constructCraft: function(netId, item, count) { return RSNetworks[netId] && RSNetworks[netId].info.constructCraft(item, count || 1); },
 		provideCraft: function(netId, tree) { var info = RSNetworks[netId] && RSNetworks[netId].info; if (info) info.provideCraft(tree); },
 		requestCraft: function(netId, item, count) {
 			var info = RSNetworks[netId] && RSNetworks[netId].info;
 			if (!info) return false;
+			var now = World.getThreadTime();
+			if (info.isRequestThrottled('api', now)) return false;
 			var result = info.constructCraft(item, count || 1);
+			if (result && result.deduped) return true;
 			if (result && result.craftable) {
 				info.provideCraft(result);
 				return true;
 			}
+			info.markRequestFailed('api', now);
 			return false;
+		},
+		keepStock: function(netId, item, minimum) {
+			var result = { have: 0, requested: 0, status: 'noNetwork' };
+			var info = RSNetworks[netId] && RSNetworks[netId].info;
+			if (!info) return result;
+			minimum = minimum || 1;
+			var targetId = item.id;
+			var targetData = item.data || 0;
+			var have = 0;
+			var items = info.items || [];
+			for (var i = 0; i < items.length; i++) {
+				var entry = items[i];
+				if (entry && entry.id === targetId && (entry.data || 0) === targetData) {
+					have += entry.count || 0;
+				}
+			}
+			result.have = have;
+			if (have >= minimum) {
+				result.status = 'satisfied';
+				return result;
+			}
+			var needed = minimum - have;
+			var sourceKey = 'keepStock:' + netId + ':' + targetId + '_' + targetData;
+			var now = World.getThreadTime();
+			if (info.isRequestThrottled(sourceKey, now)) {
+				result.status = 'throttled';
+				return result;
+			}
+			var craft = info.constructCraft({id: targetId, count: needed, data: targetData}, needed);
+			if (craft && craft.deduped) {
+				result.status = 'deduped';
+				return result;
+			}
+			if (craft && craft.craftable) {
+				info.provideCraft(craft);
+				result.requested = needed;
+				result.status = 'ok';
+				return result;
+			}
+			info.markRequestFailed(sourceKey, now);
+			result.status = 'failed';
+			return result;
 		},
 		cancelTask: function(netId, taskId) { var info = RSNetworks[netId] && RSNetworks[netId].info; return info ? info.cancelTask(taskId) : false; },
 		getTask: function(netId, taskId) { return RSNetworks[netId] && RSNetworks[netId].info.getTask(taskId); },
@@ -101,25 +148,43 @@ var _RS = {
 			var info = RSNetworks[netId] && RSNetworks[netId].info;
 			return info ? info.getPatternContainers(uid) : [];
 		},
+		registerContainer: function(tile, container) {
+			return PatternContainerRegistry.register(tile, container);
+		},
+		unregisterContainer: function(tile) {
+			return PatternContainerRegistry.unregister(tile);
+		},
 		registerPattern: function(netId, coordsId, pattern) {
 			var info = RSNetworks[netId] && RSNetworks[netId].info;
-			if (!info || !pattern || !pattern.outputs || !coordsId) return null;
+			if (!info || !pattern || !coordsId) return null;
+			var normalized = PatternContainerRegistry.validatePattern(pattern);
+			if (!normalized) return null;
 			var craft = {
-				id: 'addon',
+				id: normalized.id,
 				coordsId: coordsId,
-				isProcessed: !!pattern.isProcessed,
-				oredictEnabled: !!pattern.oredictEnabled,
-				ingridients: pattern.inputs || [],
-				result: pattern.outputs
+				isProcessed: normalized.isProcessed,
+				oredictEnabled: normalized.oredictEnabled,
+				ingridients: normalized.ingridients,
+				result: normalized.result
 			};
 			for (var ri = 0; ri < craft.result.length; ri++) {
 				var resultUid = craft.result[ri].id + '_' + craft.result[ri].data;
 				if (!info.crafts[resultUid]) info.crafts[resultUid] = [];
-				info.crafts[resultUid].push(craft);
+				var exists = false;
+				for (var ci = 0; ci < info.crafts[resultUid].length; ci++) {
+					var existing = info.crafts[resultUid][ci];
+					if (existing.coordsId === coordsId && existing.id === craft.id && existing.isProcessed === craft.isProcessed) {
+						exists = true;
+						break;
+					}
+				}
+				if (!exists) info.crafts[resultUid].push(craft);
 				if (!info.craftsIDS[craft.result[ri].id]) info.craftsIDS[craft.result[ri].id] = [];
 				if (info.craftsIDS[craft.result[ri].id].indexOf(craft.result[ri].data) == -1) info.craftsIDS[craft.result[ri].id].push(craft.result[ri].data);
 				info.addPatternContainer(resultUid, coordsId);
 			}
+			info.netMapDirty = true;
+			info.refreshOpenedGrids(true);
 			return craft;
 		},
 		unregisterPattern: function(netId, coordsId, craft) {
@@ -128,12 +193,23 @@ var _RS = {
 			for (var ri = 0; ri < craft.result.length; ri++) {
 				var resultUid = craft.result[ri].id + '_' + craft.result[ri].data;
 				if (info.crafts[resultUid]) {
-					var idx = info.crafts[resultUid].indexOf(craft);
-					if (idx != -1) info.crafts[resultUid].splice(idx, 1);
+					for (var ci = info.crafts[resultUid].length - 1; ci >= 0; ci--) {
+						var existing = info.crafts[resultUid][ci];
+						if (existing.coordsId === coordsId && existing.id === craft.id && existing.isProcessed === craft.isProcessed) {
+							info.crafts[resultUid].splice(ci, 1);
+						}
+					}
 					if (info.crafts[resultUid].length == 0) delete info.crafts[resultUid];
+				}
+				if (!info.crafts[resultUid] && info.craftsIDS[craft.result[ri].id]) {
+					var idIdx = info.craftsIDS[craft.result[ri].id].indexOf(craft.result[ri].data);
+					if (idIdx != -1) info.craftsIDS[craft.result[ri].id].splice(idIdx, 1);
+					if (info.craftsIDS[craft.result[ri].id].length == 0) delete info.craftsIDS[craft.result[ri].id];
 				}
 				info.removePatternContainer(resultUid, coordsId);
 			}
+			info.netMapDirty = true;
+			info.refreshOpenedGrids(true);
 		}
 	},
 
@@ -144,14 +220,15 @@ var _RS = {
 	},
 
 	blocks: {
-		create: function(id, params) { RS_blocks.push(id); return RefinedStorage.createTile(id, params); },
-		copy: function(fromId, toId, params) { RS_blocks.push(toId); return RefinedStorage.copy(fromId, toId, params); },
-		createMapBlock: function(name, params, types) { RS_blocks.push(BlockID[name]); return RefinedStorage.createMapBlock(name, params, types); },
+		create: function(id, params) { RS_blocks.push(id); World.setBlockChangeCallbackEnabled(id, true); return RefinedStorage.createTile(id, params); },
+		copy: function(fromId, toId, params) { RS_blocks.push(toId); World.setBlockChangeCallbackEnabled(toId, true); return RefinedStorage.copy(fromId, toId, params); },
+		createMapBlock: function(name, params, types) { RS_blocks.push(BlockID[name]); World.setBlockChangeCallbackEnabled(BlockID[name], true); return RefinedStorage.createMapBlock(name, params, types); },
 		mapTexture: function(coords, texture, meta) { RefinedStorage.mapTexture(coords, texture, meta); }
 	},
 
 	upgrades: {
-		register: function(name, nameID, texture, params, usage, registerItem) { return UpgradeRegistry.register(name, nameID, texture, params, usage, registerItem); }
+		register: function(name, nameID, texture, params, usage, registerItem) { return UpgradeRegistry.register(name, nameID, texture, params, usage, registerItem); },
+		get: function(id) { return UpgradeRegistry.get(id); }
 	},
 
 	energy: {

@@ -31,6 +31,7 @@ var CraftingTask = {
 			requestedCount: requestedCount || fullCrafts.results[0].count,
 			totalSteps: totalSteps,
 			currentStep: 0,
+			ticks: 0,
 			startTime: World.getThreadTime(),
 			cancelled: false,
 			nodes: nodes,
@@ -61,11 +62,16 @@ var CraftingTask = {
 			flushBuffer: function(info) {
 				for (var uid in this.buffer) {
 					var count = this.buffer[uid];
-					if (count <= 0) continue;
+					if (count <= 0) { delete this.buffer[uid]; continue; }
 					var parts = uid.split('_');
-					info.pushItem({ id: parseInt(parts[0]), data: parseInt(parts[1]), count: count, extra: null }, count, false, ['autocraft']);
+					var remainder = info.pushItem({ id: parseInt(parts[0]), data: parseInt(parts[1]), count: count, extra: null }, count, false, ['autocraft']);
+					if (remainder <= 0) {
+						delete this.buffer[uid];
+					} else {
+						this.buffer[uid] = remainder;
+					}
 				}
-				this.buffer = {};
+				return Object.keys(this.buffer).length === 0;
 			},
 
 			getProgress: function() {
@@ -81,6 +87,11 @@ var CraftingTask = {
 					if (this.buffer[uid] <= 0) delete this.buffer[uid];
 				}
 				return take;
+			},
+
+			addToBuffer: function(uid, count) {
+				if (count <= 0) return;
+				this.buffer[uid] = (this.buffer[uid] || 0) + count;
 			},
 
 			cacheExpectedOutputs: function(node, pattern) {
@@ -167,8 +178,9 @@ var CraftingTask = {
 			requestedCount: task.requestedCount,
 			totalSteps: task.totalSteps,
 			currentStep: task.currentStep || 0,
+			ticks: task.ticks || 0,
 			startTime: task.startTime,
-			cancelled: false,
+			cancelled: task.cancelled === true,
 			nodes: (task.nodes || []).map(function(n) { return {
 				patternUid: n.patternUid,
 				isProcessing: n.isProcessing || false,
@@ -213,8 +225,11 @@ var CraftingTask = {
 		task.startTime = data.startTime;
 		task.totalSteps = data.totalSteps;
 		task.currentStep = data.currentStep || 0;
+		task.ticks = data.ticks || 0;
 		task.buffer = data.buffer || {};
 		task.toReserve = data.toReserve || {};
+		task.cancelled = data.cancelled === true;
+		if (task.cancelled) task.completingFlush = true;
 		for (var ni = 0; ni < task.nodes.length; ni++) {
 			if (data.nodes[ni]) {
 				task.nodes[ni].remaining = data.nodes[ni].remaining;

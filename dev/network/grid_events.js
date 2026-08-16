@@ -1,7 +1,12 @@
 var GridEvents = {
 	craftPreview: function(tile, eventData, connectedClient) {
 		if(!eventData.item || !eventData.count || tile.data.NETWORK_ID == 'f') return;
-		var constructedCraft = RSNetworks[tile.data.NETWORK_ID].info.constructCraft(eventData.item, eventData.count);
+		var info = RSNetworks[tile.data.NETWORK_ID].info;
+		var sourceKey = connectedClient ? connectedClient.getPlayerUid() : 'unknown';
+		var now = World.getThreadTime();
+		if (info.isRequestThrottled(sourceKey, now)) return;
+		var constructedCraft = info.constructCraft(eventData.item, eventData.count, true);
+		if (!constructedCraft || !constructedCraft.craftable) info.markRequestFailed(sourceKey, now);
 		if(constructedCraft){
 			var craftsData = constructedCraft.crafts ? constructedCraft.crafts.map(function(c){ return {completedIngridients: c.completedIngridients, result: c.result, craftable: c.craftable}; }) : [];
 			var planData = constructedCraft.plan ? {toTake: constructedCraft.plan.toTake || {}, toCraft: constructedCraft.plan.toCraft || {}, missing: constructedCraft.plan.missing || {}} : null;
@@ -11,11 +16,18 @@ var GridEvents = {
 
 	provideConstructedCraft: function(tile, eventData, connectedClient) {
 		if(!eventData.item || !eventData.count || tile.data.NETWORK_ID == 'f') return;
-		var constructedCraft = RSNetworks[tile.data.NETWORK_ID].info.constructCraft(eventData.item, eventData.count);
+		var info = RSNetworks[tile.data.NETWORK_ID].info;
+		var sourceKey = connectedClient ? connectedClient.getPlayerUid() : 'unknown';
+		var now = World.getThreadTime();
+		if (info.isRequestThrottled(sourceKey, now)) return;
+		var constructedCraft = info.constructCraft(eventData.item, eventData.count);
+		if(constructedCraft && constructedCraft.deduped) return;
 		if(constructedCraft && constructedCraft.craftable){
-			RSNetworks[tile.data.NETWORK_ID].info.provideCraft(constructedCraft);
+			info.provideCraft(constructedCraft);
 			tile.items();
 			tile.refreshGui(false, false, true);
+		} else {
+			info.markRequestFailed(sourceKey, now);
 		}
 	},
 

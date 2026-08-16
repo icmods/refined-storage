@@ -136,19 +136,21 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_wireless_transmitter, {
 	containerEvents: Object.assign({}, RefinedStorage.paramsMap[BlockID.RS_grid].containerEvents, {
 		cancelTask: function (eventData, connectedClient) {
 			var uid = connectedClient.getPlayerUid();
-			if (this.data.wirelessMonitorPlayers && this.data.wirelessMonitorPlayers[uid]) {
+			var info = getNetworkInfo(this);
+			var cancelled = info && eventData && eventData.taskId ? info.cancelTask(eventData.taskId) : false;
+			if (cancelled && this.data.wirelessMonitorPlayers && this.data.wirelessMonitorPlayers[uid]) {
 				rsDrainWirelessItem(this, uid, Config.wirelessCraftingMonitor.cancelUsage, ItemID.RSwirelessCraftingMonitor, Config.wirelessCraftingMonitor.capacity, 'wirelessMonitorPlayers', 'Wireless Crafting Monitor is out of energy.');
 			}
-			var info = getNetworkInfo(this);
-			if (info && eventData && eventData.taskId) info.cancelTask(eventData.taskId);
 		},
 		cancelAllTasks: function (eventData, connectedClient) {
 			var uid = connectedClient.getPlayerUid();
-			if (this.data.wirelessMonitorPlayers && this.data.wirelessMonitorPlayers[uid]) {
-				rsDrainWirelessItem(this, uid, Config.wirelessCraftingMonitor.cancelAllUsage, ItemID.RSwirelessCraftingMonitor, Config.wirelessCraftingMonitor.capacity, 'wirelessMonitorPlayers', 'Wireless Crafting Monitor is out of energy.');
-			}
 			var info = getNetworkInfo(this);
-			if (info) info.cancelAllTasks();
+			if (info && info.craftingTasks && info.craftingTasks.length > 0) {
+				info.cancelAllTasks();
+				if (this.data.wirelessMonitorPlayers && this.data.wirelessMonitorPlayers[uid]) {
+					rsDrainWirelessItem(this, uid, Config.wirelessCraftingMonitor.cancelAllUsage, ItemID.RSwirelessCraftingMonitor, Config.wirelessCraftingMonitor.capacity, 'wirelessMonitorPlayers', 'Wireless Crafting Monitor is out of energy.');
+				}
+			}
 		},
 		provideCraft: function (eventData, connectedClient) {
 			craftingGridProvideCraftEvent(this, eventData, connectedClient);

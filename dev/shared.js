@@ -1,9 +1,12 @@
 ModAPI.registerAPI("RefinedStorageAPI", {
-    apiVersion: '1.3',
+    apiVersion: '1.7',
     requireGlobal: function (command) {
         return eval(command);
     },
     RefinedStorage: RefinedStorage,
+    PatternContainerRegistry: PatternContainerRegistry,
+    RS_blocks: RS_blocks,
+    EnergyUse: EnergyUse,
     Disk: Disk,
     controllerAPI: controllerFuncs,
     gridAPI: gridFuncs,

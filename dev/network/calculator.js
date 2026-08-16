@@ -182,7 +182,12 @@ var CraftingCalculator = {
 	_getAlternativeUids: function(ingr, info) {
 		var uids = [];
 		var datas = info.just_items_map[ingr.id];
-		if (!datas || datas.length <= 1) return uids;
+		if (!datas || datas.length === 0) return uids;
+		if (ingr.data == -1) {
+			for (var di = 0; di < datas.length; di++) uids.push(ingr.id + '_' + datas[di]);
+			return uids;
+		}
+		if (datas.length <= 1) return uids;
 		for (var di = 0; di < datas.length; di++) {
 			if (datas[di] !== ingr.data) {
 				uids.push(ingr.id + '_' + datas[di]);

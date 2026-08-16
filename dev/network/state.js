@@ -53,9 +53,9 @@ Saver.addSavesScope("RSCraftingTasks",
 			tasks[key] = [];
 			for (var ti = 0; ti < info.craftingTasks.length; ti++) {
 				var task = info.craftingTasks[ti];
-				if (task && task.id && !task.cancelled) {
-					tasks[key].push(CraftingTask.serialize(task));
-				}
+				if (!task || !task.id) continue;
+				if (task.cancelled && Object.keys(task.buffer || {}).length === 0) continue;
+				tasks[key].push(CraftingTask.serialize(task));
 			}
 		}
 		return { tasks: tasks };

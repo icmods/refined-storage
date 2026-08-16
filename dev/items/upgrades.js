@@ -17,6 +17,7 @@ UpgradeRegistry.register('Stack Upgrade', 'RSStackUpgrade', 'rs_stack_upgrade', 
 }, Config.energy_uses.upgrades['stack']);
 UpgradeRegistry.register('Range Upgrade', 'RSRangeUpgrade', 'rs_range_upgrade', {
     maxStack: 4,
+    rangeBonus: Config.wirelessTransmitter.rangePerUpgrade,
     addFunc: function(tileEntity, item, container, slot, player){
         if(tileEntity.refreshGui)tileEntity.refreshGui(false, false, false, 'main');
     },

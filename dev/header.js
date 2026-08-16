@@ -147,7 +147,11 @@ const RefinedStorage = {
 			params.update_network = function (net_id, _first) {
 				if (this.pre_update_network) if(this.pre_update_network(net_id)) return true;
 				var netElement;
-				if(net_id == 'f' && RSNetworks[this.data.NETWORK_ID] && (netElement = RSNetworks[this.data.NETWORK_ID][cts(this)]) && netElement.id == this.blockInfo.id) delete RSNetworks[this.data.NETWORK_ID][cts(this)];
+				var leftNetId = null;
+				if(net_id == 'f' && RSNetworks[this.data.NETWORK_ID] && (netElement = RSNetworks[this.data.NETWORK_ID][cts(this)]) && netElement.id == this.blockInfo.id) {
+					delete RSNetworks[this.data.NETWORK_ID][cts(this)];
+					leftNetId = this.data.NETWORK_ID;
+				}
 				this.data.LAST_NETWORK_ID = this.data.NETWORK_ID;
 				this.data.NETWORK_ID = net_id;
 				this.networkData.putInt('NETWORK_ID', net_id != 'f' ? net_id : -1);
@@ -163,6 +167,9 @@ const RefinedStorage = {
 						upgrades: this.data.upgrades,
 						isActive: this.data.isActive || false
 					}
+					_RS._emit("networkTileJoined", {netId: net_id, blockId: this.blockInfo.id, coords: coords_this, dimension: this.dimension});
+				} else if (leftNetId != null) {
+					_RS._emit("networkTileLeft", {netId: leftNetId, blockId: this.blockInfo.id, coords: {x: this.x, y: this.y, z: this.z}, dimension: this.dimension});
 				}
 				if(!_first)this.setActive(net_id != "f");
 				this.networkData.sendChanges();
@@ -210,7 +217,7 @@ const RefinedStorage = {
 		}
 		if(!params.redstoneAllowActive){
 			params.redstoneAllowActive = function (params) {
-				if(!this.data.redstone_mode) return true;
+				if(!this.data.redstone_mode || this.data.redstone_mode == 3) return true;
 				if (params.power > 0){
 					if(this.data.redstone_mode == 1){
 						return true;
@@ -249,6 +256,7 @@ const RefinedStorage = {
 				this.data.LAST_NETWORK_ID = this.data.NETWORK_ID;
 				this.data.NETWORK_ID = 'f';
 				if(this.post_destroy) this.post_destroy(param1);
+				_RS._emit("tileDestroyed", {blockId: this.blockInfo.id, coords: {x: this.x, y: this.y, z: this.z}, dimension: this.dimension, netId: this.data.LAST_NETWORK_ID});
 			}
 		}
 		if(!params.isWorkAllowed){
@@ -529,13 +537,14 @@ function getNetworkInfo(tile) {
 
 function recountUpgrades(tile) {
 	if (!tile.upgradesSlots) return;
-	tile.data.upgrades = {};
+	var upgrades = tile.data.upgrades || (tile.data.upgrades = {});
+	for (var key in upgrades) delete upgrades[key];
 	for (var i = 0; i < tile.upgradesSlots.length; i++) {
 		var slot = tile.container.getSlot(tile.upgradesSlots[i]);
 		var upgrade;
 		if (slot.id != 0 && (upgrade = UpgradeRegistry.get(slot.id))) {
-			if (tile.data.upgrades[upgrade.nameID]) tile.data.upgrades[upgrade.nameID]++;
-			else tile.data.upgrades[upgrade.nameID] = 1;
+			if (upgrades[upgrade.nameID]) upgrades[upgrade.nameID]++;
+			else upgrades[upgrade.nameID] = 1;
 		}
 	}
 	var _ni = getNetworkInfo(tile);

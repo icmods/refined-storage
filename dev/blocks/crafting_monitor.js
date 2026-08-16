@@ -33,12 +33,18 @@ var monitorStateColors = {
 	0: android.graphics.Color.argb(255, 228, 228, 228),
 	1: android.graphics.Color.argb(255, 232, 229, 202),
 	2: android.graphics.Color.argb(255, 173, 219, 198),
-	3: android.graphics.Color.argb(255, 217, 237, 247)
+	3: android.graphics.Color.argb(255, 217, 237, 247),
+	4: android.graphics.Color.argb(255, 168, 168, 168)
 };
 var monitorStateTransparent = android.graphics.Color.argb(0, 0, 0, 0);
 
 function createProvidedCraftPostData(taskData){
 	var newData = [];
+	if (taskData.cancelled) {
+		var cres = (taskData.results && taskData.results[0]) || {id: 0, data: 0};
+		newData.push([{ id: cres.id, data: cres.data }, Translation.translate("Cancelled"), '', 4]);
+		return newData;
+	}
 	var elements = taskData.elements || [];
 	for (var ei = 0; ei < elements.length; ei++) {
 		var el = elements[ei];
@@ -83,8 +89,8 @@ function craftingMonitorSwitchPage(page){
 		(craftingMonitorData.providingCrafts[page].postData = createProvidedCraftPostData(craftingMonitorData.providingCrafts[page])) 
 		: [];
 	var elements_ = craftingMonitorGUI.getElements();
-		for (var i = page * 4; i < page * 4 + craftingMonitorData.slots; i++) {
-		var a = i - (page * 4);
+		for (var i = 0; i < craftingMonitorData.slots; i++) {
+		var a = i;
 		var item = _data[i] || [{ id: 0, data: 0}, '', '', null];
 		elements_.get("mitemCount" + a).setBinding('text', item[1]);
 		elements_.get("aitemCount" + a).setBinding('text', item[2] || '');
@@ -147,7 +153,8 @@ function buildCraftingMonitorPayload(tile, tasks, first, providingCraft, changed
 			results: mt.results || [],
 			elements: info ? info.buildMonitorElements(mt) : [],
 			totalSteps: mt.totalSteps || 0,
-			currentStep: mt.currentStep || 0
+			currentStep: mt.currentStep || 0,
+			cancelled: !!mt.cancelled
 		});
 	}
 	return {
