@@ -45,7 +45,7 @@ function createInventoryPushHandler(data) {
 			for(var i in data.slotsKeys){
 				var _slotName = data.slotsKeys[i];
 				var _slot = itemContainer.slots[_slotName];
-				if(_slot && (_slot.id == 0 || (_slot.id == item.id && _slot.data == item.data && (item.extra == _slot.extra || (item.extra && _slot.extra && fullExtraToString(item.extra) == fullExtraToString(_slot.extra)))))){
+				if(_slot && (_slot.id == 0 || (_slot.id == item.id && _slot.data == item.data && (item.extra === _slot.extra || (item.extra && _slot.extra && fullExtraToString(item.extra) == fullExtraToString(_slot.extra)))))){
 					item.extra = _slot.extra;
 					slotFounded = true;
 					itemContainer.setSlot(_slotName, item.id, _slot.count + count, item.data, item.extra || null);

@@ -208,8 +208,8 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 	useNetworkItemContainer: true,
 	created: function () {
         if(!this.blockSource)this.blockSource = BlockSource.getDefaultForDimension(this.dimension);
-		var controller;
-		while (controller = searchController(this, false, this.blockSource)) {
+		delete this.data.controller_coords;
+		while (searchController(this, false, this.blockSource)) {
 			for (var i in sides) {
 				var coordss = {};
 				coordss.x = this.x + sides[i][0];
@@ -239,6 +239,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 					}
 				}
 			}
+			delete this.data.controller_coords;
 		}
 	},
 	setActive: function(state, forced, preventRefreshModel){

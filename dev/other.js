@@ -25,7 +25,7 @@ const searchInventory = function (player, id, data, extra, list, reverse) {
 			var itemsList = [];
 			for (var i = 35; i >= 0; i--) {
 				var item = player.getInventorySlot(i);
-				if ((item.id == id || (id == -1 && item.id != 0)) && (item.data == data || data == -1) && (extra == -1 || item.extra == extra || (item.extra && extra && fullExtraToString(item.extra) == fullExtraToString(extra)))) {
+				if ((item.id == id || (id == -1 && item.id != 0)) && (item.data == data || data == -1) && (extra === -1 || item.extra === extra || (item.extra && extra && fullExtraToString(item.extra) == fullExtraToString(extra)))) {
 					itemsList.push({
 						id: item.id,
 						data: item.data,
@@ -38,7 +38,7 @@ const searchInventory = function (player, id, data, extra, list, reverse) {
 			return itemsList;
 		} else for (var i = 35; i >= 0; i--) {
 			var item = player.getInventorySlot(i);
-			if ((item.id == id || (id == -1 && item.id != 0)) && (item.data == data || data == -1) && (extra == -1 || item.extra == extra || (item.extra && extra && fullExtraToString(item.extra) == fullExtraToString(extra)))) {
+			if ((item.id == id || (id == -1 && item.id != 0)) && (item.data == data || data == -1) && (extra === -1 || item.extra === extra || (item.extra && extra && fullExtraToString(item.extra) == fullExtraToString(extra)))) {
 				return {
 					id: item.id,
 					data: item.data,
@@ -53,7 +53,7 @@ const searchInventory = function (player, id, data, extra, list, reverse) {
 			var itemsList = [];
 			for (var i = 0; i <= 35; i++) {
 				var item = player.getInventorySlot(i);
-				if ((item.id == id || (id == -1 && item.id != 0)) && (item.data == data || data == -1) && (extra == -1 || item.extra == extra || (item.extra && extra && fullExtraToString(item.extra) == fullExtraToString(extra)))) {
+				if ((item.id == id || (id == -1 && item.id != 0)) && (item.data == data || data == -1) && (extra === -1 || item.extra === extra || (item.extra && extra && fullExtraToString(item.extra) == fullExtraToString(extra)))) {
 					itemsList.push({
 						id: item.id,
 						data: item.data,
@@ -66,7 +66,7 @@ const searchInventory = function (player, id, data, extra, list, reverse) {
 			return itemsList;
 		} else for (var i = 0; i <= 35; i++) {
 			var item = player.getInventorySlot(i);
-			if ((item.id == id || (id == -1 && item.id != 0)) && (item.data == data || data == -1) && (extra == -1 || item.extra == extra || (item.extra && extra && fullExtraToString(item.extra) == fullExtraToString(extra)))) {
+			if ((item.id == id || (id == -1 && item.id != 0)) && (item.data == data || data == -1) && (extra === -1 || item.extra === extra || (item.extra && extra && fullExtraToString(item.extra) == fullExtraToString(extra)))) {
 				return {
 					id: item.id,
 					data: item.data,
@@ -239,8 +239,31 @@ const numberWithCommas = function(_num) {
     return _num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
+function getExtraJsonText(extra){
+	var json = extra.json;
+	if(typeof json == 'string') return json;
+	if(!json) return "";
+	var str = String(json);
+	if(str && str != '[object Object]' && str != '[object JavaObject]') return str;
+	var parsed = JSON.stringify(json);
+	return parsed == undefined ? "" : parsed;
+}
+
+function getExtraUidSuffix(extra){
+	if(typeof extra.getValue == 'function') return extra.getValue();
+	if(extra.asJson && typeof extra.asJson == 'function') return String(extra.asJson());
+	if(extra.json) return getExtraJsonText(extra);
+	var str = "";
+	try {
+		str = String(extra);
+	} catch(e) {}
+	if(str && str != '[object Object]') return str;
+	var json = JSON.stringify(extra);
+	return json == undefined ? 0 : json;
+}
+
 function getItemUid(item){
-	var extra = item.extra ? item.extra.getValue() : 0;
+	var extra = item.extra ? getExtraUidSuffix(item.extra) : 0;
 	return item.id + '_' + item.data + (extra ? '_' + extra : '');
 }
 
@@ -255,6 +278,16 @@ function cutNumber(num, forGrid){
 
 function fullExtraToString(extra, usenbt){
 	if(!extra) return "";
+	if(typeof extra.asJson != 'function'){
+		if(extra.json) return getExtraJsonText(extra);
+		var str = "";
+		try {
+			str = String(extra);
+		} catch(e) {}
+		if(str && str != '[object Object]') return str;
+		var json = JSON.stringify(extra);
+		return json == undefined ? "" : json;
+	}
 	var str = "";
 	if(jsonExtra = extra.asJson()){
 		if((_value = jsonExtra.opt('data')) && _value.length() == 0) jsonExtra.remove('data');

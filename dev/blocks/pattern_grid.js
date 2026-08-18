@@ -732,7 +732,7 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 			var itemData = item.data != -1 ? item.data : ((this.originalOnlyItemsMap()[item.id] || [0])[0]);
 			var itemUid = item.id + '_' + itemData;
 			var itemExtra = (this.originalOnlyItemsExtraMap()[itemUid] || [null])[0];
-			if (itemExtra) itemUid += '_' + itemExtra.getValue();
+			if (itemExtra) itemUid += '_' + getExtraUidSuffix(itemExtra);
 			if (smallItemsMap[itemUid])
 				smallItemsMap[itemUid].count++;
 			else

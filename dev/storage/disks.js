@@ -10,13 +10,16 @@ Saver.addSavesScope("RSDiskData",
 						itemsReplacing.push([i, getItemUid(elem.items[i]), elem.items[i]]);
 					}
 				}
-				for(var i in itemsReplacing){
+			for(var i in itemsReplacing){
+				if(itemsReplacing[i][0] != itemsReplacing[i][1]){
 					elem.items[itemsReplacing[i][1]] = itemsReplacing[i][2];
 					delete elem.items[itemsReplacing[i][0]];
 				}
 			}
+			}
 			return elem;
 		}) : [false];
+		if(Config.dev)Logger.Log('[RSDev] DiskData read: entries=' + DiskData.map(function(e){ return e ? Object.keys(e.items).length : 'x'; }).join(',') + ' len=' + DiskData.length, 'RefinedStorageDebug');
 	},
 
 	function save(){

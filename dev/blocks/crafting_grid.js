@@ -317,7 +317,7 @@ for (var izxc = 0; izxc < 4; izxc++) {
 			itemData = item.data != -1 ? item.data : ((originalItem = originalOnlyItemsMap[item.id]) ? originalItem[0] : 0);
 			var itemUid = item.id+'_'+itemData;
 			var itemExtra = (itemExtraExist = originalOnlyItemsExtraMap[itemUid]) ? itemExtraExist[0] : null;
-			if(itemExtra) itemUid += '_' + itemExtra.getValue();
+			if(itemExtra) itemUid += '_' + getExtraUidSuffix(itemExtra);
 			if(smallItemsMap[itemUid])
 				smallItemsMap[itemUid]++;
 			else
@@ -376,7 +376,7 @@ function craftingGridProvideCraft(tile, player){
 		var itemUid = item.id+'_'+itemData;
 		var itemExtra = (itemExtraExist = tile.originalOnlyItemsExtraMap()[itemUid]) ? itemExtraExist[0] : null;
 		if(itemExtra) {
-			itemUid += '_' + itemExtra.getValue();
+			itemUid += '_' + getExtraUidSuffix(itemExtra);
 		}
 		if(smallItemsMap[itemUid])
 			smallItemsMap[itemUid].count++;
@@ -391,7 +391,6 @@ function craftingGridProvideCraft(tile, player){
 	var result = javaRecipe.provideRecipeForPlayer(tile.container, player);
 	if(!result) return false;
 	if(result.data == -1)result.data = 0;
-	var fixedEntries = tile.container.asScriptableField();
 	var __PlayerActor = new PlayerActor(player);
 	for(var i in smallItemsMap){
 		var ndeleted = netFuncs.deleteItem(smallItemsMap[i], smallItemsMap[i].count, true);
@@ -401,7 +400,7 @@ function craftingGridProvideCraft(tile, player){
 	};
 	var cbkUsedFunc = function(){
 		for(var i = 0; i < 9; i++){
-			var slot_ = fixedEntries[i];
+			var slot_ = this.container.getSlot('WB_craft_slot' + i);
 			if(slot_.count != 0){
 				var answ = this.pushItem(slot_, slot_.count, true);
 				if(answ != 0){

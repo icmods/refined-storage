@@ -296,7 +296,7 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 		});
 	},
 	post_setActive: function(state){
-		if(this.data.NETWORK_ID != "f")RSNetworks[this.data.NETWORK_ID].info.updateItems();
+		if(this.data.NETWORK_ID != "f")requestNetworkUpdateItems(RSNetworks[this.data.NETWORK_ID].info);
 	},
 	click: function (id, count, data, coords, player, extra) {
 		if (Entity.getSneaking(player)) return false;
@@ -367,7 +367,7 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 		}
 		if(this.data.disks != disks || this.data.storage != storage || this.data.stored != stored) {
 			if(this.data.disks != disks){
-				if(this.isWorkAllowed() && RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID].info)RSNetworks[this.data.NETWORK_ID].info.updateItems();
+				if(this.isWorkAllowed() && RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID].info)requestNetworkUpdateItems(RSNetworks[this.data.NETWORK_ID].info);
 				if(RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID].info)RSNetworks[this.data.NETWORK_ID].info.netMapDirty = true;
 			}
 			this.networkData.putString('slots', JSON.stringify(diskDatas));
@@ -385,9 +385,9 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 		return;
 	},
 	post_update_network: function(net_id){
-		if(RSNetworks && RSNetworks[this.data.LAST_NETWORK_ID] && RSNetworks[this.data.LAST_NETWORK_ID].info)RSNetworks[this.data.LAST_NETWORK_ID].info.updateItems();
+		if(RSNetworks && RSNetworks[this.data.LAST_NETWORK_ID] && RSNetworks[this.data.LAST_NETWORK_ID].info)requestNetworkUpdateItems(RSNetworks[this.data.LAST_NETWORK_ID].info);
 		if(this.data.iinit && this.isWorkAllowed()){
-			RSNetworks[this.data.NETWORK_ID].info.updateItems();
+			requestNetworkUpdateItems(RSNetworks[this.data.NETWORK_ID].info);
 			this.data.iinit = false;
 		}
 	},

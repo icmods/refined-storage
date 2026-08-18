@@ -16,6 +16,20 @@ function getStorageProvider(blockId) {
 	return StorageProviders[String(blockId)] || null;
 }
 
+var _pendingUpdateItems = {};
+
+function requestNetworkUpdateItems(info) {
+	if (info && info.net_id != 'f') _pendingUpdateItems[info.net_id] = info;
+}
+
+Callback.addCallback("tick", function () {
+	for (var id in _pendingUpdateItems) {
+		var info = _pendingUpdateItems[id];
+		delete _pendingUpdateItems[id];
+		if (RSNetworks[id] && RSNetworks[id].info === info) info.updateItems();
+	}
+});
+
 var NetworkInfo = {
 	create: function(_data, controllerTile, netId) {
 		var controllerRef = { tile: controllerTile };
@@ -29,6 +43,7 @@ var NetworkInfo = {
 			just_items_map_extra: {},
 			items_map: [],
 			items: [],
+			itemsIndex: {},
 			openedGrids: [],
 			storage: 0,
 			stored: 0,
@@ -262,10 +277,21 @@ var NetworkInfo = {
 				_RS._emit("storageUpdated", {netId: this.net_id});
 			},
 			updateItems: function(){
-				var diskDrives = searchBlocksInNetwork(this.net_id, BlockID['diskDrive']);
+				var wanted = {};
+				wanted[BlockID['diskDrive']] = true;
+				for (var pid in StorageProviders) wanted[Number(pid)] = true;
+				var byId = {};
+				for (var key in RSNetworks[this.net_id]) {
+					var entry = RSNetworks[this.net_id][key];
+					if (entry && entry.id != null && wanted[entry.id]) {
+						if (!byId[entry.id]) byId[entry.id] = [];
+						byId[entry.id].push(entry);
+					}
+				}
 				var disk_map = [];
 				var items_map = [];
 				var items = [];
+				var itemsIndexMap = {};
 				var storage = 0;
 				var stored = 0;
 				var just_items_map = {};
@@ -277,10 +303,12 @@ var NetworkInfo = {
 					for(var s in disk_data.items){
 						var diskItem = disk_data.items[s];
 						var itemUid = getItemUid(diskItem);
-						var index;
-						if((index = items_map.indexOf(itemUid)) != -1){
+						if(Config.dev && diskItem.extra)Logger.Log('[RSDev] merge uid=' + itemUid + ' extraKind=' + (typeof diskItem.extra.getValue == 'function' ? 'real' : (diskItem.extra.json ? 'json' : 'plain')), 'RefinedStorageDebug');
+						var index = itemsIndexMap[itemUid];
+						if(index != undefined){
 							items[index].count += diskItem.count;
 						} else {
+							itemsIndexMap[itemUid] = items.length;
 							items.push(Object.assign({}, diskItem));
 							items_map.push(itemUid);
 						}
@@ -298,17 +326,18 @@ var NetworkInfo = {
 						}
 					}
 				};
+				var diskDrives = byId[BlockID['diskDrive']] || [];
 				for(var i in diskDrives){
 					var tile = World.getTileEntity(diskDrives[i].coords.x, diskDrives[i].coords.y, diskDrives[i].coords.z, controllerRef.tile.blockSource);
 					if(!tile || !tile.data.isActive) continue;
 					var newDiskData = [];
 					for (var k = 0; k < 8; k++) {
 						var item = tile.container.getSlot('slot' + k);
-					if (!Disk.items[item.id]) continue;
-					if (item.data == 0) continue;
-					if (seenDiskData[item.data]) continue;
-					seenDiskData[item.data] = true;
-					var disk_data = Disk.getDiskData(item);
+						if (!Disk.items[item.id]) continue;
+						if (item.data == 0) continue;
+						if (seenDiskData[item.data]) continue;
+						seenDiskData[item.data] = true;
+						var disk_data = Disk.getDiskData(item);
 						mergeStorageEntry(disk_data);
 						newDiskData.push(disk_data);
 					}
@@ -317,7 +346,7 @@ var NetworkInfo = {
 				}
 				for(var providerBlockId in StorageProviders){
 					var provider = StorageProviders[providerBlockId];
-					var providerTiles = searchBlocksInNetwork(this.net_id, Number(providerBlockId));
+					var providerTiles = byId[Number(providerBlockId)] || [];
 					for(var pt = 0; pt < providerTiles.length; pt++){
 						var providerTile = World.getTileEntity(providerTiles[pt].coords.x, providerTiles[pt].coords.y, providerTiles[pt].coords.z, controllerRef.tile.blockSource);
 						if(!providerTile || !providerTile.data || !providerTile.data.isActive) continue;
@@ -340,6 +369,7 @@ var NetworkInfo = {
 				this.disk_map = disk_map;
 				this.items_map = items_map;
 				this.items = items;
+				this.itemsIndex = itemsIndexMap;
 				this.storage = storage;
 				this.stored = stored;
 				this.just_items_map = just_items_map;
@@ -358,6 +388,7 @@ var NetworkInfo = {
 				}
 				if(!this.itemCanBePushed(item, count)) return count;
 				var itemUid = getItemUid(item);
+				if(Config.dev && item.extra)Logger.Log('[RSDev] pushItem ' + item.id + ':' + item.data + ' uid=' + itemUid, 'RefinedStorageDebug');
 				var deleteListeners = [];
 				for(var i in this.itemAddListeners){
 					if(!this.itemAddListeners[i]) continue;
@@ -367,14 +398,16 @@ var NetworkInfo = {
 				}
 				for(var i = deleteListeners.length - 1; i >= 0; i--) this.itemAddListeners.splice(deleteListeners[i], 1);
 				if(count <= 0) return 0;
-				var index = this.items_map.indexOf(itemUid);
+				var index = this.itemsIndex[itemUid];
+				if(index == undefined) index = -1;
 				var itemUidExtra = item.id+'_'+item.data;
 				if(item.extra && index == -1 && this.just_items_map_extra[itemUidExtra])for(var iasd in this.just_items_map_extra[itemUidExtra]){
 					var ___extra = this.just_items_map_extra[itemUidExtra][iasd];
 					if(fullExtraToString(item.extra, true) == fullExtraToString(___extra, true)){
 						item.extra = ___extra;
 						itemUid = getItemUid(item);
-						index = this.items_map.indexOf(itemUid);
+						index = this.itemsIndex[itemUid];
+						if(index == undefined) index = -1;
 						break;
 					}
 				}
@@ -420,6 +453,7 @@ var NetworkInfo = {
 						extra: item.extra
 					});
 					this.items_map.push(itemUid);
+					this.itemsIndex[itemUid] = this.items.length - 1;
 					if(this.just_items_map[item.id]){
 						this.just_items_map[item.id].push(item.data);
 					} else if(!this.just_items_map[item.id]){
@@ -489,8 +523,8 @@ var NetworkInfo = {
 					item.data = this.just_items_map[item.id][0];
 				}
 				var itemUid = getItemUid(item);
-				var iItem;
-				if((iItem = this.items_map.indexOf(itemUid)) != -1){
+				var iItem = this.itemsIndex[itemUid];
+				if(iItem != undefined){
 					var have = this.items[iItem] ? this.items[iItem].count : 0;
 					return have >= count;
 				} else {
@@ -502,7 +536,7 @@ var NetworkInfo = {
 				if(!this.itemCanBeDeleted(item, count)) return count;
 				if((!item.data && item.data != 0) || item.data == -1) item.data = this.just_items_map[item.id][0];
 				if(item.extra === undefined)item.extra = null;
-				if((!item.extra && item.extra != null) || item.extra == -1) item.extra = this.just_items_map_extra[item.id+'_'+item.data][0] || null;
+				if((!item.extra && item.extra != null) || item.extra === -1) item.extra = this.just_items_map_extra[item.id+'_'+item.data][0] || null;
 				var itemUid = getItemUid(item);
 				var deleteListeners = [];
 				for(var i in this.itemRemoveListeners){
@@ -513,14 +547,16 @@ var NetworkInfo = {
 				}
 				for(var i = deleteListeners.length - 1; i >= 0; i--) this.itemRemoveListeners.splice(deleteListeners[i], 1);
 				if(count <= 0) return 0;
-				var num = this.items_map.indexOf(itemUid);
+				var num = this.itemsIndex[itemUid];
+				if(num == undefined) num = -1;
 				var itemUidExtra = item.id+'_'+item.data;
 				if(item.extra && num == -1 && this.just_items_map_extra[itemUidExtra])for(var iasd in this.just_items_map_extra[itemUidExtra]){
 					var ___extra = this.just_items_map_extra[itemUidExtra][iasd];
 					if(fullExtraToString(item.extra, true) == fullExtraToString(___extra, true)){
 						item.extra = ___extra;
 						itemUid = getItemUid(item);
-						num = this.items_map.indexOf(itemUid);
+						num = this.itemsIndex[itemUid];
+						if(num == undefined) num = -1;
 						break;
 					}
 				}
@@ -529,6 +565,9 @@ var NetworkInfo = {
 					if(count >= this.items[num].count){
 						this.items_map.splice(num, 1);
 						this.items.splice(num, 1);
+						var newItemsIndex = {};
+						for(var _mi = 0; _mi < this.items_map.length; _mi++) newItemsIndex[this.items_map[_mi]] = _mi;
+						this.itemsIndex = newItemsIndex;
 						var justIMap;
 				if((justIMap = this.just_items_map[item.id].indexOf(item.data)) != -1)this.just_items_map[item.id].splice(justIMap, 1);
 						if(this.just_items_map[item.id].length == 0)delete this.just_items_map[item.id];
