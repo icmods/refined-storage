@@ -270,6 +270,7 @@ var NetworkInfo = {
 				var stored = 0;
 				var just_items_map = {};
 				var just_items_map_extra = {};
+				var seenDiskData = {};
 				var mergeStorageEntry = function(disk_data) {
 					storage += disk_data.storage;
 					stored += disk_data.items_stored;
@@ -305,6 +306,8 @@ var NetworkInfo = {
 						var item = tile.container.getSlot('slot' + k);
 					if (!Disk.items[item.id]) continue;
 					if (item.data == 0) continue;
+					if (seenDiskData[item.data]) continue;
+					seenDiskData[item.data] = true;
 					var disk_data = Disk.getDiskData(item);
 						mergeStorageEntry(disk_data);
 						newDiskData.push(disk_data);

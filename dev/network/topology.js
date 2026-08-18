@@ -6,39 +6,56 @@ function isChunkLoadedAtSafe(blockSource, x, y, z) {
 	return true;
 }
 
-const searchController = function (_coords, _self, _blockSource) {
+const searchController = function (_coords, _self, _blockSource, _out) {
 	if(!_blockSource) _blockSource = _coords.blockSource;
 	if(!_blockSource) return false;
-	var outCoords = [];
-	outCoords.push(cts(_coords));
+	if(_out) _out.incomplete = false;
 	var s = false;
-	function _search(coords) {
-		var coordss = {};
-		for (var i in sides) {
-			coordss.x = coords.x + sides[i][0];
-			coordss.y = coords.y + sides[i][1];
-			coordss.z = coords.z + sides[i][2];
-			if (outCoords.indexOf(cts(coordss)) != -1) continue;
-			outCoords.push(cts(coordss));
-			if (!isChunkLoadedAtSafe(_blockSource, coordss.x, coordss.y, coordss.z)) continue;
-			var bck = _blockSource.getBlock(coordss.x, coordss.y, coordss.z);
-			if (bck.id == BlockID.RS_controller) {
-				s = coordss;
-				return;
-			} else if (RS_blocks.indexOf(bck.id) != -1) {
-				_search(coordss);
-			}
-		}
-	}
 	if(_self){
-		if (!isChunkLoadedAtSafe(_blockSource, _coords.x, _coords.y, _coords.z)) return false;
+		if (!isChunkLoadedAtSafe(_blockSource, _coords.x, _coords.y, _coords.z)) {
+			if(_out) _out.incomplete = true;
+			return false;
+		}
 		var bck = _blockSource.getBlock(_coords.x, _coords.y, _coords.z);
 		if (bck.id == BlockID.RS_controller) {
-			s = _coords;
-			return s;
+			return {x: _coords.x, y: _coords.y, z: _coords.z};
 		}
 	}
-	_search(_coords);
+	var hint = _coords.data ? _coords.data.controller_coords : _coords.controller_coords;
+	if (hint && hint.x != undefined && !(hint.x == 0 && hint.y == 0 && hint.z == 0)) {
+		if (isChunkLoadedAtSafe(_blockSource, hint.x, hint.y, hint.z)) {
+			var hintBlock = _blockSource.getBlock(hint.x, hint.y, hint.z);
+			if (hintBlock.id == BlockID.RS_controller) return {x: hint.x, y: hint.y, z: hint.z};
+		}
+	}
+	var visited = {};
+	visited[cts(_coords)] = true;
+	var stack = [{x: _coords.x, y: _coords.y, z: _coords.z}];
+	while (stack.length > 0) {
+		var coords = stack.pop();
+		for (var ri = 5; ri >= 0; ri--) {
+			var coordss = {};
+			coordss.x = coords.x + sides[ri][0];
+			coordss.y = coords.y + sides[ri][1];
+			coordss.z = coords.z + sides[ri][2];
+			var key = cts(coordss);
+			if (visited[key]) continue;
+			visited[key] = true;
+			if (!isChunkLoadedAtSafe(_blockSource, coordss.x, coordss.y, coordss.z)) {
+				if(_out) _out.incomplete = true;
+				continue;
+			}
+			var bck = _blockSource.getBlock(coordss.x, coordss.y, coordss.z);
+			if (bck.id == BlockID.RS_controller) {
+				s = {x: coordss.x, y: coordss.y, z: coordss.z};
+				break;
+			} else if (RS_blocks.indexOf(bck.id) != -1) {
+				stack.push({x: coordss.x, y: coordss.y, z: coordss.z});
+			}
+		}
+		if (s) break;
+	}
+	if(s && _coords.data) _coords.data.controller_coords = {x: s.x, y: s.y, z: s.z};
 	return s;
 }
 
@@ -52,52 +69,11 @@ const searchController_net = function (net_id) {
 function set_net_for_blocks(_coords, net_id, _self, _first, _defaultActive, _forced, _func) {
 	var blockSource_ = _coords.blockSource;
 	if (!blockSource_) return false;
-	var outCoords = [];
+	var visited = {};
 	var incomplete = false;
-	outCoords.push(cts(_coords));
+	visited[cts(_coords)] = true;
 	var cableDeleting = [];
-	function _search(coords) {
-		for (var i in sides) {
-			var coordss = {};
-			coordss.x = coords.x + sides[i][0];
-			coordss.y = coords.y + sides[i][1];
-			coordss.z = coords.z + sides[i][2];
-			if (outCoords.indexOf(cts(coordss)) != -1) continue;
-			outCoords.push(cts(coordss));
-			if (!isChunkLoadedAtSafe(blockSource_, coordss.x, coordss.y, coordss.z)) continue;
-			var bck = blockSource_.getBlock(coordss.x, coordss.y, coordss.z);
-			var isRsBlock = (RS_blocks.indexOf(bck.id) != -1);
-			if (bck.id == BlockID.RS_controller) {
-				if(net_id == 'f') continue;
-				if(InnerCore_pack.packVersionCode < 120) blockSource_.destroyBlock(coordss.x, coordss.y, coordss.z, true);
-				else blockSource_.breakBlock(coordss.x, coordss.y, coordss.z, true);
-                if(InnerCore_pack.packVersionCode <= 110)Block.onBlockDestroyed(coordss, bck, false, Player.get());
-				continue;
-			} else if (bck.id == BlockID.RS_cable) {
-				if(net_id != 'f' && RSNetworks[net_id]){
-					RSNetworks[net_id][cts(coordss)] = {
-						id: BlockID.RS_cable,
-						coords: coordss,
-						isActive: true
-					}
-				} else {
-					cableDeleting.push(cts(coordss));
-				}
-				_search(coordss);
-			} else if (isRsBlock) {
-				var tile = World.getTileEntity(coordss.x, coordss.y, coordss.z, blockSource_);
-				if (tile) {
-					if(!_forced && net_id == 'f' && !compareCoords(_coords, tile.data.controller_coords || {})) continue;
-					tile.data.controller_coords = {x: _coords.x, y: _coords.y, z: _coords.z};
-					tile.update_network(net_id, _first || (_defaultActive != undefined));
-					if(_defaultActive)tile.setActive(_defaultActive);
-				} else {
-					incomplete = true;
-				}
-				_search(coordss);
-			}
-		}
-	}
+	var stack = [];
 	if(_self){
 		if (!isChunkLoadedAtSafe(blockSource_, _coords.x, _coords.y, _coords.z)) return true;
 		var bck = {id: blockSource_.getBlockId(_coords.x, _coords.y, _coords.z)};
@@ -124,8 +100,54 @@ function set_net_for_blocks(_coords, net_id, _self, _first, _defaultActive, _for
 				}
 			}
 		}
+		stack.push({x: _coords.x, y: _coords.y, z: _coords.z});
+	} else {
+		stack.push({x: _coords.x, y: _coords.y, z: _coords.z});
 	}
-	_search(_coords);
+	while (stack.length > 0) {
+		var coords = stack.pop();
+		for (var ri = 5; ri >= 0; ri--) {
+			var coordss = {};
+			coordss.x = coords.x + sides[ri][0];
+			coordss.y = coords.y + sides[ri][1];
+			coordss.z = coords.z + sides[ri][2];
+			var key = cts(coordss);
+			if (visited[key]) continue;
+			visited[key] = true;
+			if (!isChunkLoadedAtSafe(blockSource_, coordss.x, coordss.y, coordss.z)) continue;
+			var bck = blockSource_.getBlock(coordss.x, coordss.y, coordss.z);
+			var isRsBlock = (RS_blocks.indexOf(bck.id) != -1);
+			if (bck.id == BlockID.RS_controller) {
+				if(net_id == 'f') continue;
+				if(InnerCore_pack.packVersionCode < 120) blockSource_.destroyBlock(coordss.x, coordss.y, coordss.z, true);
+				else blockSource_.breakBlock(coordss.x, coordss.y, coordss.z, true);
+                if(InnerCore_pack.packVersionCode <= 110)Block.onBlockDestroyed(coordss, bck, false, Player.get());
+				continue;
+			} else if (bck.id == BlockID.RS_cable) {
+				if(net_id != 'f' && RSNetworks[net_id]){
+					RSNetworks[net_id][cts(coordss)] = {
+						id: BlockID.RS_cable,
+						coords: coordss,
+						isActive: true
+					}
+				} else {
+					cableDeleting.push(cts(coordss));
+				}
+				stack.push({x: coordss.x, y: coordss.y, z: coordss.z});
+			} else if (isRsBlock) {
+				var tile = World.getTileEntity(coordss.x, coordss.y, coordss.z, blockSource_);
+				if (tile) {
+					if(!_forced && net_id == 'f' && !compareCoords(_coords, tile.data.controller_coords || {})) continue;
+					tile.data.controller_coords = {x: _coords.x, y: _coords.y, z: _coords.z};
+					tile.update_network(net_id, _first || (_defaultActive != undefined));
+					if(_defaultActive)tile.setActive(_defaultActive);
+				} else {
+					incomplete = true;
+				}
+				stack.push({x: coordss.x, y: coordss.y, z: coordss.z});
+			}
+		}
+	}
 	if(cableDeleting.length > 0){
 		for(var i in RSNetworks){
 			for(var k in cableDeleting){
@@ -153,7 +175,19 @@ function checkAndSetNetOnCoords(coords, update){
 	if (!coords.blockSource) return;
 	var controllerCoords;
 	var tile;
-	if(!(controllerCoords = searchController(coords, true)))set_net_for_blocks(coords, 'f', true, false, undefined, true);
+	var _out = {incomplete: false};
+	if(!(controllerCoords = searchController(coords, true, undefined, _out))){
+		if(_out.incomplete){
+			var blockedTile = World.getTileEntity(coords.x, coords.y, coords.z, coords.blockSource);
+			var blockedNet = blockedTile && blockedTile.data ? blockedTile.data.NETWORK_ID : 'f';
+			if(blockedNet != 'f' && RSNetworks[blockedNet] && RSNetworks[blockedNet].info){
+				RSNetworks[blockedNet].info.incomplete = true;
+				RSScheduleNetworkRebuild();
+			}
+			return;
+		}
+		set_net_for_blocks(coords, 'f', true, false, undefined, true);
+	}
 	if(update && controllerCoords && (tile = World.getTileEntity(controllerCoords.x, controllerCoords.y, controllerCoords.z, coords.blockSource)))tile.updateControllerNetwork();
 }
 

@@ -5,6 +5,16 @@ function computeNetMap(netId, blockSource, ignoreIsActive) {
 		if (!RSNetworks[netId][i] || i == "info" || RSNetworks[netId][i].id == BlockID.RS_controller || (!RSNetworks[netId][i].isActive && !ignoreIsActive)) continue;
 		var networkTile = RSNetworks[netId][i];
 		var id_ = networkTile.id;
+		if (id_ == BlockID.RS_cable) {
+			var cableUsage = EnergyUse[BlockID.RS_cable] || 0;
+			usage += cableUsage;
+			if(!net_map[String(id_)])
+				net_map[String(id_)] = {id: id_, energy_use: 0, count: 1};
+			else
+				net_map[String(id_)].count++;
+			net_map[String(id_)].energy_use += cableUsage;
+			continue;
+		}
 		if (id_ == BlockID.diskDrive) {
 			var tile = World.getTileEntity(networkTile.coords.x, networkTile.coords.y, networkTile.coords.z, blockSource);
 			if (!tile) continue;
