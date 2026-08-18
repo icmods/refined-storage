@@ -303,9 +303,9 @@ var NetworkInfo = {
 					var newDiskData = [];
 					for (var k = 0; k < 8; k++) {
 						var item = tile.container.getSlot('slot' + k);
-						if (!Disk.items[item.id]) continue;
-						if (item.data == 0) item.data = DiskData.length;
-						var disk_data = Disk.getDiskData(item);
+					if (!Disk.items[item.id]) continue;
+					if (item.data == 0) continue;
+					var disk_data = Disk.getDiskData(item);
 						mergeStorageEntry(disk_data);
 						newDiskData.push(disk_data);
 					}

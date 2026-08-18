@@ -324,7 +324,10 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 				diskDatas.push({id: 0, data: 0, storage: 0, items_stored: 0});
 				continue;
 			}
-			if (item.data == 0) item.data = DiskData.length;
+			if (item.data == 0) {
+				diskDatas.push({id: 0, data: 0, storage: 0, items_stored: 0});
+				continue;
+			}
 			var disk_data = Disk.getDiskData(item);
 			diskDatas.push({id: item.id, data: item.data, storage: disk_data.storage + "", items_stored: disk_data.items_stored});
 		}
@@ -349,7 +352,10 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 				diskDatas.push({id: 0, data: 0, storage: 0, items_stored: 0});
 				continue;
 			}
-			if (item.data == 0) item.data = DiskData.length;
+			if (item.data == 0) {
+				item.data = DiskData.length;
+				this.container.setSlot('slot' + i, item.id, item.count, item.data, item.extra);
+			}
 			var disk_data = Disk.getDiskData(item);
 			diskDatas.push({id: item.id, data: item.data, storage: disk_data.storage + "", items_stored: disk_data.items_stored});
 			var diskPercent = disk_data.items_stored/disk_data.storage;
