@@ -3,6 +3,11 @@ Block.createBlockWithRotation("RS_wireless_transmitter", [
 	{
 		name: "Wireless Transmitter",
 		texture: [
+			["wireless_transmitter", 0],
+			["wireless_transmitter", 0],
+			["wireless_transmitter", 0],
+			["wireless_transmitter", 0],
+			["wireless_transmitter", 0],
 			["wireless_transmitter", 0]
 		],
 		inCreative: true
@@ -205,11 +210,13 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_wireless_transmitter, {
 		});
 	},
 	refreshModel: function () {
+		if(!this.networkEntity) return;
 		this.sendPacket("refreshModel", { isActive: this.data.isActive, coords: { x: this.x, y: this.y, z: this.z, dimension: this.dimension } });
 	},
 	getRange: function () {
-		var count = this.data.upgrades.RSRangeUpgrade || 0;
-		return Config.wirelessTransmitter.baseRange + count * Config.wirelessTransmitter.rangePerUpgrade;
+		var properties = rsGetTransmitterProperties(this);
+		if (properties.infiniteRange) return Infinity;
+		return properties.range;
 	},
 	click: function (id, count, data, coords, player, extra) {
 		var client = Network.getClientForPlayer(player);
@@ -222,10 +229,11 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_wireless_transmitter, {
 	refreshGui: function (first, client, updateFilters, screen, updateCrafts) {
 		screen = screen || 'grid';
 		if (screen == 'main') {
+			var range = this.getRange();
 			var _data = {
 				screen: screen,
 				redstone_mode: this.data.redstone_mode,
-				rangeText: Translation.translate('Range') + ': ' + this.getRange() + ' ' + Translation.translate('block(s)')
+				rangeText: Translation.translate('Range') + ': ' + (range === Infinity ? '∞' : range + ' ' + Translation.translate('block(s)'))
 			};
 			if (client) this.container.sendEvent(client, "openGui", _data);
 			else this.container.sendEvent("openGui", _data);

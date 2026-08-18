@@ -24,20 +24,21 @@ var _RS = {
 		searchController: function(coords, self) { return searchController(coords, self); },
 		searchBlocks: function(netId, blockId) { return searchBlocksInNetwork(netId, blockId); },
 		getController: function(netId) { return searchController_net(netId); },
+		refreshItems: function(netId) { var info = RSNetworks[netId] && RSNetworks[netId].info; if (info) info.updateItems(); },
 		constructCraft: function(netId, item, count) { return RSNetworks[netId] && RSNetworks[netId].info.constructCraft(item, count || 1); },
 		provideCraft: function(netId, tree) { var info = RSNetworks[netId] && RSNetworks[netId].info; if (info) info.provideCraft(tree); },
 		requestCraft: function(netId, item, count) {
 			var info = RSNetworks[netId] && RSNetworks[netId].info;
 			if (!info) return false;
 			var now = World.getThreadTime();
-			if (info.isRequestThrottled('api', now)) return false;
+			if (info.isRequestThrottled('api:' + netId, now)) return false;
 			var result = info.constructCraft(item, count || 1);
 			if (result && result.deduped) return true;
 			if (result && result.craftable) {
 				info.provideCraft(result);
 				return true;
 			}
-			info.markRequestFailed('api', now);
+			info.markRequestFailed('api:' + netId, now);
 			return false;
 		},
 		keepStock: function(netId, item, minimum) {
@@ -243,6 +244,26 @@ var _RS = {
 
 	config: {
 		get: function() { return Config; }
+	},
+
+	storage: {
+		registerProvider: function(blockId, provider) { return registerStorageProvider(blockId, provider); },
+		getProvider: function(blockId) { return getStorageProvider(blockId); }
+	},
+
+	registerStorageProvider: function(blockId, provider) { return registerStorageProvider(blockId, provider); },
+
+	wireless: {
+		open: function(cfg) { return rsOpenWirelessTerminal(cfg); },
+		drain: function(tile, playerUid, amount, itemId, capacity, sessionMap, outOfEnergyMsg, closedCallback) { return rsDrainWirelessItem(tile, playerUid, amount, itemId, capacity, sessionMap, outOfEnergyMsg, closedCallback); },
+		bind: function(itemId, capacity, coords, playerUid, blockSource) { return rsBindWirelessItem(itemId, capacity, coords, playerUid, blockSource); },
+		getProperties: function(transmitter) { return rsGetTransmitterProperties(transmitter); },
+		findNearestTransmitter: function(playerUid, netId, crossDimension) { return rsFindNearestTransmitter(playerUid, netId, crossDimension); },
+		getSession: function(playerUid) {
+			var session = PhantomSessions.get(playerUid);
+			if (!session || !session.tile || session.tile.data.removed) return null;
+			return { tile: session.tile, netId: session.netId, screen: session.tile.data.screen };
+		}
 	},
 
 	getBlocks: function() { return RS_blocks; },

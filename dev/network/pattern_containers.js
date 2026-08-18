@@ -3,6 +3,11 @@ var PatternContainerRegistry = {
 	entries: {},
 	coordsIndex: {},
 
+	reset: function() {
+		this.entries = {};
+		this.coordsIndex = {};
+	},
+
 	_coordsKey: function(dimension, coordsId) {
 		return dimension + ':' + coordsId;
 	},
@@ -57,6 +62,7 @@ var PatternContainerRegistry = {
 			var entry = this.entries[key];
 			if (!entry) continue;
 			if (dimension !== undefined && dimension !== null && entry.dimension !== dimension) continue;
+			if (blockSource && !isChunkLoadedAtSafe(blockSource, entry.coords.x, entry.coords.y, entry.coords.z)) continue;
 			var tile = World.getTileEntity(entry.coords.x, entry.coords.y, entry.coords.z, blockSource);
 			if (!tile || !tile.data) {
 				deadKeys.push(key);

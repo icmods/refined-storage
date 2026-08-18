@@ -1,7 +1,24 @@
 var REQUEST_THROTTLE_TICKS = 60;
 
+var StorageProviders = {};
+
+// Contract: provider.getEntries(tile) must return an array of LIVE references to the addon's persisted
+// storage entries, shaped like DiskData entries: { storage: number, items_stored: number,
+// items: { [getItemUid(item)]: { id, data, count, extra } } }. Counts must be finite numbers.
+// Entries are mutated in place by pushItem/deleteItem and must survive updateItems rebuilds.
+function registerStorageProvider(blockId, provider) {
+	if (!blockId || !provider || typeof provider.getEntries !== 'function') return false;
+	StorageProviders[String(blockId)] = provider;
+	return true;
+}
+
+function getStorageProvider(blockId) {
+	return StorageProviders[String(blockId)] || null;
+}
+
 var NetworkInfo = {
 	create: function(_data, controllerTile, netId) {
+		var controllerRef = { tile: controllerTile };
 		return {
 			net_id: netId,
 			craftsIDS: {},
@@ -20,6 +37,10 @@ var NetworkInfo = {
 			providingCrafts: [],
 			craftingTasks: [],
 			netMapDirty: false,
+			incomplete: false,
+			updateControllerTile: function(tile) {
+				controllerRef.tile = tile;
+			},
 			monitorListeners: [],
 			lastFailedRequestTick: {},
 			isRequestThrottled: function(sourceKey, now) {
@@ -232,7 +253,7 @@ var NetworkInfo = {
 			refreshOpenedGrids: function(_full){
 				for(var i in this.openedGrids){
 					var __coords = this.openedGrids[i];
-					var tile = World.getTileEntity(__coords.x, __coords.y, __coords.z, controllerTile.blockSource);
+					var tile = World.getTileEntity(__coords.x, __coords.y, __coords.z, controllerRef.tile.blockSource);
 					if(tile && tile.data){
 						tile.data.fullRefreshPage = _full;
 						tile.data.refreshCurPage = true;
@@ -249,8 +270,35 @@ var NetworkInfo = {
 				var stored = 0;
 				var just_items_map = {};
 				var just_items_map_extra = {};
+				var mergeStorageEntry = function(disk_data) {
+					storage += disk_data.storage;
+					stored += disk_data.items_stored;
+					for(var s in disk_data.items){
+						var diskItem = disk_data.items[s];
+						var itemUid = getItemUid(diskItem);
+						var index;
+						if((index = items_map.indexOf(itemUid)) != -1){
+							items[index].count += diskItem.count;
+						} else {
+							items.push(Object.assign({}, diskItem));
+							items_map.push(itemUid);
+						}
+						if(just_items_map[diskItem.id]){
+							just_items_map[diskItem.id].push(diskItem.data);
+						} else if(!just_items_map[diskItem.id]){
+							just_items_map[diskItem.id] = [diskItem.data];
+						}
+						if(diskItem.extra){
+							if(just_items_map_extra[diskItem.id+'_'+diskItem.data] && just_items_map_extra[diskItem.id+'_'+diskItem.data].indexOf(diskItem.extra) == -1){
+								just_items_map_extra[diskItem.id+'_'+diskItem.data].push(diskItem.extra);
+							} else if(!just_items_map_extra[diskItem.id+'_'+diskItem.data]){
+								just_items_map_extra[diskItem.id+'_'+diskItem.data] = [diskItem.extra];
+							}
+						}
+					}
+				};
 				for(var i in diskDrives){
-					var tile = World.getTileEntity(diskDrives[i].coords.x, diskDrives[i].coords.y, diskDrives[i].coords.z, controllerTile.blockSource);
+					var tile = World.getTileEntity(diskDrives[i].coords.x, diskDrives[i].coords.y, diskDrives[i].coords.z, controllerRef.tile.blockSource);
 					if(!tile || !tile.data.isActive) continue;
 					var newDiskData = [];
 					for (var k = 0; k < 8; k++) {
@@ -258,35 +306,33 @@ var NetworkInfo = {
 						if (!Disk.items[item.id]) continue;
 						if (item.data == 0) item.data = DiskData.length;
 						var disk_data = Disk.getDiskData(item);
-						storage += disk_data.storage;
-						stored += disk_data.items_stored;
-						for(var s in disk_data.items){
-							var diskItem = disk_data.items[s];
-							var itemUid = getItemUid(diskItem);
-							var index;
-				if((index = items_map.indexOf(itemUid)) != -1){
-								items[index].count += diskItem.count;
-							} else {
-								items.push(Object.assign({}, diskItem));
-								items_map.push(itemUid);
-							}
-							if(just_items_map[diskItem.id]){
-								just_items_map[diskItem.id].push(diskItem.data);
-							} else if(!just_items_map[diskItem.id]){
-								just_items_map[diskItem.id] = [diskItem.data];
-							}
-							if(diskItem.extra){
-								if(just_items_map_extra[diskItem.id+'_'+diskItem.data] && just_items_map_extra[diskItem.id+'_'+diskItem.data].indexOf(diskItem.extra) == -1){
-									just_items_map_extra[diskItem.id+'_'+diskItem.data].push(diskItem.extra);
-								} else if(!just_items_map_extra[diskItem.id+'_'+diskItem.data]){
-									just_items_map_extra[diskItem.id+'_'+diskItem.data] = [diskItem.extra];
-								}
-							}
-						}
+						mergeStorageEntry(disk_data);
 						newDiskData.push(disk_data);
 					}
 					if(newDiskData.length == 0) continue;
 					disk_map.push(newDiskData);
+				}
+				for(var providerBlockId in StorageProviders){
+					var provider = StorageProviders[providerBlockId];
+					var providerTiles = searchBlocksInNetwork(this.net_id, Number(providerBlockId));
+					for(var pt = 0; pt < providerTiles.length; pt++){
+						var providerTile = World.getTileEntity(providerTiles[pt].coords.x, providerTiles[pt].coords.y, providerTiles[pt].coords.z, controllerRef.tile.blockSource);
+						if(!providerTile || !providerTile.data || !providerTile.data.isActive) continue;
+						var entries;
+						try {
+							entries = provider.getEntries(providerTile);
+						} catch(err) {
+							if(Config.dev)Logger.Log('[StorageProvider] getEntries error at ' + providerBlockId + ': ' + err, 'RefinedStorageError');
+							continue;
+						}
+						if(!Array.isArray(entries)) continue;
+						for(var ei = 0; ei < entries.length; ei++){
+							var entry = entries[ei];
+							if(!entry || !entry.items || !isFinite(entry.storage) || !isFinite(entry.items_stored)) continue;
+							mergeStorageEntry(entry);
+							disk_map.push([entry]);
+						}
+					}
 				}
 				this.disk_map = disk_map;
 				this.items_map = items_map;
@@ -578,6 +624,7 @@ var NetworkInfo = {
 			this.notifyMonitorListeners();
 			if(Config.dev)Logger.Log('[CRAFT] Task ' + task.id + ' scheduled: ' + task.requestedCount + 'x ' + task.requestedUid, 'RefinedStorageDebug');
 			_RS._emit("taskAdded", {netId: this.net_id, task: {id: task.id, requestedUid: task.requestedUid, requestedCount: task.requestedCount}});
+			return task;
 		},
 			cancelTask: function(taskId) {
 				var task = this.getTask(taskId);
@@ -609,7 +656,7 @@ var NetworkInfo = {
 				return null;
 			},
 			provideCraft: function(_craft_) {
-				this.scheduleTask(_craft_);
+				return this.scheduleTask(_craft_);
 			}
 		};
 	}

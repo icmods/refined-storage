@@ -67,9 +67,18 @@ function rsDrainWirelessGrid(tile, playerUid, amount) {
 
 var rsWirelessGridLastOpen = {};
 
+function isWirelessSourceTile(tile) {
+	if (!tile || !tile.data) return false;
+	if (tile.data.phantom) return true;
+	if (tile.data.wirelessPlayers) { for (var uid in tile.data.wirelessPlayers) return true; }
+	if (tile.data.wirelessCraftingGridPlayers) { for (var uid in tile.data.wirelessCraftingGridPlayers) return true; }
+	if (tile.data.wirelessMonitorPlayers) { for (var uid in tile.data.wirelessMonitorPlayers) return true; }
+	return false;
+}
+
 function rsGetTransmitterProperties(transmitter) {
 	var properties = { range: Config.wirelessTransmitter.baseRange, infiniteRange: false, crossDimension: false };
-	var upgrades = transmitter.upgrades || {};
+	var upgrades = transmitter.upgrades || (transmitter.data && transmitter.data.upgrades) || {};
 	for (var nameID in upgrades) {
 		var count = upgrades[nameID] || 0;
 		if (count <= 0) continue;
@@ -142,6 +151,36 @@ function rsOpenWirelessTerminal(cfg) {
 	if (energy <= cfg.config.openUsage) return log(Translation.translate(cfg.noEnergyMsg));
 	var client = Network.getClientForPlayer(playerUid);
 	if (!client) return;
+	var phantom = null;
+	var session = PhantomSessions.get(playerUid);
+	if (session && session.tile && !session.tile.data.removed && session.netId == netId && TileEntity.isTileEntityLoaded(session.tile)) {
+		phantom = session.tile;
+		if (phantom.data.screen != cfg.screen) phantom.data.screen = cfg.screen;
+	} else {
+		if (session) PhantomSessions.remove(playerUid, session.tile);
+		phantom = spawnPhantom(playerUid, netId, cfg.screen, BlockSource.getDefaultForActor(playerUid));
+	}
+	if (phantom) {
+		if (!phantom.data.openedScreens) phantom.data.openedScreens = {};
+		phantom.data.openedScreens[playerUid] = cfg.screen;
+		phantom.data.wirelessConfig = cfg.config;
+		phantom.data.wirelessSessionMap = cfg.sessionMap;
+		phantom.data.wirelessItemId = cfg.itemId;
+		if (phantom.data[cfg.otherSessionMap]) delete phantom.data[cfg.otherSessionMap][playerUid];
+		if (cfg.screen != 'monitor') phantom.items();
+		if (phantom.__initialized) {
+			phantom.container.openFor(client, cfg.screen);
+			phantom.refreshGui(true, client, false, cfg.screen);
+		} else {
+			phantom.data.pendingOpen = {screen: cfg.screen};
+		}
+		if (!phantom.data[cfg.sessionMap]) phantom.data[cfg.sessionMap] = {};
+		phantom.data[cfg.sessionMap][playerUid] = true;
+		extra.putInt('energy', energy - cfg.config.openUsage);
+		if (RSChargeRegistry) slotItem.data = RSChargeRegistry.getDisplayData(energy - cfg.config.openUsage, cfg.config.capacity);
+		new PlayerActor(playerUid).setInventorySlot(slotItem.slot, slotItem.id, slotItem.count, slotItem.data, extra);
+		return;
+	}
 	var blockSource = crossDimension ? BlockSource.getDefaultForDimension(bindingDimension) : BlockSource.getDefaultForActor(playerUid);
 	var tile = World.getTileEntity(best.coords.x, best.coords.y, best.coords.z, blockSource);
 	if (!tile || !tile.container) return log(Translation.translate(cfg.noRangeMsg));

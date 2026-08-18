@@ -24,6 +24,7 @@ var CraftingScheduler = {
 					var ctidx = info.craftingTasks.indexOf(task);
 					if (ctidx != -1) info.craftingTasks.splice(ctidx, 1);
 					ti--;
+					_RS._emit("taskRemoved", {netId: info.net_id});
 				}
 				continue;
 			}
@@ -65,6 +66,7 @@ var CraftingScheduler = {
 		var containers = info.getPatternContainers(node.patternUid);
 		if ((!patternList || !patternList[0]) || containers.length === 0) {
 			node._lastTry = tick;
+			node._suspendSince = null;
 			if (node.missingSince == null) node.missingSince = tick;
 			else if (tick - node.missingSince >= CraftingScheduler.FAIL_TIMEOUT) {
 				info.cancelTask(task.id);
@@ -83,8 +85,24 @@ var CraftingScheduler = {
 			}
 			var cacheKey = parts[0] + ',' + parts[1] + ',' + parts[2];
 			var crafter = tileCache[cacheKey];
-			if (crafter === undefined) crafter = tileCache[cacheKey] = World.getTileEntity(parseInt(parts[0]), parseInt(parts[1]), parseInt(parts[2]), blockSource);
+			if (crafter === undefined) {
+				var cx = parseInt(parts[0]);
+				var cz = parseInt(parts[2]);
+				if (blockSource && !isChunkLoadedAtSafe(blockSource, cx, parseInt(parts[1]), cz)) {
+					tileCache[cacheKey] = null;
+					info.incomplete = true;
+					node.missingSince = null;
+					node._suspendSince = node._suspendSince == null ? tick : node._suspendSince;
+					if (tick - node._suspendSince >= CraftingScheduler.FAIL_TIMEOUT * 5) {
+						info.cancelTask(task.id);
+						return false;
+					}
+					continue;
+				}
+				crafter = tileCache[cacheKey] = World.getTileEntity(parseInt(parts[0]), parseInt(parts[1]), parseInt(parts[2]), blockSource);
+			}
 			if (!crafter || !crafter.data || !crafter.data.isActive) continue;
+			node._suspendSince = null;
 
 			var container = PatternContainerRegistry.get(crafter);
 			var interval = crafter.data.speed || 10;

@@ -208,12 +208,14 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 	useNetworkItemContainer: true,
 	created: function () {
         if(!this.blockSource)this.blockSource = BlockSource.getDefaultForDimension(this.dimension);
+		var controller;
 		while (controller = searchController(this, false, this.blockSource)) {
 			for (var i in sides) {
 				var coordss = {};
 				coordss.x = this.x + sides[i][0];
 				coordss.y = this.y + sides[i][1];
 				coordss.z = this.z + sides[i][2];
+				if (!isChunkLoadedAtSafe(this.blockSource, coordss.x, coordss.y, coordss.z)) continue;
 				var bck = this.blockSource.getBlock(coordss.x, coordss.y, coordss.z);
 				if (RS_blocks.indexOf(bck.id) != -1) {
 					if(bck.id == BlockID.RS_cable){
@@ -257,33 +259,55 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		return true;
 	},
 	init: function () {
-		//if (this.data.NETWORK_ID == "f" || !RSNetworks[this.data.NETWORK_ID]) {
-			this.data.NETWORK_ID = RSNetworks.length;
-			var controllerTile = this;
-			this.networkData.putInt('energy', this.data.energy);
-			this.networkData.putInt('NETWORK_ID', RSNetworks.length);
-			this.networkData.putBoolean('isActive', this.data.isActive || false);
-			if(this.unsaveableSlots && InnerCore_pack.packVersionCode >= 120){
-				if(Array.isArray(this.unsaveableSlots)){
-					for(var i in this.unsaveableSlots)this.container.setSlotSavingEnabled(this.unsaveableSlots[i], false);
-				} else {
-					this.container.setGlobalSlotSavingEnabled(false);
-				}
+		var existingNetId = -1;
+		var ownKey = cts(this);
+		for (var nid = 0; nid < RSNetworks.length; nid++) {
+			var probeNet = RSNetworks[nid];
+			if (!probeNet) continue;
+			var probeEntry = probeNet[ownKey];
+			if (probeEntry && probeEntry.id == BlockID.RS_controller) { existingNetId = nid; break; }
+		}
+		var netId = existingNetId != -1 ? existingNetId : RSNetworks.length;
+		this.data.NETWORK_ID = netId;
+		var controllerTile = this;
+		this.networkData.putInt('energy', this.data.energy);
+		this.networkData.putInt('NETWORK_ID', netId);
+		this.networkData.putBoolean('isActive', this.data.isActive || false);
+		if(this.unsaveableSlots && InnerCore_pack.packVersionCode >= 120){
+			if(Array.isArray(this.unsaveableSlots)){
+				for(var i in this.unsaveableSlots)this.container.setSlotSavingEnabled(this.unsaveableSlots[i], false);
+			} else {
+				this.container.setGlobalSlotSavingEnabled(false);
 			}
+		}
+		if (existingNetId == -1) {
 			var _data = {};
-			_data[cts(this)] = {
+			_data[ownKey] = {
 				id: BlockID.RS_controller,
 				coords: { x: this.x, y: this.y, z: this.z },
 				upgrades: {},
 				isActive: false
 			}
-			_data['info'] = NetworkInfo.create(_data, controllerTile, RSNetworks.length);
+			_data['info'] = NetworkInfo.create(_data, controllerTile, netId);
 			RSNetworks.push(_data);
-			this.networkData.sendChanges();
-			this.data.ticks = 0;
-			this.data.timer = 20;
-			_RS._emit("networkCreated", {netId: this.data.NETWORK_ID, tile: this});
-		//}
+			_RS._emit("networkCreated", {netId: netId, tile: this});
+		} else {
+			var existingNet = RSNetworks[netId];
+			existingNet[ownKey] = {
+				id: BlockID.RS_controller,
+				coords: { x: this.x, y: this.y, z: this.z },
+				upgrades: {},
+				isActive: false
+			}
+			if (existingNet.info && existingNet.info.updateControllerTile) existingNet.info.updateControllerTile(controllerTile);
+			if (existingNet.info) {
+				existingNet.info.netMapDirty = true;
+				existingNet.info.incomplete = true;
+			}
+		}
+		this.networkData.sendChanges();
+		this.data.ticks = 0;
+		this.data.timer = 20;
 	},
 	updateItems: function(){
 		if(this.data.NETWORK_ID != 'f'){
@@ -291,9 +315,11 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		}
 	},
 	updateControllerNetwork: function(_first){
-		set_net_for_blocks(this, this.data.NETWORK_ID, false, _first, _first ? undefined : this.data.isActive);
+		var incomplete = set_net_for_blocks(this, this.data.NETWORK_ID, false, _first, _first ? undefined : this.data.isActive);
 		if (this.data.NETWORK_ID != 'f' && RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID].info) {
-			RSNetworks[this.data.NETWORK_ID].info.netMapDirty = true;
+			var info = RSNetworks[this.data.NETWORK_ID].info;
+			info.netMapDirty = true;
+			info.incomplete = !!incomplete;
 		}
 	},
 	click: function (id, count, data, coords, player, extra) {
@@ -391,6 +417,15 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			this.data.updateControllerNetwork = false;
 		}
 		var _info0 = (this.data.NETWORK_ID != 'f' && RSNetworks[this.data.NETWORK_ID]) ? RSNetworks[this.data.NETWORK_ID].info : null;
+		if (_info0 && _info0.incomplete) {
+			this.data.incompleteRetry = (this.data.incompleteRetry === undefined ? 0 : this.data.incompleteRetry) + 1;
+			if (this.data.incompleteRetry >= 100) {
+				this.data.incompleteRetry = 0;
+				this.data.updateControllerNetwork = true;
+			}
+		} else if (this.data.incompleteRetry) {
+			this.data.incompleteRetry = 0;
+		}
 		this.data.netMapTimer = (this.data.netMapTimer === undefined ? 0 : this.data.netMapTimer) - 1;
 		if ((_info0 && _info0.netMapDirty) || this.data.netMapTimer <= 0) {
 			this.updateNetMap();

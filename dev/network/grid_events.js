@@ -1,7 +1,9 @@
 var GridEvents = {
 	craftPreview: function(tile, eventData, connectedClient) {
 		if(!eventData.item || !eventData.count || tile.data.NETWORK_ID == 'f') return;
-		var info = RSNetworks[tile.data.NETWORK_ID].info;
+		var net = RSNetworks[tile.data.NETWORK_ID];
+		if (!net || !net.info) return;
+		var info = net.info;
 		var sourceKey = connectedClient ? connectedClient.getPlayerUid() : 'unknown';
 		var now = World.getThreadTime();
 		if (info.isRequestThrottled(sourceKey, now)) return;
@@ -16,16 +18,19 @@ var GridEvents = {
 
 	provideConstructedCraft: function(tile, eventData, connectedClient) {
 		if(!eventData.item || !eventData.count || tile.data.NETWORK_ID == 'f') return;
-		var info = RSNetworks[tile.data.NETWORK_ID].info;
+		var net = RSNetworks[tile.data.NETWORK_ID];
+		if (!net || !net.info) return;
+		var info = net.info;
 		var sourceKey = connectedClient ? connectedClient.getPlayerUid() : 'unknown';
 		var now = World.getThreadTime();
 		if (info.isRequestThrottled(sourceKey, now)) return;
 		var constructedCraft = info.constructCraft(eventData.item, eventData.count);
 		if(constructedCraft && constructedCraft.deduped) return;
 		if(constructedCraft && constructedCraft.craftable){
-			info.provideCraft(constructedCraft);
+			var task = info.provideCraft(constructedCraft);
 			tile.items();
 			tile.refreshGui(false, false, true);
+			_RS._emit("wirelessGridAction", {netId: tile.data.NETWORK_ID, playerUid: sourceKey, kind: 'autocraft', count: task ? task.requestedCount : eventData.count, source: isWirelessSourceTile(tile) ? 'wireless' : 'block'});
 		} else {
 			info.markRequestFailed(sourceKey, now);
 		}

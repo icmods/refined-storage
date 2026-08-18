@@ -78,7 +78,7 @@ const RefinedStorage = {
 				} else {
 					var controller = searchController(this, false);
 					if (controller) {
-						var tile = World.getTileEntity(controller.x, controller.y, controller.z, this.data.blockSource);
+						var tile = World.getTileEntity(controller.x, controller.y, controller.z, this.blockSource);
 						if (tile) {
 							tile.data.updateControllerNetwork = true;
 						}
@@ -148,11 +148,12 @@ const RefinedStorage = {
 				if (this.pre_update_network) if(this.pre_update_network(net_id)) return true;
 				var netElement;
 				var leftNetId = null;
-				if(net_id == 'f' && RSNetworks[this.data.NETWORK_ID] && (netElement = RSNetworks[this.data.NETWORK_ID][cts(this)]) && netElement.id == this.blockInfo.id) {
-					delete RSNetworks[this.data.NETWORK_ID][cts(this)];
-					leftNetId = this.data.NETWORK_ID;
+				var lastNetId = this.data.NETWORK_ID;
+				if(lastNetId != 'f' && RSNetworks[lastNetId] && (netElement = RSNetworks[lastNetId][cts(this)]) && netElement.id == this.blockInfo.id) {
+					delete RSNetworks[lastNetId][cts(this)];
+					leftNetId = lastNetId;
 				}
-				this.data.LAST_NETWORK_ID = this.data.NETWORK_ID;
+				this.data.LAST_NETWORK_ID = lastNetId;
 				this.data.NETWORK_ID = net_id;
 				this.networkData.putInt('NETWORK_ID', net_id != 'f' ? net_id : -1);
 				if (net_id != "f" && RSNetworks[net_id]) {
@@ -167,7 +168,7 @@ const RefinedStorage = {
 						upgrades: this.data.upgrades,
 						isActive: this.data.isActive || false
 					}
-					_RS._emit("networkTileJoined", {netId: net_id, blockId: this.blockInfo.id, coords: coords_this, dimension: this.dimension});
+					if (this.data.LAST_NETWORK_ID != net_id) _RS._emit("networkTileJoined", {netId: net_id, blockId: this.blockInfo.id, coords: coords_this, dimension: this.dimension});
 				} else if (leftNetId != null) {
 					_RS._emit("networkTileLeft", {netId: leftNetId, blockId: this.blockInfo.id, coords: {x: this.x, y: this.y, z: this.z}, dimension: this.dimension});
 				}
@@ -186,6 +187,7 @@ const RefinedStorage = {
 		}
 		if (!params.setActive) {
 			params.setActive = function (state, forced, preventRefreshModel) {
+				if(!this.networkEntity) return false;
 				state = this.data.NETWORK_ID != "f" ? !!state : false;
 				if(this.data.isActive == state) return false;
 				if (this.pre_setActive) if(this.pre_setActive(state)) return false;
@@ -193,7 +195,7 @@ const RefinedStorage = {
 				if(state == false || (forced || (!this.data.controllerOff && this.data.allowSetIsActive != false))){
 					this.data.isActive = state;
 					this.networkData.putBoolean('isActive', state);
-					if(this.data.NETWORK_ID != "f")RSNetworks[this.data.NETWORK_ID][this.coords_id()].isActive = state
+					if(this.data.NETWORK_ID != "f" && RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID][this.coords_id()])RSNetworks[this.data.NETWORK_ID][this.coords_id()].isActive = state
 					this.networkData.sendChanges();
 					if(this.refreshModel && !preventRefreshModel)this.refreshModel();
 					if (this.post_setActive) this.post_setActive(state);

@@ -932,7 +932,9 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 					if(!content || !window || !window.isOpened()) return;
 					delete container.slots.bindings;
 					delete container.slots.slots;
-					patternGridData.networkData = SyncedNetworkData.getClientSyncedData(eventData.name);
+					var synced = SyncedNetworkData.getClientSyncedData(eventData.name);
+					if (!synced) return;
+					patternGridData.networkData = synced;
 					var _slotKeys = [];
 					if(updateFilters || refresh){
 						var originalOnlyItemsExtraMap = {};

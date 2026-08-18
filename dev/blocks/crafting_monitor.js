@@ -1,13 +1,4 @@
 IDRegistry.genBlockID("RS_craftingMonitor");
-Block.createBlockWithRotation("RS_craftingMonitor", [
-	{
-		name: "Crafting Monitor",
-		texture: [['crafting_monitor_front', 0]],
-		inCreative: true
-	}
-])
-RS_blocks.push(BlockID['RS_craftingMonitor']);
-EnergyUse[BlockID['RS_craftingMonitor']] = Config.energy_uses.craftingMonitor || 8;
 
 var _monitorTexture = [
 	["disk_drive_bottom", 0],
@@ -17,6 +8,16 @@ var _monitorTexture = [
 	["grid_left", 0],
 	["grid_right", 0]
 ];
+
+Block.createBlockWithRotation("RS_craftingMonitor", [
+	{
+		name: "Crafting Monitor",
+		texture: _monitorTexture,
+		inCreative: true
+	}
+])
+RS_blocks.push(BlockID['RS_craftingMonitor']);
+EnergyUse[BlockID['RS_craftingMonitor']] = Config.energy_uses.craftingMonitor || 8;
 
 function getCraftingMonitorTexture(variation, _active){
 	return getRotatableTexture(_monitorTexture, variation, _active);

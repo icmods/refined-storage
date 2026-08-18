@@ -73,6 +73,7 @@ function restoreCraftingTasks(controllerTile) {
 			var task = CraftingTask.restore(saved[si], info);
 			info.craftingTasks.push(task);
 			info.providingCrafts.push(task);
+			_RS._emit("taskAdded", {netId: info.net_id, task: {id: task.id, requestedUid: task.requestedUid, requestedCount: task.requestedCount}});
 			if(Config.dev)Logger.Log('[PERSIST] Restored task ' + task.id + ': ' + task.requestedCount + 'x ' + task.requestedUid, 'RefinedStorageDebug');
 		} catch(e) {
 			Logger.Log('[PERSIST] Failed to restore task: ' + e, 'RefinedStorageError');
@@ -86,4 +87,7 @@ Callback.addCallback("LevelLeft", function () {
 	_savedCraftingTasks = {};
 	RSpendingReconnect = {};
 	RSreconnectTicks = 0;
+	if (typeof PatternContainerRegistry !== 'undefined') PatternContainerRegistry.reset();
+	RSChunkRebuildPending = false;
+	RSChunkRebuildTicks = 0;
 });

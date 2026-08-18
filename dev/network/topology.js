@@ -1,5 +1,14 @@
+function isChunkLoadedAtSafe(blockSource, x, y, z) {
+	if (blockSource && typeof blockSource.isChunkLoadedAt == 'function') return blockSource.isChunkLoadedAt(x, z);
+	if (typeof World.isChunkLoadedAt == 'function') return World.isChunkLoadedAt(x, y != null ? y : 64, z);
+	if (blockSource && typeof blockSource.isChunkLoaded == 'function') return blockSource.isChunkLoaded(x >> 4, z >> 4);
+	if (typeof World.isChunkLoaded == 'function') return World.isChunkLoaded(x >> 4, z >> 4);
+	return true;
+}
+
 const searchController = function (_coords, _self, _blockSource) {
 	if(!_blockSource) _blockSource = _coords.blockSource;
+	if(!_blockSource) return false;
 	var outCoords = [];
 	outCoords.push(cts(_coords));
 	var s = false;
@@ -11,6 +20,7 @@ const searchController = function (_coords, _self, _blockSource) {
 			coordss.z = coords.z + sides[i][2];
 			if (outCoords.indexOf(cts(coordss)) != -1) continue;
 			outCoords.push(cts(coordss));
+			if (!isChunkLoadedAtSafe(_blockSource, coordss.x, coordss.y, coordss.z)) continue;
 			var bck = _blockSource.getBlock(coordss.x, coordss.y, coordss.z);
 			if (bck.id == BlockID.RS_controller) {
 				s = coordss;
@@ -21,6 +31,7 @@ const searchController = function (_coords, _self, _blockSource) {
 		}
 	}
 	if(_self){
+		if (!isChunkLoadedAtSafe(_blockSource, _coords.x, _coords.y, _coords.z)) return false;
 		var bck = _blockSource.getBlock(_coords.x, _coords.y, _coords.z);
 		if (bck.id == BlockID.RS_controller) {
 			s = _coords;
@@ -40,7 +51,9 @@ const searchController_net = function (net_id) {
 
 function set_net_for_blocks(_coords, net_id, _self, _first, _defaultActive, _forced, _func) {
 	var blockSource_ = _coords.blockSource;
+	if (!blockSource_) return false;
 	var outCoords = [];
+	var incomplete = false;
 	outCoords.push(cts(_coords));
 	var cableDeleting = [];
 	function _search(coords) {
@@ -51,6 +64,7 @@ function set_net_for_blocks(_coords, net_id, _self, _first, _defaultActive, _for
 			coordss.z = coords.z + sides[i][2];
 			if (outCoords.indexOf(cts(coordss)) != -1) continue;
 			outCoords.push(cts(coordss));
+			if (!isChunkLoadedAtSafe(blockSource_, coordss.x, coordss.y, coordss.z)) continue;
 			var bck = blockSource_.getBlock(coordss.x, coordss.y, coordss.z);
 			var isRsBlock = (RS_blocks.indexOf(bck.id) != -1);
 			if (bck.id == BlockID.RS_controller) {
@@ -71,19 +85,21 @@ function set_net_for_blocks(_coords, net_id, _self, _first, _defaultActive, _for
 				}
 				_search(coordss);
 			} else if (isRsBlock) {
-				var tile = World.getTileEntity(coordss.x, coordss.y, coordss.z, blockSource_) || World.addTileEntity(coordss.x, coordss.y, coordss.z, blockSource_);
-				
+				var tile = World.getTileEntity(coordss.x, coordss.y, coordss.z, blockSource_);
 				if (tile) {
 					if(!_forced && net_id == 'f' && !compareCoords(_coords, tile.data.controller_coords || {})) continue;
 					tile.data.controller_coords = {x: _coords.x, y: _coords.y, z: _coords.z};
 					tile.update_network(net_id, _first || (_defaultActive != undefined));
 					if(_defaultActive)tile.setActive(_defaultActive);
+				} else {
+					incomplete = true;
 				}
 				_search(coordss);
 			}
 		}
 	}
 	if(_self){
+		if (!isChunkLoadedAtSafe(blockSource_, _coords.x, _coords.y, _coords.z)) return true;
 		var bck = {id: blockSource_.getBlockId(_coords.x, _coords.y, _coords.z)};
 		var isRsBlock = RS_blocks.indexOf(bck.id) != -1;
 		if (isRsBlock && bck.id != BlockID.RS_controller) {
@@ -98,11 +114,13 @@ function set_net_for_blocks(_coords, net_id, _self, _first, _defaultActive, _for
 					cableDeleting.push(cts(_coords));
 				}
 			} else {
-				var tile = World.getTileEntity(_coords.x, _coords.y, _coords.z, blockSource_) || World.addTileEntity(_coords.x, _coords.y, _coords.z, blockSource_);
+				var tile = World.getTileEntity(_coords.x, _coords.y, _coords.z, blockSource_);
 				if (tile) {
 					tile.data.controller_coords = {x: _coords.x, y: _coords.y, z: _coords.z};
 					tile.update_network(net_id, _first || (_defaultActive != undefined));
 					if(_defaultActive)tile.setActive(_defaultActive);
+				} else {
+					incomplete = true;
 				}
 			}
 		}
@@ -115,13 +133,14 @@ function set_net_for_blocks(_coords, net_id, _self, _first, _defaultActive, _for
 			}
 		}
 	}
+	return incomplete;
 }
 
 function set_is_active_for_blocks_net(net_id, _state, isController, _blockSource) {
 	for(var i in RSNetworks[net_id]){
 		if(i != 'info' && RSNetworks[net_id][i].id != BlockID.RS_controller){
 			var tile = World.getTileEntity(RSNetworks[net_id][i].coords.x, RSNetworks[net_id][i].coords.y, RSNetworks[net_id][i].coords.z, _blockSource);
-			if (tile) {
+			if (tile && tile.networkEntity) {
 				if(isController) tile.data.controllerOff = !_state;
 				tile.setActive(_state);
 			}
@@ -131,8 +150,11 @@ function set_is_active_for_blocks_net(net_id, _state, isController, _blockSource
 }
 
 function checkAndSetNetOnCoords(coords, update){
+	if (!coords.blockSource) return;
+	var controllerCoords;
+	var tile;
 	if(!(controllerCoords = searchController(coords, true)))set_net_for_blocks(coords, 'f', true, false, undefined, true);
-	if(update && controllerCoords && (tile = coords.blockSource.getTileEntity(controllerCoords.x, controllerCoords.y, controllerCoords.z)))tile.updateControllerNetwork();
+	if(update && controllerCoords && (tile = World.getTileEntity(controllerCoords.x, controllerCoords.y, controllerCoords.z, coords.blockSource)))tile.updateControllerNetwork();
 }
 
 function searchBlocksInNetwork(net_id, id){
@@ -160,7 +182,8 @@ var pistonsPoss = [
 var pistonsMove__ = {};
 var ignoredParams = ['NETWORK_ID','LAST_NETWORK_ID','controller_coords','createdCalled'];
 Callback.addCallback('BlockChanged', function(coords, oldBlock, newBlock, _blockSource){
-	_blockSource = BlockSource.getDefaultForDimension(_blockSource);
+	if (typeof _blockSource == 'number') _blockSource = BlockSource.getDefaultForDimension(_blockSource);
+	if (!_blockSource) return;
 	coords.blockSource = _blockSource;
 	if(oldBlock.id == 535 || newBlock.id == 535 || newBlock.id == 34) {
 		var pistonBlockData = newBlock.id == 535 || newBlock.id == 34 ? newBlock.data : oldBlock.data;
@@ -181,6 +204,7 @@ Callback.addCallback('BlockChanged', function(coords, oldBlock, newBlock, _block
 		}
 	}
 	if(oldBlock.id == 250) {
+		var oldTileData, newTileData;
 		if((oldTileData = pistonsMove__[cts(coords)]) && (newTileData = World.addTileEntity(coords.x, coords.y, coords.z, _blockSource))){
 			for(var i in newTileData.data){
 				if(ignoredParams.indexOf(i) == -1){
@@ -216,6 +240,7 @@ Callback.addCallback('BlockChanged', function(coords, oldBlock, newBlock, _block
 		checkAndSetNetOnCoords(zCoords);
 	}
 	if(newBlock.id == BlockID.RS_cable){
-		if((controllerCoords = searchController(coords, true)) && (tile = World.getTileEntity(controllerCoords.x, controllerCoords.y, controllerCoords.z, _blockSource)))tile.updateControllerNetwork();
+		var controllerCoords2;
+		if((controllerCoords2 = searchController(coords, true)) && (tile = World.getTileEntity(controllerCoords2.x, controllerCoords2.y, controllerCoords2.z, _blockSource)))tile.updateControllerNetwork();
 	}
 });

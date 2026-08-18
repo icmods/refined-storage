@@ -131,7 +131,9 @@ function gridOpenGui(container, window, content, eventData){
 	gridData.updateGui = function(refresh, updateFilters, nonlocal){
 		delete container.slots.bindings;
 		delete container.slots.slots;
-		gridData.networkData = SyncedNetworkData.getClientSyncedData(eventData.name);
+		var synced = SyncedNetworkData.getClientSyncedData(eventData.name);
+		if (!synced) return;
+		gridData.networkData = synced;
 		if(updateFilters || refresh){
 			var _slotKeys = [];
 			for(var i in container.slots)if(i[0] >= 0 && container.slots[i].id != 0)_slotKeys.push(i);

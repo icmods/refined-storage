@@ -3,6 +3,7 @@ header.js
 
 network/state.js
 network/topology.js
+network/chunks.js
 network/pattern_containers.js
 network/info.js
 network/calculator.js
@@ -50,6 +51,8 @@ blocks/cable.js
 blocks/craftBlocks.js
 blocks/interface.js
 blocks/wireless_transmitter.js
+
+network/phantom.js
 
 crafts.js
 shared.js

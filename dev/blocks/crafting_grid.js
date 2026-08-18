@@ -15,9 +15,7 @@ IDRegistry.genBlockID("RS_crafting_grid");
 Block.createBlockWithRotation("RS_crafting_grid", [
 	{
 		name: "Crafting Grid",
-		texture: [
-            ['stone', 0]
-        ],
+		texture: _craftingGridTexture,
 		inCreative: true
 	}
 ])
@@ -424,12 +422,16 @@ function craftingGridProvideCraftEvent(tile, eventData, connectedClient){
 	tile.data.selectedRecipe.javaRecipe = Recipes.getRecipeByUid(eventData.uid);
 	tile.data.selectedRecipe.result = tile.data.selectedRecipe.javaRecipe.getResult();
 	var result = tile.data.selectedRecipe.result;
+	var playerUid = connectedClient.getPlayerUid();
+	var crafted = 0;
 	for(var count = 0; count < eventData.count; count += result.count){
-		if(!craftingGridProvideCraft(tile, connectedClient.getPlayerUid())) break;
+		if(!craftingGridProvideCraft(tile, playerUid)) break;
+		crafted++;
 	}
 	tile.items();
 	tile.refreshGui(false, false, true, true);
 	tile.container.sendResponseEvent("reselectRecipe", {});
+	if(crafted > 0)_RS._emit("wirelessGridAction", {netId: tile.data.NETWORK_ID, playerUid: playerUid, kind: 'craft', count: crafted * result.count, source: isWirelessSourceTile(tile) ? 'wireless' : 'block'});
 }
 
 function buildCraftingGridPayload(tile, first, updateFilters, updateCrafts){
@@ -460,7 +462,9 @@ function craftingGridOpenGui(container, window, content, eventData){
 		if(!content || !window || !window.isOpened()) return;
 		delete container.slots.bindings;
 		delete container.slots.slots;
-		craftingGridData.networkData = SyncedNetworkData.getClientSyncedData(eventData.name);
+		var synced = SyncedNetworkData.getClientSyncedData(eventData.name);
+		if (!synced) return;
+		craftingGridData.networkData = synced;
 		var _slotKeys = [];
 		if(updateFilters || refresh){
 			var originalOnlyItemsExtraMap = {};

@@ -15,7 +15,9 @@ function buildControllerElements(elements, otherData, controllerFuncs, switchPag
 		scale: 1,
 		onTouchEvent: function (element, event) {
 			var content = {elements: elements};
-			var itemContainer = element.window.getContainer().getParent();
+			var itemContainerUiHandler = element.window.getContainer();
+			if (!itemContainerUiHandler) return;
+			var itemContainer = itemContainerUiHandler.getParent();
 			if (event.type == "DOWN" && !swipe_y && event.x > content.elements["mesh"].x && event.x < (content.elements["mesh"].x + content.elements["mesh"].width) && event.y > content.elements["mesh"].y && event.y < (content.elements["mesh"].y + content.elements["mesh"].height)) {
 				swipe_y = event.y;
 			} else if (swipe_y && event.type == "MOVE") {
@@ -25,7 +27,7 @@ function buildControllerElements(elements, otherData, controllerFuncs, switchPag
 					var pages = controllerFuncs.getPages(Object.keys(otherData.net_map).length);
 					if(!switchPageFn(otherData.lastPage + _n, itemContainer, otherData)) return;
 					var ___y = controllerFuncs.getCoordsFromPage(otherData.lastPage + _n, pages);
-					element.window.getContentProvider().elementMap.get("slider_button").setPosition(elements['slider_button'].x, ___y);
+					itemContainerUiHandler.getElement("slider_button").setPosition(elements['slider_button'].x, ___y);
 				}
 				if (distance > 7) {
 					if (event.y > swipe_y) moveSwitchPage_(false);
@@ -48,7 +50,7 @@ function buildControllerElements(elements, otherData, controllerFuncs, switchPag
 			if (event.type != 'UP' && event.type != "CLICK") {
 				var page = controllerFuncs.getPageFromCoords(event, controllerFuncs.getPages(Object.keys(otherData.net_map).length));
 				switchPageFn(page, itemContainer, otherData);
-				element.window.getContentProvider().elementMap.get("slider_button").setPosition(content.elements['slider_button'].x, Math.max(Math.min(event.y, max_y), content.elements["slider_button"].start_y));
+				itemContainerUiHandler.getElement("slider_button").setPosition(content.elements['slider_button'].x, Math.max(Math.min(event.y, max_y), content.elements["slider_button"].start_y));
 			}
 			if (event.type == "UP" || event.type == "CLICK") {
 				moving = false;
@@ -56,7 +58,7 @@ function buildControllerElements(elements, otherData, controllerFuncs, switchPag
 				var page = controllerFuncs.getPageFromCoords(event, pages);
 				switchPageFn(page, itemContainer, otherData);
 				var ___y = controllerFuncs.getCoordsFromPage(page, pages);
-				element.window.getContentProvider().elementMap.get("slider_button").setPosition(elements['slider_button'].x, ___y);
+				itemContainerUiHandler.getElement("slider_button").setPosition(elements['slider_button'].x, ___y);
 			}
 		}
 	}
@@ -197,10 +199,12 @@ function buildControllerElements(elements, otherData, controllerFuncs, switchPag
 				moving = true;
 			}
 			if (event.type == 'CLICK') {
+				var itemContainerUiHandler = element.window.getContainer();
+				if (!itemContainerUiHandler) return;
 				var pages = controllerFuncs.getPages(Object.keys(otherData.net_map).length);
 				var page = controllerFuncs.getPageFromCoords(event, pages);
 				var ___y = controllerFuncs.getCoordsFromPage(page, pages);
-				element.window.getContentProvider().elementMap.get("slider_button").setPosition(elements['slider_button'].x, ___y);
+				itemContainerUiHandler.getElement("slider_button").setPosition(elements['slider_button'].x, ___y);
 			}
 		}
 	}
