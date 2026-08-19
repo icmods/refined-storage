@@ -53,7 +53,8 @@ var craftingGridGUI = new UI.StandartWindow({
 GUIs.push(craftingGridGUI);
 
 function craftingGridSwitchPage(page, container, ignore, dontMoveSlider){
-	if(!container.getUiAdapter() || !container.getUiAdapter().getWindow() || !container.getUiAdapter().getWindow().isOpened()) return false;
+	var window_ = getClientGuiWindow(container, 'main');
+	if(!window_ || typeof window_.isOpened != 'function' || !window_.isOpened()) return false;
 	var slots = container.slots;
 	var slotsKeys = craftingGridData.slotsKeys;
 	var slots_count = craftingGridData.slots_count;
@@ -75,19 +76,21 @@ function craftingGridSwitchPage(page, container, ignore, dontMoveSlider){
 		}
 		return false;
 	}
-	var elements_ = container.getUiAdapter().getWindow().getWindow('main').getElements();
+	var elements_ = window_.getElements ? window_.getElements() : window_.getContent().elements;
 	for (var i = page * x_count; i < page * x_count + slots_count; i++) {
 		var a = i - (page * x_count);
 		var item = slots[slotsKeys[i]] || { id: 0, data: 0, count: 0, extra: null };
 		container.markSlotDirty("slot" + a);
-		elements_.get("slot" + a).setBinding('text', (!item.count ? 'Craft' : cutNumber(item.count, true) + ""));
+		if(elements_.get) elements_.get("slot" + a).setBinding('text', (!item.count ? 'Craft' : cutNumber(item.count, true) + ""));
+		else if(elements_["slot" + a] && elements_["slot" + a].setBinding) elements_["slot" + a].setBinding('text', (!item.count ? 'Craft' : cutNumber(item.count, true) + ""));
 		container.setSlot("slot" + a, item.id, item.count, item.data, item.extra || null);
 	}
 	return true;
 }
 
 function craftingGridSwitchCraftsPage(page, container, ignore, dontMoveSlider){
-	if(!container.getUiAdapter() || !container.getUiAdapter().getWindow() || !container.getUiAdapter().getWindow().isOpened()) return false;
+	var window_ = getClientGuiWindow(container, 'main');
+	if(!window_ || typeof window_.isOpened != 'function' || !window_.isOpened()) return false;
 	var crafts = craftingGridData.crafts;
 	var slots_count = craftingGridData.crafts_slots_count;
 	var x_count = craftingGridData.crafts_x_count;
@@ -107,17 +110,15 @@ function craftingGridSwitchCraftsPage(page, container, ignore, dontMoveSlider){
 		}
 		return false;
 	}
-	var window = uiAdapter.getWindow();
-	var content = window.getContent();
-	var window1 = window.getWindow('main');
-	var contentProvider = window1.getContentProvider();
+	var content = typeof window_.getContent == 'function' ? window_.getContent() : null;
+	var contentProvider = typeof window_.getContentProvider == 'function' ? window_.getContentProvider() : null;
 	for (var i = 0; i < slots_count; i++) {
 		var a = i + (page * x_count);
 		var item = crafts[a] ? crafts[a].getResult() : { id: 0, data: 0, count: 0, extra: null };
 		container.setSlot("item_craft_slot" + i, item.id, item.count, item.data > 0 ? item.data : 0, item.extra || null);
-		if(crafts[a])content.elements["item_craft_slot" + i].darken = craftingGridData.isDarkenMap["e" + crafts[a].getRecipeUid()];
+		if(crafts[a] && content && content.elements)content.elements["item_craft_slot" + i].darken = craftingGridData.isDarkenMap["e" + crafts[a].getRecipeUid()];
 	}
-	contentProvider.refreshElements();
+	if(contentProvider)contentProvider.refreshElements();
 	return true;
 }
 
@@ -485,7 +486,6 @@ function craftingGridOpenGui(container, window, content, eventData){
 			craftingGridData.originalOnlyItemsExtraMap = originalOnlyItemsExtraMap;
 			craftingGridData.originalOnlyItemsMap = originalOnlyItemsMap;
 			craftingGridData.slotsKeys = _slotKeys;
-			craftingGridData.crafts = [];
 			if(!refresh)craftingGridData.textSearch = false;
 			var millis = 0;
 			if(Config.dev)millis = java.lang.System.currentTimeMillis();
@@ -610,7 +610,7 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_crafting_grid, {
 			}
 			if(this.updateCrafts && this.ticks%20 == 0){
 				this.updateCrafts = false;
-				craftingGridData.updateGui(true, false, true);
+				if(craftingGridData.name == this.networkData.getName())craftingGridData.updateGui(true, false, true);
 			}
 		},
 		events: {

@@ -368,7 +368,7 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_wireless_transmitter, {
 			}
 			if (this.updateCrafts && this.ticks % 20 == 0) {
 				this.updateCrafts = false;
-				craftingGridData.updateGui(true, false, true);
+				if (craftingGridData.name == this.networkData.getName()) craftingGridData.updateGui(true, false, true);
 			}
 		},
 		load: function () {

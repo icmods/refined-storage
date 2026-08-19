@@ -222,7 +222,8 @@ function buildStorageSlots(ctx) {
 						}
 						var _count = 1;
 						var updateFull = false;
-						var elements_ = itemContainer.getUiAdapter().getWindow().getWindow('main').getElements();
+						var window_ = getClientGuiWindow(itemContainer, 'main');
+						var elements_ = window_ && window_.getElements ? window_.getElements() : null;
 						if(slotItem.count == _count) {
 							itemContainer.setSlot(slot, 0, 0, 0);
 							ctx.gridData.slotsKeys.splice(_num, 1);
@@ -236,13 +237,13 @@ function buildStorageSlots(ctx) {
 									ctx.gridData.updateGui(true, true);
 								} else {
 									itemContainer.markSlotDirty('slot' + this.num);
-									elements_.get('slot' + this.num).setBinding('text', cutNumber(slotItem.count - _count, true) + "");
+									if(elements_ && elements_.get('slot' + this.num))elements_.get('slot' + this.num).setBinding('text', cutNumber(slotItem.count - _count, true) + "");
 									itemContainer.setSlot('slot' + this.num, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
 									itemContainer.setSlot(slot, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
 								}
 							} else {
 								itemContainer.markSlotDirty('slot' + this.num);
-								elements_.get('slot' + this.num).setBinding('text', cutNumber(slotItem.count - _count, true) + "");
+								if(elements_ && elements_.get('slot' + this.num))elements_.get('slot' + this.num).setBinding('text', cutNumber(slotItem.count - _count, true) + "");
 								itemContainer.setSlot('slot' + this.num, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
 								itemContainer.setSlot(slot, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
 							}
@@ -281,7 +282,8 @@ function buildStorageSlots(ctx) {
 						var this_item = searchInventory(Player, slotItem.id, slotItem.data, -1, false, true);
 						var _count = this_item && this_item.count < maxStack && this_item.extra === slotItem.extra ? Math.min(slotItem.count, maxStack - this_item.count) : Math.min(slotItem.count, maxStack);
 						var updateFull = false;
-						var elements_ = itemContainer.getUiAdapter().getWindow().getWindow('main').getElements();
+						var window_ = getClientGuiWindow(itemContainer, 'main');
+						var elements_ = window_ && window_.getElements ? window_.getElements() : null;
 						if(slotItem.count <= _count) {
 							itemContainer.setSlot(slot, 0, 0, 0);
 							ctx.gridData.slotsKeys.splice(_num, 1);
@@ -295,13 +297,13 @@ function buildStorageSlots(ctx) {
 									ctx.gridData.updateGui(true, true);
 								} else {
 									itemContainer.markSlotDirty('slot' + this.num);
-									elements_.get('slot' + this.num).setBinding('text', cutNumber(slotItem.count - _count, true) + "");
+									if(elements_ && elements_.get('slot' + this.num))elements_.get('slot' + this.num).setBinding('text', cutNumber(slotItem.count - _count, true) + "");
 									itemContainer.setSlot('slot' + this.num, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
 									itemContainer.setSlot(slot, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
 								}
 							} else {
 								itemContainer.markSlotDirty('slot' + this.num);
-								elements_.get('slot' + this.num).setBinding('text', cutNumber(slotItem.count - _count, true) + "");
+								if(elements_ && elements_.get('slot' + this.num))elements_.get('slot' + this.num).setBinding('text', cutNumber(slotItem.count - _count, true) + "");
 								itemContainer.setSlot('slot' + this.num, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
 								itemContainer.setSlot(slot, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
 							}

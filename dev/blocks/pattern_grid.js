@@ -122,7 +122,8 @@ patternGridFuncs.updateCrafts = function(items, craftsTextSearch, onlyItemsMap, 
 
 
 function patternGridSwitchPage(page, container, ignore, dontMoveSlider){
-	if(!container.getUiAdapter() || !container.getUiAdapter().getWindow() || !container.getUiAdapter().getWindow().isOpened()) return false;
+	var window_ = getClientGuiWindow(container, 'main');
+	if(!window_ || typeof window_.isOpened != 'function' || !window_.isOpened()) return false;
 	var slots = container.slots;
 	var slotsKeys = patternGridData.slotsKeys;
 	var slots_count = patternGridData.slots_count;
@@ -144,19 +145,21 @@ function patternGridSwitchPage(page, container, ignore, dontMoveSlider){
 		}
 		return false;
 	}
-	var elements_ = container.getUiAdapter().getWindow().getWindow('main').getElements();
+	var elements_ = window_.getElements ? window_.getElements() : window_.getContent().elements;
 	for (var i = page * x_count; i < page * x_count + slots_count; i++) {
 		var a = i - (page * x_count);
 		var item = slots[slotsKeys[i]] || { id: 0, data: 0, count: 0, extra: null };
 		container.markSlotDirty("slot" + a);
-		elements_.get("slot" + a).setBinding('text', (!item.count ? 'Craft' : (cutNumber(item.count, true) + "")));
+		if(elements_.get) elements_.get("slot" + a).setBinding('text', (!item.count ? 'Craft' : (cutNumber(item.count, true) + "")));
+		else if(elements_["slot" + a] && elements_["slot" + a].setBinding) elements_["slot" + a].setBinding('text', (!item.count ? 'Craft' : (cutNumber(item.count, true) + "")));
 		container.setSlot("slot" + a, item.id, item.count || 2, item.data, item.extra || null);
 	}
 	return true;
 }
 
 function patternGridSwitchCraftsPage(page, container, ignore, dontMoveSlider){
-	if(!container.getUiAdapter() || !container.getUiAdapter().getWindow() || !container.getUiAdapter().getWindow().isOpened()) return false;
+	var window_ = getClientGuiWindow(container, 'main');
+	if(!window_ || typeof window_.isOpened != 'function' || !window_.isOpened()) return false;
 	var crafts = patternGridData.crafts;
 	var slots_count = patternGridData.crafts_slots_count;
 	var x_count = patternGridData.crafts_x_count;
@@ -176,17 +179,15 @@ function patternGridSwitchCraftsPage(page, container, ignore, dontMoveSlider){
 		}
 		return false;
 	}
-	var window = uiAdapter.getWindow();
-	var content = window.getContent();
-	var window1 = window.getWindow('main');
-	var contentProvider = window1.getContentProvider();
+	var content = typeof window_.getContent == 'function' ? window_.getContent() : null;
+	var contentProvider = typeof window_.getContentProvider == 'function' ? window_.getContentProvider() : null;
 	for (var i = 0; i < slots_count; i++) {
 		var a = i + (page * x_count);
 		var item = crafts[a] ? crafts[a].getResult() : { id: 0, data: 0, count: 0, extra: null };
 		container.setSlot("item_craft_slot" + i, item.id, item.count, item.data > 0 ? item.data : 0, item.extra || null);
-		if(crafts[a])content.elements["item_craft_slot" + i].darken = patternGridData.isDarkenMap["e" + crafts[a].getRecipeUid()];
+		if(crafts[a] && content && content.elements)content.elements["item_craft_slot" + i].darken = patternGridData.isDarkenMap["e" + crafts[a].getRecipeUid()];
 	}
-	contentProvider.refreshElements();
+	if(contentProvider)contentProvider.refreshElements();
 	return true;
 }
 
@@ -906,7 +907,7 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 			}
 			if(this.updateCrafts && this.ticks%20 == 0){
 				this.updateCrafts = false;
-				patternGridData.updateGui(true, false, true);
+				if(patternGridData.name == this.networkData.getName())patternGridData.updateGui(true, false, true);
 			}
 		},
 		events: {
@@ -956,7 +957,6 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 						patternGridData.originalOnlyItemsExtraMap = originalOnlyItemsExtraMap;
 						patternGridData.originalOnlyItemsMap = originalOnlyItemsMap;
 						patternGridData.slotsKeys = _slotKeys;
-						patternGridData.crafts = [];
 						if(!refresh)patternGridData.textSearch = false;
 						patternGridData.slotsKeys = RefinedStorage.sortItems(eventData.sort, eventData.reverse_filter, patternGridData.textSearch || null, container, patternGridData.slotsKeys);
 						var originalItemsMap = patternGridData.slotsKeys.map(function(__slot) {

@@ -262,6 +262,35 @@ function getExtraUidSuffix(extra){
 	return json == undefined ? 0 : json;
 }
 
+function getClientGuiWindow(container, name) {
+	var window = null;
+	if (container && typeof container.getWindow == 'function') {
+		try { window = container.getWindow(); } catch(e) { window = null; }
+	}
+	if (!window && container && typeof container.getUiAdapter == 'function') {
+		try {
+			var adapter = container.getUiAdapter();
+			if (adapter && typeof adapter.getWindow == 'function') window = adapter.getWindow();
+		} catch(e) { window = null; }
+	}
+	if (window && typeof window.getWindow == 'function') {
+		if (window.getAllWindows) {
+			try {
+				var all = window.getAllWindows();
+				var it = all && all.iterator ? all.iterator() : null;
+				while (it && it.hasNext()) {
+					var w = it.next();
+					if (w && typeof w.isOpened == 'function' && w.isOpened()) return w;
+				}
+			} catch(e) {}
+		}
+		if (name) {
+			try { return window.getWindow(name) || window; } catch(e) {}
+		}
+	}
+	return window;
+}
+
 function getItemUid(item){
 	var extra = item.extra ? getExtraUidSuffix(item.extra) : 0;
 	return item.id + '_' + item.data + (extra ? '_' + extra : '');

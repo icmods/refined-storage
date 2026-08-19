@@ -37,6 +37,7 @@ function rsDeferPhantomDestroy(tile, reason) {
 }
 
 Callback.addCallback("tick", function () {
+	AutocraftingTickManager.flushTick();
 	if (RSPhantomDeferredDestroy.length === 0) return;
 	var remaining = [];
 	for (var i = 0; i < RSPhantomDeferredDestroy.length; i++) {
@@ -124,7 +125,10 @@ TileEntity.registerPrototype(BlockID.RS_phantom, {
 		lastMonitorRefresh: 0,
 		_monitorChangedTaskId: null,
 		deadTicks: 0,
+		orphanTicks: 0,
 		pollTicks: 0,
+		safetyTicks: 0,
+		pollDirty: false,
 		ageTicks: 0,
 		phantom: true,
 		wirelessConfig: null,
@@ -327,7 +331,12 @@ TileEntity.registerPrototype(BlockID.RS_phantom, {
 			}
 		}
 		var uid = this.data.playerUid;
-		if (uid == -1) { rsDeferPhantomDestroy(this, 'no player'); return; }
+		if (uid == -1) {
+			this.data.orphanTicks = (this.data.orphanTicks || 0) + 1;
+			if (this.data.orphanTicks > 40) rsDeferPhantomDestroy(this, 'no player');
+			return;
+		}
+		this.data.orphanTicks = 0;
 		var hasClients = this.container.getNetworkEntity().getClients().iterator().hasNext();
 		if (!hasClients) {
 			this.data.deadTicks = (this.data.deadTicks || 0) + 1;
@@ -337,8 +346,16 @@ TileEntity.registerPrototype(BlockID.RS_phantom, {
 		}
 		this.data.deadTicks = 0;
 		this.data.pollTicks = (this.data.pollTicks || 0) + 1;
+		this.data.safetyTicks = (this.data.safetyTicks || 0) + 1;
 		this.data.ageTicks = (this.data.ageTicks || 0) + 1;
-		if (this.data.pollTicks >= 10) {
+		var pollDirty = this.data.pollDirty === true;
+		this.data.pollDirty = false;
+		if (this.data.pollTicks >= 10 && pollDirty) {
+			this.data.pollTicks = 0;
+			if (this.data.screen == 'grid' || this.data.screen == 'craftingGrid') this.refreshGui(false, false, false, this.data.screen);
+		}
+		if (this.data.safetyTicks >= 30) {
+			this.data.safetyTicks = 0;
 			this.data.pollTicks = 0;
 			if (this.data.ageTicks >= 40) {
 				var carried = Entity.getCarriedItem(uid);
@@ -375,6 +392,7 @@ TileEntity.registerPrototype(BlockID.RS_phantom, {
 				_RS._emit("phantomItemMoved", {netId: tile.data.NETWORK_ID, playerUid: Number(playerUid), kind: eventType});
 			}
 		});
+		this.data.pollDirty = true;
 	},
 	events: {
 		pushDeleteEvents: function(packetData, packetExtra, connectedClient) {
@@ -417,6 +435,7 @@ TileEntity.registerPrototype(BlockID.RS_phantom, {
 		},
 		updateRedstoneMode: function(eventData, connectedClient) {
 			this.data.redstone_mode = this.data.redstone_mode >= 2 ? 0 : this.data.redstone_mode + 1;
+			this.data.pollDirty = true;
 		}
 	},
 	destroyPhantom: function(reason) {
@@ -479,7 +498,7 @@ TileEntity.registerPrototype(BlockID.RS_phantom, {
 			}
 			if (this.updateCrafts && this.ticks % 20 == 0) {
 				this.updateCrafts = false;
-				craftingGridData.updateGui(true, false, true);
+				if (craftingGridData.name == this.networkData.getName()) craftingGridData.updateGui(true, false, true);
 			}
 		},
 		containerEvents: {
@@ -521,6 +540,17 @@ var AutocraftingTickManager = {
 	areas: {},
 	bboxes: {},
 	names: {},
+	dirty: {},
+	markDirty: function(netId) {
+		if (netId == null) return;
+		this.dirty[netId] = true;
+	},
+	flushTick: function() {
+		for (var netId in this.dirty) {
+			delete this.dirty[netId];
+			this.recomputeArea(netId);
+		}
+	},
 	recomputeArea: function(netId) {
 		var info = RSNetworks[netId] && RSNetworks[netId].info;
 		if (!info) return;
@@ -553,6 +583,13 @@ var AutocraftingTickManager = {
 				if (node.done || node.remaining <= 0) continue;
 				var containers = info.getPatternContainers(node.patternUid);
 				for (var ci = 0; ci < containers.length; ci++) {
+					var parsedCoords = info.patternContainersParsed ? info.patternContainersParsed[containers[ci]] : null;
+					if (parsedCoords) {
+						minX = Math.min(minX, parsedCoords.x); maxX = Math.max(maxX, parsedCoords.x);
+						minY = Math.min(minY, parsedCoords.y); maxY = Math.max(maxY, parsedCoords.y);
+						minZ = Math.min(minZ, parsedCoords.z); maxZ = Math.max(maxZ, parsedCoords.z);
+						continue;
+					}
 					var parts = containers[ci].split(',');
 					if (parts.length < 3) continue;
 					var cx = parseInt(parts[0]), cy = parseInt(parts[1]), cz = parseInt(parts[2]);
@@ -606,10 +643,10 @@ var AutocraftingTickManager = {
 };
 
 (function initAutocraftingTickManager() {
-	_RS.on("taskAdded", function(data) { AutocraftingTickManager.recomputeArea(data.netId); });
-	_RS.on("taskCompleted", function(data) { AutocraftingTickManager.recomputeArea(data.netId); });
-	_RS.on("taskCancelled", function(data) { AutocraftingTickManager.recomputeArea(data.netId); });
-	_RS.on("taskRemoved", function(data) { AutocraftingTickManager.recomputeArea(data.netId); });
+	_RS.on("taskAdded", function(data) { AutocraftingTickManager.markDirty(data.netId); });
+	_RS.on("taskCompleted", function(data) { AutocraftingTickManager.markDirty(data.netId); });
+	_RS.on("taskCancelled", function(data) { AutocraftingTickManager.markDirty(data.netId); });
+	_RS.on("taskRemoved", function(data) { AutocraftingTickManager.markDirty(data.netId); });
 	_RS.on("networkDestroyed", function(data) {
 		if (!data || data.netId == null) return;
 		if (AutocraftingTickManager.areas[data.netId]) {
@@ -627,6 +664,7 @@ Callback.addCallback("ServerLevelLoaded", function() {
 	for (var netId in AutocraftingTickManager.areas) AutocraftingTickManager.areas[netId] = false;
 	AutocraftingTickManager.bboxes = {};
 	AutocraftingTickManager.names = {};
+	AutocraftingTickManager.dirty = {};
 	for (var i = 0; i < RSNetworks.length; i++) {
 		if (RSNetworks[i] && RSNetworks[i].info && RSNetworks[i].info.craftingTasks && RSNetworks[i].info.craftingTasks.length > 0) {
 			AutocraftingTickManager.recomputeArea(i);
@@ -641,4 +679,5 @@ Callback.addCallback("LevelLeft", function() {
 	AutocraftingTickManager.areas = {};
 	AutocraftingTickManager.bboxes = {};
 	AutocraftingTickManager.names = {};
+	AutocraftingTickManager.dirty = {};
 });

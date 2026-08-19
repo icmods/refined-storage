@@ -49,16 +49,23 @@ var GridEvents = {
 
 	processPushDeleteEvents: function(tile, onEventHandled) {
 		for(var p in tile.data.pushDeleteEvents){
-			var player = new PlayerActor(Number(p));
-			for(var i in tile.data.pushDeleteEvents[p]){
-				var event = tile.data.pushDeleteEvents[p][i];
+			var events = tile.data.pushDeleteEvents[p];
+			var player = null;
+			var needRefresh = false;
+			var fullRefresh = false;
+			for(var slotKey in events){
+				var event = events[slotKey];
 				if(!event) {
-					delete tile.data.pushDeleteEvents[p][i];
+					delete events[slotKey];
 					continue;
 				}
+				if(!player) player = new PlayerActor(Number(p));
 				if(event.type == 'push'){
 					var item = player.getInventorySlot(event.slot);
-					if(item.id == 0) continue;
+					if(item.id == 0) {
+						delete events[slotKey];
+						continue;
+					}
 					var count = Math.min(event.count, item.count);
 					var pushed = tile.pushItem(item, count, true);
 					if(pushed < count){
@@ -66,13 +73,13 @@ var GridEvents = {
 					}
 					var _index;
 					if((_index = tile.originalItemsMap().indexOf(getItemUid(item))) != -1)tile.container.markSlotDirty(_index+'slot');
-					tile.items();
-					tile.refreshGui(false, false, item.count <= count || event.updateFull);
+					needRefresh = true;
+					if(item.count <= count || event.updateFull) fullRefresh = true;
 					if(onEventHandled)onEventHandled(Number(p), 'push');
-					delete tile.data.pushDeleteEvents[p][i];
+					delete events[slotKey];
 				}
 				if(event.type == 'delete'){
-					var item = tile.container.getSlot(i);
+					var item = tile.container.getSlot(slotKey);
 					var itemMaxStack = Item.getMaxStack(item.id);
 					var this_item = searchItem(item.id, item.data, item.extra, false, true, p);
 					var count = this_item && this_item.count < itemMaxStack ? Math.min(event.count, item.count, itemMaxStack - this_item.count) : Math.min(event.count, item.count);
@@ -80,12 +87,16 @@ var GridEvents = {
 					if((res = tile.deleteItem(item, count, true)) < count) {
 						var _extra = (this_item ? this_item.extra : item.extra);
 						player.addItemToInventory(item.id, count - res, item.data, _extra || null, true);
-						tile.items();
-						tile.refreshGui(false, false, item.count <= count || event.updateFull);
+						needRefresh = true;
+						if(item.count <= count || event.updateFull) fullRefresh = true;
 					}
 					if(onEventHandled)onEventHandled(Number(p), 'delete');
-					delete tile.data.pushDeleteEvents[p][i];
+					delete events[slotKey];
 				}
+			}
+			if(needRefresh){
+				tile.items();
+				tile.refreshGui(false, false, fullRefresh);
 			}
 			delete tile.data.pushDeleteEvents[p];
 		}
