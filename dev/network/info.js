@@ -22,14 +22,6 @@ function requestNetworkUpdateItems(info) {
 	if (info && info.net_id != 'f') _pendingUpdateItems[info.net_id] = info;
 }
 
-Callback.addCallback("tick", function () {
-	for (var id in _pendingUpdateItems) {
-		var info = _pendingUpdateItems[id];
-		delete _pendingUpdateItems[id];
-		if (RSNetworks[id] && RSNetworks[id].info === info) info.updateItems();
-	}
-});
-
 var NetworkInfo = {
 	create: function(_data, controllerTile, netId) {
 		var controllerRef = { tile: controllerTile };

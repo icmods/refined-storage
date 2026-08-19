@@ -106,6 +106,7 @@ Callback.addCallback("LevelLeft", function () {
 	RSpendingReconnect = {};
 	RSreconnectTicks = 0;
 	if (typeof PatternContainerRegistry !== 'undefined') PatternContainerRegistry.reset();
+	if (typeof NetworkTimer !== 'undefined') NetworkTimer.reset();
 	RSChunkRebuildPending = false;
 	RSChunkRebuildTicks = 0;
 });

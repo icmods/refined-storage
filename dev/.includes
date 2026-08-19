@@ -6,6 +6,7 @@ network/topology.js
 network/chunks.js
 network/pattern_containers.js
 network/info.js
+network/network_timer.js
 network/calculator.js
 network/task.js
 network/scheduler.js

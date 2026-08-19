@@ -152,7 +152,7 @@ function patternGridSwitchPage(page, container, ignore, dontMoveSlider){
 		container.markSlotDirty("slot" + a);
 		if(elements_.get) elements_.get("slot" + a).setBinding('text', (!item.count ? 'Craft' : (cutNumber(item.count, true) + "")));
 		else if(elements_["slot" + a] && elements_["slot" + a].setBinding) elements_["slot" + a].setBinding('text', (!item.count ? 'Craft' : (cutNumber(item.count, true) + "")));
-		container.setSlot("slot" + a, item.id, item.count || 2, item.data, item.extra || null);
+		container.setSlot("slot" + a, item.id, item.count, item.data, item.extra || null);
 	}
 	return true;
 }

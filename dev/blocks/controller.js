@@ -200,7 +200,6 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		containerUpdate: false,
 		ticks: 0,
 		networkTick: 0,
-		patternCheckTimer: 6000,
 		updateControllerNetwork: false,
 		updateModel: false
 	},
@@ -401,6 +400,39 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 				this.data.ticks = 0;
 			}
 		}
+		// Self-heal for a piston-moved controller: on piston push the engine
+		// runs destroy(isDropAllowed=false) which tears the network down and
+		// returns before clearing NETWORK_ID, and neither created nor init run
+		// at the destination. Rebind into the surviving network object (moving
+		// the stale controller entry to the current coords) or recreate the
+		// network, then re-arm the boot flood.
+		if (this.data.NETWORK_ID != 'f') {
+			var _orphanNet = RSNetworks[this.data.NETWORK_ID];
+			if (!_orphanNet || !_orphanNet.info || !_orphanNet[cts(this)]) {
+				if (_orphanNet && _orphanNet.info) {
+					for (var _k in _orphanNet) {
+						if (_k != 'info' && _orphanNet[_k] && _orphanNet[_k].id == BlockID.RS_controller) delete _orphanNet[_k];
+					}
+					_orphanNet[cts(this)] = {
+						id: BlockID.RS_controller,
+						coords: {x: this.x, y: this.y, z: this.z},
+						upgrades: this.data.upgrades,
+						isActive: this.data.isActive || false
+					};
+					_orphanNet.info.updateControllerTile(this);
+					_orphanNet.info.netMapDirty = true;
+					_orphanNet.info.incomplete = true;
+					this.data.ticks = 0;
+					this.data.timer = 20;
+				} else {
+					if (_orphanNet && !_orphanNet.info) delete RSNetworks[this.data.NETWORK_ID];
+					this.init();
+				}
+			}
+		} else if (this.data.timer === undefined) {
+			// Tile created without init (piston-placed fresh tile): initialize.
+			this.init();
+		}
 		if (this.container.getNetworkEntity().getClients().iterator().hasNext()) {
 			var _scale = this.data.energy / this.getCapacity();
 			if (this.data._lastGuiScale !== _scale) {
@@ -427,29 +459,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			this.data.updateControllerNetwork = false;
 		}
 		var _info0 = (this.data.NETWORK_ID != 'f' && RSNetworks[this.data.NETWORK_ID]) ? RSNetworks[this.data.NETWORK_ID].info : null;
-		if (_info0 && _info0.incomplete) {
-			this.data.incompleteRetry = (this.data.incompleteRetry === undefined ? 0 : this.data.incompleteRetry) + 1;
-			if (this.data.incompleteRetry >= 100) {
-				this.data.incompleteRetry = 0;
-				this.data.updateControllerNetwork = true;
-			}
-		} else if (this.data.incompleteRetry) {
-			this.data.incompleteRetry = 0;
-		}
-		this.data.netMapTimer = (this.data.netMapTimer === undefined ? 0 : this.data.netMapTimer) - 1;
-		if ((_info0 && _info0.netMapDirty) || this.data.netMapTimer <= 0) {
-			this.updateNetMap();
-			this.data.netMapTimer = 20;
-			if (_info0) _info0.netMapDirty = false;
-			if (this.container.getNetworkEntity().getClients().iterator().hasNext() || this.data.containerUpdate) {
-				var _usageText = Translation.translate('Usage')+": " + this.data.usage + " FE/t";
-				if (this.data._lastGuiUsageText !== _usageText) {
-					this.data._lastGuiUsageText = _usageText;
-					this.container.setText('usage', _usageText);
-					this.data.containerUpdate = true;
-				}
-			}
-		}
+		if (_info0) NetworkTimer.heartbeat(_info0, this, this.blockSource);
 		if (this.data.energy >= this.data.usage && this.data.energy != 0){
 			this.setActive(true);
 			if(Config.controller.usesEnergy && !this.data.isCreative){
@@ -480,13 +490,6 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 				this.data.networkTick++;
 				CraftingScheduler.processTick(info, this.blockSource, this.data.networkTick);
 			}
-			if (info) {
-				this.data.patternCheckTimer--;
-				if (this.data.patternCheckTimer <= 0) {
-					info.rebuildPatternContainers(this);
-					this.data.patternCheckTimer = 6000;
-				}
-			}
 		}
 	},
 	refreshModel: function(){
@@ -505,6 +508,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			_RS._emit("networkDestroyed", {netId: this.data.NETWORK_ID, tile: this});
 			set_net_for_blocks(this, 'f');
 			delete RSNetworks[this.data.NETWORK_ID];
+			NetworkTimer.destroyNetwork(this.data.NETWORK_ID);
 		}
 		if(!isDropAllowed && isDropAllowed !== undefined) return;
 		this.data.LAST_NETWORK_ID = this.data.NETWORK_ID;

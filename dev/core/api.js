@@ -12,7 +12,14 @@ var _RS = {
 
 	_emit: function(event, data) {
 		var list = this._listeners[event];
-		if (list) for (var i in list) list[i](data);
+		if (!list) return;
+		for (var i = 0; i < list.length; i++) {
+			try {
+				list[i](data);
+			} catch (e) {
+				Logger.Log('Event listener for "' + event + '" failed: ' + e, 'RefinedStorageError');
+			}
+		}
 	},
 
 	networks: {
@@ -252,6 +259,47 @@ var _RS = {
 	},
 
 	registerStorageProvider: function(blockId, provider) { return registerStorageProvider(blockId, provider); },
+
+	// Addon-facing Network Timer API. Tasks are runtime-only: re-register on
+	// ModAPI.addAPICallback / PostLoaded (same pattern as StorageProviders) and
+	// unregister at teardown; the registry is cleared on LevelLeft and on
+	// networkDestroyed. Callback signature: fn(netId). Callbacks run on the
+	// server thread inside the controller heartbeat, i.e. only while the
+	// network's controller chunk is ticking. A throwing callback is logged and
+	// isolated (failures are counted, other tasks keep running). Prefer
+	// interval >= 20 for expensive work; do NOT persist task state.
+	timer: {
+		register: function(netId, name, interval, offset, fn) {
+			if (typeof NetworkTimer === 'undefined') return false;
+			if (typeof fn !== 'function' || typeof name !== 'string' || !name) return false;
+			var net = NetworkTimer.networks[netId];
+			var existing = net && net.tasks[name];
+			if (existing && existing.internal) return false;
+			return NetworkTimer.register(netId, name, interval, offset, function(_netId) {
+				fn(_netId);
+			}, false);
+		},
+		unregister: function(netId, name) {
+			if (typeof NetworkTimer === 'undefined') return false;
+			var net = NetworkTimer.networks[netId];
+			var t = net && net.tasks[name];
+			if (!t) return false;
+			if (t.internal) return false;
+			return NetworkTimer.unregister(netId, name);
+		},
+		get: function(netId, name) {
+			if (typeof NetworkTimer === 'undefined') return null;
+			return NetworkTimer.get(netId, name);
+		},
+		list: function(netId) {
+			if (typeof NetworkTimer === 'undefined') return null;
+			return NetworkTimer.list(netId);
+		},
+		listAll: function() {
+			if (typeof NetworkTimer === 'undefined') return {};
+			return NetworkTimer.listAll();
+		}
+	},
 
 	wireless: {
 		open: function(cfg) { return rsOpenWirelessTerminal(cfg); },
