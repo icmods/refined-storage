@@ -73,6 +73,7 @@ function restoreCraftingTasks(controllerTile) {
 			var task = CraftingTask.restore(saved[si], info);
 			info.craftingTasks.push(task);
 			info.providingCrafts.push(task);
+			info.scheduledByUid[task.requestedUid] = (info.scheduledByUid[task.requestedUid] || 0) + (task.requestedCount || 0);
 			_RS._emit("taskAdded", {netId: info.net_id, task: {id: task.id, requestedUid: task.requestedUid, requestedCount: task.requestedCount}});
 			if(Config.dev)Logger.Log('[PERSIST] Restored task ' + task.id + ': ' + task.requestedCount + 'x ' + task.requestedUid, 'RefinedStorageDebug');
 		} catch(e) {

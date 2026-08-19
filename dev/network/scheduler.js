@@ -12,6 +12,7 @@ var CraftingScheduler = {
 
 		var parallel = Config['parallelCrafting (Java like)'] === true;
 		var tileCache = {};
+		var dirtyTasks = {};
 
 		for (var ti = 0; ti < info.craftingTasks.length; ti++) {
 			var task = info.craftingTasks[ti];
@@ -24,6 +25,10 @@ var CraftingScheduler = {
 					var ctidx = info.craftingTasks.indexOf(task);
 					if (ctidx != -1) info.craftingTasks.splice(ctidx, 1);
 					ti--;
+					info.removeScheduledCount(task);
+					info.unregisterTaskExpectedOutputs(task);
+					info.notifyMonitorListeners(task);
+					info.refreshOpenedGrids();
 					_RS._emit("taskRemoved", {netId: info.net_id});
 				}
 				continue;
@@ -35,7 +40,7 @@ var CraftingScheduler = {
 					var node = task.nodes[ni];
 					if (node.done || node.remaining <= 0) continue;
 					if (node._lastTry != null && networkTick - node._lastTry < CraftingScheduler.RETRY_THROTTLE) continue;
-					CraftingScheduler._tryExecute(task, node, info, blockSource, networkTick, tileCache);
+					CraftingScheduler._tryExecute(task, node, info, blockSource, networkTick, tileCache, dirtyTasks);
 				}
 			} else {
 				for (var ni2 = 0; ni2 < (task.nodes || []).length; ni2++) {
@@ -43,7 +48,7 @@ var CraftingScheduler = {
 					var node2 = task.nodes[ni2];
 					if (node2.done || node2.remaining <= 0) continue;
 					if (node2._lastTry != null && networkTick - node2._lastTry < CraftingScheduler.RETRY_THROTTLE) continue;
-					CraftingScheduler._tryExecute(task, node2, info, blockSource, networkTick, tileCache);
+					CraftingScheduler._tryExecute(task, node2, info, blockSource, networkTick, tileCache, dirtyTasks);
 					break;
 				}
 			}
@@ -58,9 +63,15 @@ var CraftingScheduler = {
 				if (CraftingScheduler._completeTask(task, info, ti)) ti--;
 			}
 		}
+
+		var dirtyKeys = Object.keys(dirtyTasks);
+		if (dirtyKeys.length > 0) {
+			for (var dk = 0; dk < dirtyKeys.length; dk++) info.notifyMonitorListeners(dirtyTasks[dirtyKeys[dk]]);
+			info.refreshOpenedGrids();
+		}
 	},
 
-	_tryExecute: function(task, node, info, blockSource, networkTick, tileCache) {
+	_tryExecute: function(task, node, info, blockSource, networkTick, tileCache, dirtyTasks) {
 		var tick = networkTick || 0;
 		var patternList = info.crafts[node.patternUid];
 		var containers = info.getPatternContainers(node.patternUid);
@@ -78,17 +89,21 @@ var CraftingScheduler = {
 		var anySuccess = false;
 		var needsThrottle = false;
 		for (var ci = 0; ci < containers.length; ci++) {
-			var parts = containers[ci].split(',');
-			if (parts.length < 3) {
-				needsThrottle = true;
-				continue;
+			var coordsStr = containers[ci];
+			var parsed = info.patternContainersParsed ? info.patternContainersParsed[coordsStr] : null;
+			if (!parsed) {
+				var parts = coordsStr.split(',');
+				if (parts.length < 3) {
+					needsThrottle = true;
+					continue;
+				}
+				parsed = { x: parseInt(parts[0]), y: parseInt(parts[1]), z: parseInt(parts[2]) };
+				if (info.patternContainersParsed) info.patternContainersParsed[coordsStr] = parsed;
 			}
-			var cacheKey = parts[0] + ',' + parts[1] + ',' + parts[2];
+			var cacheKey = coordsStr;
 			var crafter = tileCache[cacheKey];
 			if (crafter === undefined) {
-				var cx = parseInt(parts[0]);
-				var cz = parseInt(parts[2]);
-				if (blockSource && !isChunkLoadedAtSafe(blockSource, cx, parseInt(parts[1]), cz)) {
+				if (blockSource && !isChunkLoadedAtSafe(blockSource, parsed.x, parsed.y, parsed.z)) {
 					tileCache[cacheKey] = null;
 					info.incomplete = true;
 					node.missingSince = null;
@@ -99,7 +114,7 @@ var CraftingScheduler = {
 					}
 					continue;
 				}
-				crafter = tileCache[cacheKey] = World.getTileEntity(parseInt(parts[0]), parseInt(parts[1]), parseInt(parts[2]), blockSource);
+				crafter = tileCache[cacheKey] = World.getTileEntity(parsed.x, parsed.y, parsed.z, blockSource);
 			}
 			if (!crafter || !crafter.data || !crafter.data.isActive) continue;
 			node._suspendSince = null;
@@ -144,8 +159,7 @@ var CraftingScheduler = {
 				if (success) {
 					anySuccess = true;
 					task.currentStep = (task.currentStep || 0) + 1;
-					info.notifyMonitorListeners(task);
-					info.refreshOpenedGrids();
+					dirtyTasks[task.id] = task;
 					if (task.currentStep % 5 === 0) _RS._emit("taskProgress", {netId: info.net_id, taskId: task.id, currentStep: task.currentStep, totalSteps: task.totalSteps || 0});
 				} else {
 					needsThrottle = true;
@@ -325,9 +339,7 @@ var CraftingScheduler = {
 	},
 
 	_completeTask: function(task, info, index) {
-		for (var ni = 0; ni < (task.nodes || []).length; ni++) {
-			if (!task.nodes[ni].done) return false;
-		}
+		// OPT-10 contract: only called from processTick after its allDone scan passed.
 		if (task.flushBuffer && !task.flushBuffer(info)) {
 			task.completingFlush = true;
 			return false;
@@ -340,7 +352,10 @@ var CraftingScheduler = {
 		var tidx = info.craftingTasks.indexOf(task);
 		if (tidx != -1) info.craftingTasks.splice(tidx, 1);
 
+		info.removeScheduledCount(task);
+		info.unregisterTaskExpectedOutputs(task);
 		info.notifyMonitorListeners(task);
+		info.refreshOpenedGrids();
 		_RS._emit("taskCompleted", {netId: info.net_id, task: {id: task.id, requestedUid: task.requestedUid, requestedCount: task.requestedCount}});
 		return true;
 	}

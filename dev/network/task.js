@@ -27,6 +27,7 @@ var CraftingTask = {
 
 		var task = Object.assign({}, fullCrafts, {
 			id: CraftingTask._generateId(),
+			_info: info,
 			requestedUid: getItemUid(requestedItem),
 			requestedCount: requestedCount || fullCrafts.results[0].count,
 			totalSteps: totalSteps,
@@ -64,7 +65,7 @@ var CraftingTask = {
 					var count = this.buffer[uid];
 					if (count <= 0) { delete this.buffer[uid]; continue; }
 					var parts = uid.split('_');
-					var remainder = info.pushItem({ id: parseInt(parts[0]), data: parseInt(parts[1]), count: count, extra: null }, count, false, ['autocraft']);
+					var remainder = info.pushItem({ id: parseInt(parts[0]), data: parseInt(parts[1]), count: count, extra: null }, count, true, ['autocraft']);
 					if (remainder <= 0) {
 						delete this.buffer[uid];
 					} else {
@@ -113,6 +114,7 @@ var CraftingTask = {
 				for (var uid in node.expectedByUid) {
 					if (!this.pendingOutputs[uid]) this.pendingOutputs[uid] = [];
 					if (this.pendingOutputs[uid].indexOf(idx) == -1) this.pendingOutputs[uid].push(idx);
+					if (this._info && this._info.registerExpectedOutputTask) this._info.registerExpectedOutputTask(uid, this);
 				}
 			},
 
@@ -125,7 +127,10 @@ var CraftingTask = {
 					if (!list) continue;
 					var li = list.indexOf(idx);
 					if (li != -1) list.splice(li, 1);
-					if (list.length === 0) delete this.pendingOutputs[uid];
+					if (list.length === 0) {
+						delete this.pendingOutputs[uid];
+						if (this._info && this._info.unregisterExpectedOutputTask) this._info.unregisterExpectedOutputTask(uid, this);
+					}
 				}
 			},
 

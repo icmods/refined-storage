@@ -38,6 +38,7 @@ var NetworkInfo = {
 			craftsIDS: {},
 			crafts: {},
 			patternToContainers: {},
+			patternContainersParsed: {},
 			disk_map: [],
 			just_items_map: {},
 			just_items_map_extra: {},
@@ -51,6 +52,8 @@ var NetworkInfo = {
 			itemRemoveListeners: [],
 			providingCrafts: [],
 			craftingTasks: [],
+			scheduledByUid: {},
+			expectedOutputIndex: {},
 			netMapDirty: false,
 			incomplete: false,
 			updateControllerTile: function(tile) {
@@ -78,19 +81,49 @@ var NetworkInfo = {
 					if (this.monitorListeners[i]) this.monitorListeners[i](this, task || null);
 				}
 			},
+			registerExpectedOutputTask: function(uid, task) {
+				if (!this.expectedOutputIndex[uid]) this.expectedOutputIndex[uid] = {};
+				this.expectedOutputIndex[uid][task.id] = task;
+			},
+			unregisterExpectedOutputTask: function(uid, task) {
+				var set = this.expectedOutputIndex[uid];
+				if (!set) return;
+				delete set[task.id];
+				if (Object.keys(set).length === 0) delete this.expectedOutputIndex[uid];
+			},
+			unregisterTaskExpectedOutputs: function(task) {
+				if (!task || !task.pendingOutputs) return;
+				for (var uid in task.pendingOutputs) this.unregisterExpectedOutputTask(uid, task);
+				task.pendingOutputs = {};
+			},
 			trackInsertedItem: function(item, count) {
 				if (count <= 0) return;
 				var uid = getItemUid(item);
 				var remaining = count;
-				for (var ti = 0; ti < this.craftingTasks.length && remaining > 0; ti++) {
-					var task = this.craftingTasks[ti];
-					if (!task || task.cancelled || task.completing || !task.onOutputArrived) continue;
-					var consumed = task.onOutputArrived(uid, remaining);
-				if (consumed > 0) {
-					remaining -= consumed;
-					this.notifyMonitorListeners(task);
-					_RS._emit("taskProgress", {netId: this.net_id, taskId: task.id, currentStep: task.currentStep || 0, totalSteps: task.totalSteps || 0});
-				}
+				var set = this.expectedOutputIndex[uid];
+				if (set) {
+					for (var taskId in set) {
+						if (remaining <= 0) break;
+						var task = set[taskId];
+						if (!task || task.cancelled || task.completing || !task.onOutputArrived) continue;
+						var consumed = task.onOutputArrived(uid, remaining);
+						if (consumed > 0) {
+							remaining -= consumed;
+							this.notifyMonitorListeners(task);
+							_RS._emit("taskProgress", {netId: this.net_id, taskId: task.id, currentStep: task.currentStep || 0, totalSteps: task.totalSteps || 0});
+						}
+					}
+				} else {
+					for (var ti = 0; ti < this.craftingTasks.length && remaining > 0; ti++) {
+						var task2 = this.craftingTasks[ti];
+						if (!task2 || task2.cancelled || task2.completing || !task2.onOutputArrived) continue;
+						var consumed2 = task2.onOutputArrived(uid, remaining);
+						if (consumed2 > 0) {
+							remaining -= consumed2;
+							this.notifyMonitorListeners(task2);
+							_RS._emit("taskProgress", {netId: this.net_id, taskId: task2.id, currentStep: task2.currentStep || 0, totalSteps: task2.totalSteps || 0});
+						}
+					}
 				}
 			},
 			buildMonitorElements: function(task) {
@@ -202,7 +235,15 @@ var NetworkInfo = {
 			},
 			addPatternContainer: function(resultUid, coordsStr){
 				if(!this.patternToContainers[resultUid]) this.patternToContainers[resultUid] = [];
-				if(this.patternToContainers[resultUid].indexOf(coordsStr) == -1) this.patternToContainers[resultUid].push(coordsStr);
+				if(this.patternToContainers[resultUid].indexOf(coordsStr) == -1){
+					this.patternToContainers[resultUid].push(coordsStr);
+					if(!this.patternContainersParsed[coordsStr]){
+						var parts = coordsStr.split(',');
+						if(parts.length >= 3){
+							this.patternContainersParsed[coordsStr] = { x: parseInt(parts[0]), y: parseInt(parts[1]), z: parseInt(parts[2]) };
+						}
+					}
+				}
 			},
 			removePatternContainer: function(resultUid, coordsStr){
 				var list = this.patternToContainers[resultUid];
@@ -216,12 +257,14 @@ var NetworkInfo = {
 			},
 			rebuildPatternContainers: function(controllerTile){
 				var newPatternToContainers = {};
+				var newPatternContainersParsed = {};
 				var newCrafts = {};
 				var newCraftsIDS = {};
 				var dedupeKeys = {};
 				var containers = PatternContainerRegistry.forNetwork(this.net_id, controllerTile.blockSource, controllerTile.dimension);
 				for(var ci = 0; ci < containers.length; ci++){
 					var entry = containers[ci];
+					newPatternContainersParsed[entry.coordsId] = { x: entry.coords.x, y: entry.coords.y, z: entry.coords.z };
 					var patterns;
 					try {
 						patterns = entry.container.getPatterns();
@@ -261,6 +304,7 @@ var NetworkInfo = {
 					}
 				}
 				this.patternToContainers = newPatternToContainers;
+				this.patternContainersParsed = newPatternContainersParsed;
 				this.crafts = newCrafts;
 				this.craftsIDS = newCraftsIDS;
 				this.refreshOpenedGrids(true);
@@ -647,13 +691,14 @@ var NetworkInfo = {
 			},
 			getScheduledCountFor: function(item) {
 				var uid = item.id + '_' + item.data;
-				var scheduled = 0;
-				for (var i = 0; i < this.craftingTasks.length; i++) {
-					var task = this.craftingTasks[i];
-					if (!task || task.cancelled || task.completing) continue;
-					if (task.requestedUid === uid) scheduled += task.requestedCount || 0;
-				}
-				return scheduled;
+				return this.scheduledByUid[uid] || 0;
+			},
+			removeScheduledCount: function(task) {
+				if (!task || !task.requestedUid) return;
+				var uid = task.requestedUid;
+				var next = (this.scheduledByUid[uid] || 0) - (task.requestedCount || 0);
+				if (next <= 0) delete this.scheduledByUid[uid];
+				else this.scheduledByUid[uid] = next;
 			},
 			scheduleTask: function(_craft_) {
 				var requestedItem = _craft_.results && _craft_.results[0]
@@ -663,6 +708,7 @@ var NetworkInfo = {
 			this.refreshOpenedGrids();
 			this.craftingTasks.push(task);
 			this.providingCrafts.push(task);
+			this.scheduledByUid[task.requestedUid] = (this.scheduledByUid[task.requestedUid] || 0) + (task.requestedCount || 0);
 			this.notifyMonitorListeners();
 			if(Config.dev)Logger.Log('[CRAFT] Task ' + task.id + ' scheduled: ' + task.requestedCount + 'x ' + task.requestedUid, 'RefinedStorageDebug');
 			_RS._emit("taskAdded", {netId: this.net_id, task: {id: task.id, requestedUid: task.requestedUid, requestedCount: task.requestedCount}});
@@ -674,13 +720,17 @@ var NetworkInfo = {
 				task.cancelled = true;
 				if (task.flushBuffer && !task.flushBuffer(this)) {
 					task.completingFlush = true;
+					this.refreshOpenedGrids();
 				} else {
 					var pidx = this.providingCrafts.indexOf(task);
 					if (pidx != -1) this.providingCrafts.splice(pidx, 1);
 					var tidx = this.craftingTasks.indexOf(task);
 					if (tidx != -1) this.craftingTasks.splice(tidx, 1);
+					this.removeScheduledCount(task);
+					this.unregisterTaskExpectedOutputs(task);
+					this.refreshOpenedGrids();
 				}
-				this.notifyMonitorListeners();
+				this.notifyMonitorListeners(task);
 				_RS._emit("taskCancelled", {netId: this.net_id, taskId: taskId});
 					if(Config.dev)Logger.Log('[CRAFT] Task ' + taskId + ' cancelled', 'RefinedStorageDebug');
 					return true;
