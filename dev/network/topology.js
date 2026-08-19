@@ -6,7 +6,7 @@ function isChunkLoadedAtSafe(blockSource, x, y, z) {
 	return true;
 }
 
-const searchController = function (_coords, _self, _blockSource, _out) {
+const searchController = function (_coords, _self, _blockSource, _out, _visited) {
 	if(!_blockSource) _blockSource = _coords.blockSource;
 	if(!_blockSource) return false;
 	if(_out) _out.incomplete = false;
@@ -28,7 +28,7 @@ const searchController = function (_coords, _self, _blockSource, _out) {
 			if (hintBlock.id == BlockID.RS_controller) return {x: hint.x, y: hint.y, z: hint.z};
 		}
 	}
-	var visited = {};
+	var visited = _visited || {};
 	visited[cts(_coords)] = true;
 	var stack = [{x: _coords.x, y: _coords.y, z: _coords.z}];
 	while (stack.length > 0) {
@@ -214,11 +214,23 @@ var pistonsPoss = [
 	[-1, 0, 0]
 ]
 var pistonsMove__ = {};
+var pistonsMoveKey = function(coords, blockSource){
+	return blockSource.getDimension() + ':' + cts(coords);
+}
 var ignoredParams = ['NETWORK_ID','LAST_NETWORK_ID','controller_coords','createdCalled'];
+var RSBlockChangedProcessed = {};
+var RSBlockChangedStamp = -1;
 Callback.addCallback('BlockChanged', function(coords, oldBlock, newBlock, _blockSource){
 	if (typeof _blockSource == 'number') _blockSource = BlockSource.getDefaultForDimension(_blockSource);
 	if (!_blockSource) return;
 	coords.blockSource = _blockSource;
+	var currentStamp = World.getThreadTime();
+	if (RSBlockChangedStamp != currentStamp) {
+		RSBlockChangedStamp = currentStamp;
+		RSBlockChangedProcessed = {};
+	}
+	// DISABLED - engine bug: UpdatableSchedulerScopeBindGenBase_createHandle_I SIGSEGV (use-after-free on tile create/destroy). Re-enable after b129 fix.
+	/*
 	if(oldBlock.id == 535 || newBlock.id == 535 || newBlock.id == 34) {
 		var pistonBlockData = newBlock.id == 535 || newBlock.id == 34 ? newBlock.data : oldBlock.data;
 		var pistonPos = pistonsPoss[pistonBlockData];
@@ -234,12 +246,12 @@ Callback.addCallback('BlockChanged', function(coords, oldBlock, newBlock, _block
 		} : coords;
 		var __tile = World.getTileEntity(from_coords.x, from_coords.y, from_coords.z, _blockSource);
 		if(__tile){
-			pistonsMove__[cts(to_coords)] = __tile;
+			pistonsMove__[pistonsMoveKey(to_coords, _blockSource)] = __tile;
 		}
 	}
 	if(oldBlock.id == 250) {
 		var oldTileData, newTileData;
-		if((oldTileData = pistonsMove__[cts(coords)]) && (newTileData = World.addTileEntity(coords.x, coords.y, coords.z, _blockSource))){
+		if((oldTileData = pistonsMove__[pistonsMoveKey(coords, _blockSource)]) && (newTileData = World.addTileEntity(coords.x, coords.y, coords.z, _blockSource))){
 			for(var i in newTileData.data){
 				if(ignoredParams.indexOf(i) == -1){
 					newTileData.data[i] = oldTileData.data[i];
@@ -253,9 +265,10 @@ Callback.addCallback('BlockChanged', function(coords, oldBlock, newBlock, _block
 				oldTileData.container.setSlot(i, 0,0,0,null);
 			}
 			TileEntity.destroyTileEntity(oldTileData);
-			delete pistonsMove__[cts(coords)];
+			delete pistonsMove__[pistonsMoveKey(coords, _blockSource)];
 		}
 	}
+	*/
 	if (oldBlock.id == BlockID.RS_cable) {
 		for(var i in RSNetworks){
 			if(RSNetworks[i][cts(coords)]) delete RSNetworks[i][cts(coords)];
@@ -271,6 +284,9 @@ Callback.addCallback('BlockChanged', function(coords, oldBlock, newBlock, _block
 			z: coords.z + sides[i][2],
 			blockSource: _blockSource
 		}
+		var zKey = _blockSource.getDimension() + ':' + cts(zCoords);
+		if (RSBlockChangedProcessed[zKey]) continue;
+		RSBlockChangedProcessed[zKey] = true;
 		checkAndSetNetOnCoords(zCoords);
 	}
 	if(newBlock.id == BlockID.RS_cable){

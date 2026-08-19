@@ -15,25 +15,42 @@ var RSpendingReconnect = {};
 var RSreconnectTicks = 0;
 
 function rsAddReconnectPending(tile) {
-	RSpendingReconnect[tile.coords_id()] = { x: tile.x, y: tile.y, z: tile.z, blockSource: tile.blockSource };
+	RSpendingReconnect[tile.dimension + ':' + tile.coords_id()] = { x: tile.x, y: tile.y, z: tile.z, dimension: tile.dimension, blockSource: tile.blockSource };
 }
 
 Callback.addCallback("tick", function () {
 	RSreconnectTicks++;
 	if (RSreconnectTicks < 20) return;
 	RSreconnectTicks = 0;
+	var byDimension = {};
 	for (var cid in RSpendingReconnect) {
 		var entry = RSpendingReconnect[cid];
-		var tile = World.getTileEntity(entry.x, entry.y, entry.z, entry.blockSource);
-		if (!tile) { delete RSpendingReconnect[cid]; continue; }
-		if (tile.data.NETWORK_ID != 'f' && RSNetworks[tile.data.NETWORK_ID] && RSNetworks[tile.data.NETWORK_ID][cid]) {
-			delete RSpendingReconnect[cid];
-			continue;
-		}
-		var controller = searchController(tile, false);
-		if (controller) {
-			var cTile = World.getTileEntity(controller.x, controller.y, controller.z, entry.blockSource);
-			if (cTile) cTile.data.updateControllerNetwork = true;
+		var dKey = entry.dimension != undefined ? entry.dimension : -1;
+		if (!byDimension[dKey]) byDimension[dKey] = [];
+		byDimension[dKey].push({ key: cid, entry: entry });
+	}
+	for (var dKey in byDimension) {
+		var visited = {};
+		var doneControllers = {};
+		var group = byDimension[dKey];
+		for (var pi = 0; pi < group.length; pi++) {
+			var key = group[pi].key;
+			var entry = group[pi].entry;
+			var tile = World.getTileEntity(entry.x, entry.y, entry.z, entry.blockSource);
+			if (!tile) { delete RSpendingReconnect[key]; continue; }
+			if (tile.data.NETWORK_ID != 'f' && RSNetworks[tile.data.NETWORK_ID] && RSNetworks[tile.data.NETWORK_ID][tile.coords_id()]) {
+				delete RSpendingReconnect[key];
+				continue;
+			}
+			var controller = searchController(tile, false, entry.blockSource, null, visited);
+			if (controller) {
+				var cKey = controller.x + ',' + controller.y + ',' + controller.z;
+				if (!doneControllers[cKey]) {
+					doneControllers[cKey] = true;
+					var cTile = World.getTileEntity(controller.x, controller.y, controller.z, entry.blockSource);
+					if (cTile) cTile.data.updateControllerNetwork = true;
+				}
+			}
 		}
 	}
 });
