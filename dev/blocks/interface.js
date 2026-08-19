@@ -224,6 +224,7 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 		upgrades: {},
 		speed: 9,
 		count: 1,
+		guiDirty: false,
 		importItems: [{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null}]
 	},
 	upgradesSlots: ["slot_upgrades0", "slot_upgrades1", "slot_upgrades2", "slot_upgrades3"],
@@ -248,6 +249,7 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 			if(deleted < item.count){
 				var count = item.count - deleted;
 				this.container.setSlot('slot_output' + k, item.id, slotItem.count + count, item.data, item.extra);
+				this.data.guiDirty = true;
 			}
 		}
 		this.data.ticks++
@@ -262,18 +264,39 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 				var pushed = this.itemCanBePushed(slot, count, true);
 				if(pushed == 0){
 					this.container.setSlot('slot_input' + this.data.currentSlot, slot.id, slot.count - count, slot.data, slot.extra);
+					this.data.guiDirty = true;
 				} else if(pushed < count){
 					this.container.setSlot('slot_input' + this.data.currentSlot, slot.id, slot.count - (count - pushed), slot.data, slot.extra);
+					this.data.guiDirty = true;
 				} else {
 					this.data.currentSlot++;
 					if(this.data.currentSlot > 8) this.data.currentSlot = 0;
+					if(this.data.guiDirty){
+						if(this.container.getNetworkEntity().getClients().iterator().hasNext())this.container.sendChanges();
+						this.data.guiDirty = false;
+					}
 					return;
 				}
-				if(slot.count <= (count - pushed)) this.container.clearSlot('slot_input' + this.data.currentSlot);
+				if(slot.count <= (count - pushed)){
+					this.container.clearSlot('slot_input' + this.data.currentSlot);
+					this.data.guiDirty = true;
+				}
 				this.pushItem(slot, count);
 			}
 		}
-		this.container.sendChanges();
+		if(World.getThreadTime()%8 == 0){
+			var region = this.blockSource;
+			var _hopperNear = region.getBlockId(this.x, this.y - 1, this.z) == 154;
+			for(var _side = 1; _side < 6 && !_hopperNear; _side++){
+				var _dir = StorageInterface.getRelativeCoords(this, _side);
+				if(region.getBlockId(_dir.x, _dir.y, _dir.z) == 154)_hopperNear = true;
+			}
+			if(_hopperNear)this.data.guiDirty = true;
+		}
+		if(this.data.guiDirty){
+			if(this.container.getNetworkEntity().getClients().iterator().hasNext())this.container.sendChanges();
+			this.data.guiDirty = false;
+		}
 	},
 	pre_created: function(){
 		this.data.importItems = [{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null}];
@@ -334,6 +357,7 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 					var thisSlot = itemContainer.getSlot(slot);
 					ths.data.importItems[importSlotsMap[slot]] = {id: id, count: thisSlot.count + count, data: data, extra: extra};
 					itemContainer.setSlot(slot, id, Math.min(thisSlot.count + count, Item.getMaxStack(id)), data, extra);
+					ths.data.guiDirty = true;
 					return 0;
 				}
 			})
@@ -341,6 +365,7 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 				transfer: function(itemContainer, slot, id, count, data, extra, player){
 					ths.data.importItems[importSlotsMap[slot]] = {id:0, count:0, data: 0, extra: null};
 					itemContainer.setSlot(slot, 0, 0, 0, null);
+					ths.data.guiDirty = true;
 					return 0;
 				}
 			})

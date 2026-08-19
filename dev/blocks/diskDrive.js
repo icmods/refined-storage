@@ -304,6 +304,9 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 		if(!client) return true;
 		if (this.container.getNetworkEntity().getClients().contains(client)) return true;
 		this.container.openFor(client, "main");
+		this.data._lastGuiScale = null;
+		this.data._lastGuiPercents = null;
+		this.data._lastGuiItems = null;
 		var _data = {
 			name: this.networkData.getName() + '', 
 			isActive: this.data.isActive, 
@@ -377,10 +380,18 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 		this.data.storage = String(storage);
 		this.data.stored = stored;
 		if (this.container.getNetworkEntity().getClients().iterator().hasNext()) {
-			this.container.setScale('scale', stored == 0 ? 0 : stored / storage);
-			this.container.setText('percents', stored == 0 ? '0%' : Math.ceil(stored / (storage / 100)) + '%');
-			this.container.setText('items', cutNumber(stored) + (storage != Infinity ? '/' + cutNumber(storage) : ''));
-			this.container.sendChanges();
+			var _scale = stored == 0 ? 0 : stored / storage;
+			var _percents = stored == 0 ? '0%' : Math.ceil(stored / (storage / 100)) + '%';
+			var _items = cutNumber(stored) + (storage != Infinity ? '/' + cutNumber(storage) : '');
+			if (this.data._lastGuiScale !== _scale || this.data._lastGuiPercents !== _percents || this.data._lastGuiItems !== _items) {
+				this.data._lastGuiScale = _scale;
+				this.data._lastGuiPercents = _percents;
+				this.data._lastGuiItems = _items;
+				this.container.setScale('scale', _scale);
+				this.container.setText('percents', _percents);
+				this.container.setText('items', _items);
+				this.container.sendChanges();
+			}
 		}
 		return;
 	},

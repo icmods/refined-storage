@@ -402,9 +402,18 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			}
 		}
 		if (this.container.getNetworkEntity().getClients().iterator().hasNext()) {
-			this.container.setScale('scale', this.data.energy / this.getCapacity());
-			this.container.setText('storage', this.data.energy + '/' + this.getCapacity() + ' FE');
-			this.data.containerUpdate = true;
+			var _scale = this.data.energy / this.getCapacity();
+			if (this.data._lastGuiScale !== _scale) {
+				this.data._lastGuiScale = _scale;
+				this.container.setScale('scale', _scale);
+				this.data.containerUpdate = true;
+			}
+			var _storageText = this.data.energy + '/' + this.getCapacity() + ' FE';
+			if (this.data._lastGuiStorageText !== _storageText) {
+				this.data._lastGuiStorageText = _storageText;
+				this.container.setText('storage', _storageText);
+				this.data.containerUpdate = true;
+			}
 		}
 		if(!this.isWorkAllowed()) {
 			if(this.data.containerUpdate){
@@ -433,8 +442,12 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			this.data.netMapTimer = 20;
 			if (_info0) _info0.netMapDirty = false;
 			if (this.container.getNetworkEntity().getClients().iterator().hasNext() || this.data.containerUpdate) {
-				this.container.setText('usage', Translation.translate('Usage')+": " + this.data.usage + " FE/t");
-				this.data.containerUpdate = true;
+				var _usageText = Translation.translate('Usage')+": " + this.data.usage + " FE/t";
+				if (this.data._lastGuiUsageText !== _usageText) {
+					this.data._lastGuiUsageText = _usageText;
+					this.container.setText('usage', _usageText);
+					this.data.containerUpdate = true;
+				}
 			}
 		}
 		if (this.data.energy >= this.data.usage && this.data.energy != 0){
