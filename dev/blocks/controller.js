@@ -250,7 +250,10 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		if(state == false || (forced || this.data.allowSetIsActive != false)){
 			this.data.isActive = state;
 			this.networkData.putBoolean('isActive', state);
-			if(this.data.NETWORK_ID != "f")RSNetworks[this.data.NETWORK_ID][this.coords_id()].isActive = state;
+			if(this.data.NETWORK_ID != "f"){
+				var ownNetworkEntry = RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID][this.coords_id()];
+				if(ownNetworkEntry) ownNetworkEntry.isActive = state;
+			}
 			if(this.data.NETWORK_ID != "f")_RS._emit("networkStateChanged", {netId: this.data.NETWORK_ID, isActive: state});
 		}
 		this.networkData.sendChanges();
@@ -305,6 +308,9 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 				existingNet.info.incomplete = true;
 			}
 		}
+		var _timerNet = NetworkTimer.networks[netId];
+		if(!_timerNet) _timerNet = NetworkTimer.networks[netId] = { heartbeat: 0, tasks: {} };
+		if(RSNetworks[netId] && RSNetworks[netId].info) NetworkTimer.ensureInternalTasks(_timerNet, RSNetworks[netId].info);
 		this.networkData.sendChanges();
 		this.data.ticks = 0;
 		this.data.timer = 20;

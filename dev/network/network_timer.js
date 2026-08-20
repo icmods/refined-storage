@@ -11,16 +11,20 @@
 // Cleanup: NetworkTimer.destroyNetwork(netId) on network destroyed and
 // NetworkTimer.reset() on LevelLeft.
 //
-// Internal RefinedStorage tasks (netMap, patternCheck, incompleteRetry) are
-// registered lazily on the first heartbeat of each network (self-healing).
+// Internal RefinedStorage tasks (netMap, patternCheck, incompleteRetry, flush)
+// are reserved names, registered eagerly in controller.init and re-registered
+// lazily on the first heartbeat of each network (self-healing safety net).
 // ============================================================
 
 var NetworkTimer = {
 	networks: {},
 
+	RESERVED: { netMap: 1, patternCheck: 1, incompleteRetry: 1, flush: 1 },
+
 	register: function(netId, name, interval, offset, fn, internal) {
 		if (typeof netId !== 'number' || !(netId >= 0) || typeof RSNetworks === 'undefined' || !RSNetworks[netId] || !RSNetworks[netId].info) return false;
 		if (typeof name !== 'string' || !name) return false;
+		if (this.RESERVED[name] && !internal) return false;
 		interval = Math.floor(Number(interval));
 		if (!isFinite(interval) || interval < 1) return false;
 		offset = Math.floor(Number(offset));

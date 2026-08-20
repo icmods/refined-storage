@@ -272,6 +272,7 @@ var _RS = {
 		register: function(netId, name, interval, offset, fn) {
 			if (typeof NetworkTimer === 'undefined') return false;
 			if (typeof fn !== 'function' || typeof name !== 'string' || !name) return false;
+			if (NetworkTimer.RESERVED[name]) return false;
 			var net = NetworkTimer.networks[netId];
 			var existing = net && net.tasks[name];
 			if (existing && existing.internal) return false;

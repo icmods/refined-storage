@@ -1,3 +1,5 @@
+var MAX_PUSH_DELETE_COUNT = 10000;
+
 var GridEvents = {
 	craftPreview: function(tile, eventData, connectedClient) {
 		if(!eventData.item || !eventData.count || tile.data.NETWORK_ID == 'f') return;
@@ -55,11 +57,17 @@ var GridEvents = {
 			var fullRefresh = false;
 			for(var slotKey in events){
 				var event = events[slotKey];
-				if(!event) {
-					delete events[slotKey];
-					continue;
-				}
-				if(!player) player = new PlayerActor(Number(p));
+			if(!event) {
+				delete events[slotKey];
+				continue;
+			}
+			var eventCount = Math.floor(Number(event.count));
+			if(!isFinite(eventCount) || eventCount <= 0) {
+				delete events[slotKey];
+				continue;
+			}
+			event.count = Math.min(eventCount, MAX_PUSH_DELETE_COUNT);
+			if(!player) player = new PlayerActor(Number(p));
 				if(event.type == 'push'){
 					var item = player.getInventorySlot(event.slot);
 					if(item.id == 0) {

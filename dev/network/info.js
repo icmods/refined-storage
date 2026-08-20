@@ -571,8 +571,11 @@ var NetworkInfo = {
 				count = count || item.count;
 				if(!this.itemCanBeDeleted(item, count)) return count;
 				if((!item.data && item.data != 0) || item.data == -1) item.data = this.just_items_map[item.id][0];
-				if(item.extra === undefined)item.extra = null;
-				if((!item.extra && item.extra != null) || item.extra === -1) item.extra = this.just_items_map_extra[item.id+'_'+item.data][0] || null;
+			if(item.extra === undefined)item.extra = null;
+			if((!item.extra && item.extra != null) || item.extra === -1){
+				var _extraMap = this.just_items_map_extra[item.id+'_'+item.data];
+				item.extra = (_extraMap && _extraMap[0]) || null;
+			}
 				var itemUid = getItemUid(item);
 				var deleteListeners = [];
 				for(var i in this.itemRemoveListeners){

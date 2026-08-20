@@ -217,7 +217,7 @@ var pistonsMove__ = {};
 var pistonsMoveKey = function(coords, blockSource){
 	return blockSource.getDimension() + ':' + cts(coords);
 }
-var ignoredParams = ['NETWORK_ID','LAST_NETWORK_ID','controller_coords','createdCalled'];
+var ignoredParams = ['NETWORK_ID','LAST_NETWORK_ID','controller_coords','createdCalled','timer'];
 var RSBlockChangedProcessed = {};
 var RSBlockChangedStamp = -1;
 Callback.addCallback('BlockChanged', function(coords, oldBlock, newBlock, _blockSource){
@@ -229,46 +229,49 @@ Callback.addCallback('BlockChanged', function(coords, oldBlock, newBlock, _block
 		RSBlockChangedStamp = currentStamp;
 		RSBlockChangedProcessed = {};
 	}
-	// DISABLED - engine bug: UpdatableSchedulerScopeBindGenBase_createHandle_I SIGSEGV (use-after-free on tile create/destroy). Re-enable after b129 fix.
-	/*
-	if(oldBlock.id == 535 || newBlock.id == 535 || newBlock.id == 34) {
-		var pistonBlockData = newBlock.id == 535 || newBlock.id == 34 ? newBlock.data : oldBlock.data;
-		var pistonPos = pistonsPoss[pistonBlockData];
-		var from_coords = oldBlock.id == 535 ? {
-			x: coords.x + pistonPos[0],
-			y: coords.y + pistonPos[1],
-			z: coords.z + pistonPos[2]
-		} : coords;
-		var to_coords = newBlock.id == 535 || newBlock.id == 34 ? {
-			x: coords.x + pistonPos[0],
-			y: coords.y + pistonPos[1],
-			z: coords.z + pistonPos[2]
-		} : coords;
-		var __tile = World.getTileEntity(from_coords.x, from_coords.y, from_coords.z, _blockSource);
-		if(__tile){
-			pistonsMove__[pistonsMoveKey(to_coords, _blockSource)] = __tile;
+	// Re-enabled on engine b129+ only: on b128 and earlier this path triggers
+	// UpdatableSchedulerScopeBindGenBase_createHandle_I SIGSEGV (use-after-free
+	// on tile create/destroy). Defensive: per engine devs, custom blocks/tiles
+	// are not movable by pistons, so this normally never fires.
+	if(InnerCore_pack.packVersionCode >= 129){
+		if(oldBlock.id == 535 || newBlock.id == 535 || newBlock.id == 34) {
+			var pistonBlockData = newBlock.id == 535 || newBlock.id == 34 ? newBlock.data : oldBlock.data;
+			var pistonPos = pistonsPoss[pistonBlockData];
+			var from_coords = oldBlock.id == 535 ? {
+				x: coords.x + pistonPos[0],
+				y: coords.y + pistonPos[1],
+				z: coords.z + pistonPos[2]
+			} : coords;
+			var to_coords = newBlock.id == 535 || newBlock.id == 34 ? {
+				x: coords.x + pistonPos[0],
+				y: coords.y + pistonPos[1],
+				z: coords.z + pistonPos[2]
+			} : coords;
+			var __tile = World.getTileEntity(from_coords.x, from_coords.y, from_coords.z, _blockSource);
+			if(__tile){
+				pistonsMove__[pistonsMoveKey(to_coords, _blockSource)] = __tile;
+			}
 		}
-	}
-	if(oldBlock.id == 250) {
-		var oldTileData, newTileData;
-		if((oldTileData = pistonsMove__[pistonsMoveKey(coords, _blockSource)]) && (newTileData = World.addTileEntity(coords.x, coords.y, coords.z, _blockSource))){
-			for(var i in newTileData.data){
-				if(ignoredParams.indexOf(i) == -1){
-					newTileData.data[i] = oldTileData.data[i];
+		if(oldBlock.id == 250) {
+			var oldTileData, newTileData;
+			if((oldTileData = pistonsMove__[pistonsMoveKey(coords, _blockSource)]) && (newTileData = World.addTileEntity(coords.x, coords.y, coords.z, _blockSource))){
+				for(var i in newTileData.data){
+					if(ignoredParams.indexOf(i) == -1){
+						newTileData.data[i] = oldTileData.data[i];
+					}
 				}
+				var unsaveableSlotsArray = Array.isArray(oldTileData.unsaveableSlots) ? oldTileData.unsaveableSlots : [];
+				if(!oldTileData.unsaveableSlots || unsaveableSlotsArray.length > 0)for(var i in oldTileData.container.slots){
+					if(unsaveableSlotsArray.length > 0 && unsaveableSlotsArray.indexOf(i) != -1) continue;
+					var _slot = oldTileData.container.slots[i];
+					newTileData.container.setSlot(i, _slot.id, _slot.count, _slot.data, _slot.extra);
+					oldTileData.container.setSlot(i, 0,0,0,null);
+				}
+				TileEntity.destroyTileEntity(oldTileData, false, false);
+				delete pistonsMove__[pistonsMoveKey(coords, _blockSource)];
 			}
-			var unsaveableSlotsArray = Array.isArray(oldTileData.unsaveableSlots) ? oldTileData.unsaveableSlots : [];
-			if(!oldTileData.unsaveableSlots || unsaveableSlotsArray.length > 0)for(var i in oldTileData.container.slots){
-				if(unsaveableSlotsArray.length > 0 && unsaveableSlotsArray.indexOf(i) != -1) continue;
-				var _slot = oldTileData.container.slots[i];
-				newTileData.container.setSlot(i, _slot.id, _slot.count, _slot.data, _slot.extra);
-				oldTileData.container.setSlot(i, 0,0,0,null);
-			}
-			TileEntity.destroyTileEntity(oldTileData);
-			delete pistonsMove__[pistonsMoveKey(coords, _blockSource)];
 		}
 	}
-	*/
 	if (oldBlock.id == BlockID.RS_cable) {
 		for(var i in RSNetworks){
 			if(RSNetworks[i][cts(coords)]) delete RSNetworks[i][cts(coords)];

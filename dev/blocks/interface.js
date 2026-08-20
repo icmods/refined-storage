@@ -327,6 +327,10 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 	},
 	destroy: function(){
 		for(var i = 0; i < 9; i++)this.container.clearSlot('slot_import' + i);
+		if(this.data.NETWORK_ID != 'f' && RSNetworks[this.data.NETWORK_ID]) delete RSNetworks[this.data.NETWORK_ID][cts(this)];
+		this.data.LAST_NETWORK_ID = this.data.NETWORK_ID;
+		this.data.NETWORK_ID = 'f';
+		_RS._emit("tileDestroyed", {blockId: this.blockInfo.id, coords: {x: this.x, y: this.y, z: this.z}, dimension: this.dimension, netId: this.data.LAST_NETWORK_ID});
 	},
 	refreshGui: function(first, client){
 		var _data = {

@@ -1,9 +1,9 @@
 UpgradeRegistry.register('Speed Upgrade', 'RSSpeedUpgrade', 'rs_speed_upgrade', {
     addFunc: function(tileEntity, item, container, slot, player){
-        tileEntity.data.speed -= 2;
+        tileEntity.data.speed = Math.max(1, tileEntity.data.speed - 2);
     },
     deleteFunc: function(tileEntity, item, container, slot, player){
-        tileEntity.data.speed += 2;
+        tileEntity.data.speed = Math.max(1, tileEntity.data.speed + 2);
     }
 }, Config.energy_uses.upgrades['speed']);
 UpgradeRegistry.register('Stack Upgrade', 'RSStackUpgrade', 'rs_stack_upgrade', {
