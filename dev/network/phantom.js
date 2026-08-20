@@ -48,6 +48,15 @@ Callback.addCallback("tick", function () {
 			entry.tile.performPhantomTeardown(entry.reason);
 		} catch (e) {
 			Logger.Log('Phantom deferred teardown failed: ' + e, 'RSPhantom');
+			entry.attempts = (entry.attempts || 0) + 1;
+			if (entry.attempts < 3) {
+				entry.tile.data.teardownDone = false;
+				entry.tile.data.removed = false;
+				entry.ticks = 5;
+				remaining.push(entry);
+			} else {
+				Logger.Log('Phantom teardown permanently failed after 3 attempts (' + entry.reason + ')', 'RSPhantom');
+			}
 		}
 	}
 	RSPhantomDeferredDestroy = remaining;
@@ -469,7 +478,13 @@ TileEntity.registerPrototype(BlockID.RS_phantom, {
 		Logger.Log('Phantom #' + (this.data.phantomId != null ? this.data.phantomId : '?') + ' at ' + this.x + ',' + this.y + ',' + this.z + ' destroyed (engine destroy)', 'RSPhantom');
 		this.clearPhantomContainer();
 		var net = this.data.NETWORK_ID != 'f' ? RSNetworks[this.data.NETWORK_ID] : null;
-		if (net && net.info && this._monitorListener) net.info.removeMonitorListener(this._monitorListener);
+		if (net && net.info) {
+			if (this._monitorListener) net.info.removeMonitorListener(this._monitorListener);
+			var coords_id = this.x + ',' + this.y + ',' + this.z;
+			for (var i = net.info.openedGrids.length - 1; i >= 0; i--) {
+				if (cts(net.info.openedGrids[i]) == coords_id) net.info.openedGrids.splice(i, 1);
+			}
+		}
 		PhantomSessions.remove(this.data.playerUid, this);
 	},
 	onDisconnectionPlayer: function(client) {
@@ -656,6 +671,12 @@ var AutocraftingTickManager = {
 			AutocraftingTickManager.areas[data.netId] = false;
 			delete AutocraftingTickManager.names[data.netId];
 			delete AutocraftingTickManager.bboxes[data.netId];
+		}
+		for (var uid in PhantomSessions.sessions) {
+			var session = PhantomSessions.sessions[uid];
+			if (session && session.tile && session.netId == data.netId && !session.tile.data.removed) {
+				rsDeferPhantomDestroy(session.tile, 'network destroyed');
+			}
 		}
 	});
 })();

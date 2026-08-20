@@ -1028,5 +1028,13 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 		for(var i in this.container.slots){
 			if(i.indexOf('pattern_slot') == -1)this.container.clearSlot(i);
 		}
+		if (this.data.LAST_NETWORK_ID != 'f' && RSNetworks[this.data.LAST_NETWORK_ID]) {
+			var info = RSNetworks[this.data.LAST_NETWORK_ID].info;
+			var coords_id = this.coords_id();
+			if (info && info.openedGrids) {
+				var iIndex;
+				if((iIndex = info.openedGrids.findIndex(function(element){return cts(element) == coords_id})) != -1) info.openedGrids.splice(iIndex, 1);
+			}
+		}
 	}
 });

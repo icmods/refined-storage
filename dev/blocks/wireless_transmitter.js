@@ -309,6 +309,13 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_wireless_transmitter, {
 		var iIndex;
 		if ((iIndex = RSNetworks[this.data.NETWORK_ID].info.openedGrids.findIndex(function (element) { return cts(element) == coords_id })) != -1) RSNetworks[this.data.NETWORK_ID].info.openedGrids.splice(iIndex, 1);
 	},
+	onDisconnectionPlayer: function (client) {
+		var uid = client.getPlayerUid();
+		if (this.data.wirelessPlayers) delete this.data.wirelessPlayers[uid];
+		if (this.data.wirelessMonitorPlayers) delete this.data.wirelessMonitorPlayers[uid];
+		if (this.data.wirelessCraftingGridPlayers) delete this.data.wirelessCraftingGridPlayers[uid];
+		if (this.data.openedScreens) delete this.data.openedScreens[uid];
+	},
 	post_init: function () {
 		this.data.pushDeleteEvents = {};
 		this.data.openedScreens = {};

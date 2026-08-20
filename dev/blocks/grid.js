@@ -371,6 +371,14 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		for(var i in this.container.slots){
 			this.container.clearSlot(i);
 		}
+		if (this.data.LAST_NETWORK_ID != 'f' && RSNetworks[this.data.LAST_NETWORK_ID]) {
+			var info = RSNetworks[this.data.LAST_NETWORK_ID].info;
+			var coords_id = this.coords_id();
+			if (info && info.openedGrids) {
+				var iIndex;
+				if((iIndex = info.openedGrids.findIndex(function(element){return cts(element) == coords_id})) != -1) info.openedGrids.splice(iIndex, 1);
+			}
+		}
 	},
 	refreshModel: function(){
 		if(!this.networkEntity) return Logger.Log(Item.getName(this.blockInfo.id, this.blockInfo.data) + ' model on: ' + cts(this) + ' cannot be displayed');

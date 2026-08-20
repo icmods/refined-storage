@@ -144,8 +144,10 @@ function buildCraftingMonitorPayload(tile, tasks, first, providingCraft, changed
 		tile.data[changedTaskFlag] = null;
 	}
 	var tasksToSend = tasks;
+	var fullList = false;
 	if (providingCraft) tasksToSend = [providingCraft];
 	else if (changedTask) tasksToSend = [changedTask];
+	else fullList = true;
 	var mapped = [];
 	for (var mti = 0; mti < tasksToSend.length; mti++) {
 		var mt = tasksToSend[mti];
@@ -165,7 +167,8 @@ function buildCraftingMonitorPayload(tile, tasks, first, providingCraft, changed
 		redstone_mode: tile.data.redstone_mode,
 		providingCrafts: tile.isWorkAllowed() ? mapped : [],
 		refresh: !first,
-		first: first
+		first: first,
+		fullList: fullList
 	};
 }
 
@@ -173,7 +176,7 @@ function craftingMonitorOpenGui(container, window, content, eventData){
 	if(!content || !window || !window.isOpened()) return;
 	craftingMonitorData.container = container;
 	var incoming = eventData.providingCrafts;
-	if (eventData.refresh && craftingMonitorData.providingCrafts && incoming.length === 1 && incoming[0].id) {
+	if (eventData.refresh && !eventData.fullList && craftingMonitorData.providingCrafts && incoming.length === 1 && incoming[0].id) {
 		var found = false;
 		for (var i = 0; i < craftingMonitorData.providingCrafts.length; i++) {
 			if (craftingMonitorData.providingCrafts[i].id === incoming[0].id) {
@@ -441,18 +444,21 @@ RefinedStorage.createTile(BlockID.RS_craftingMonitor, {
 	},
 	pre_init: function(){
 		this._monitorListener = makeMonitorListener(this, 'refreshCurPage', '_changedTaskId');
+		this._monitorViewers = 0;
 	},
 	onWindowOpen: function(container, client){
 		if(this.data.NETWORK_ID == 'f' || !RSNetworks[this.data.NETWORK_ID]) return;
+		this._monitorViewers++;
 		var info = RSNetworks[this.data.NETWORK_ID].info;
-		if (info && info.addMonitorListener) {
+		if (info && info.addMonitorListener && this._monitorViewers == 1) {
 			info.addMonitorListener(this._monitorListener);
 		}
 	},
 	onWindowClose: function(){
+		this._monitorViewers = Math.max(0, (this._monitorViewers || 0) - 1);
 		if(this.data.NETWORK_ID == 'f' || !RSNetworks[this.data.NETWORK_ID]) return;
 		var info = RSNetworks[this.data.NETWORK_ID].info;
-		if (info && info.removeMonitorListener) {
+		if (info && info.removeMonitorListener && this._monitorViewers == 0) {
 			info.removeMonitorListener(this._monitorListener);
 		}
 	},
@@ -462,6 +468,10 @@ RefinedStorage.createTile(BlockID.RS_craftingMonitor, {
 			if (oldInfo && oldInfo.removeMonitorListener) {
 				oldInfo.removeMonitorListener(this._monitorListener);
 			}
+		}
+		if (this._monitorViewers > 0 && this.data.NETWORK_ID != 'f' && RSNetworks[this.data.NETWORK_ID]) {
+			var newInfo = RSNetworks[this.data.NETWORK_ID].info;
+			if (newInfo && newInfo.addMonitorListener) newInfo.addMonitorListener(this._monitorListener);
 		}
 	},
 	post_destroy: function(){

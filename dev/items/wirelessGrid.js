@@ -146,7 +146,20 @@ function rsOpenWirelessTerminal(cfg) {
 	var netId = rsFindNetworkByBinding(binding);
 	if (netId == -1 || !RSNetworks[netId] || !RSNetworks[netId].info) return log(Translation.translate(cfg.noBindMsg));
 	var best = rsFindNearestTransmitter(playerUid, netId, crossDimension);
-	if (!best) return log(Translation.translate(cfg.noRangeMsg));
+	if (!best) {
+		var transmitterEntries = searchBlocksInNetwork(netId, BlockID.RS_wireless_transmitter);
+		if (transmitterEntries.length === 0) return log(Translation.translate(cfg.noTransmitterMsg));
+		var checkSource = crossDimension ? BlockSource.getDefaultForDimension(bindingDimension) : BlockSource.getDefaultForActor(playerUid);
+		var hasLoadedActive = false;
+		for (var ti = 0; ti < transmitterEntries.length; ti++) {
+			var _t = transmitterEntries[ti];
+			if (!_t.isActive) continue;
+			var _tile = World.getTileEntity(_t.coords.x, _t.coords.y, _t.coords.z, checkSource);
+			if (_tile) { hasLoadedActive = true; break; }
+		}
+		if (!hasLoadedActive) return log(Translation.translate(cfg.transmitterUnloadedMsg));
+		return log(Translation.translate(cfg.noRangeMsg));
+	}
 	var energy = extra.getInt('energy', 0);
 	if (energy <= cfg.config.openUsage) return log(Translation.translate(cfg.noEnergyMsg));
 	var client = Network.getClientForPlayer(playerUid);
@@ -155,7 +168,13 @@ function rsOpenWirelessTerminal(cfg) {
 	var session = PhantomSessions.get(playerUid);
 	if (session && session.tile && !session.tile.data.removed && session.netId == netId && TileEntity.isTileEntityLoaded(session.tile)) {
 		phantom = session.tile;
-		if (phantom.data.screen != cfg.screen) phantom.data.screen = cfg.screen;
+		if (phantom.data.screen != cfg.screen) {
+			if (phantom.data.screen == 'monitor' && phantom._monitorListener) {
+				var oldNet = phantom.data.NETWORK_ID != 'f' ? RSNetworks[phantom.data.NETWORK_ID] : null;
+				if (oldNet && oldNet.info) oldNet.info.removeMonitorListener(phantom._monitorListener);
+			}
+			phantom.data.screen = cfg.screen;
+		}
 	} else {
 		if (session) PhantomSessions.remove(playerUid, session.tile);
 		phantom = spawnPhantom(playerUid, netId, cfg.screen, BlockSource.getDefaultForActor(playerUid));
@@ -208,6 +227,8 @@ function rsOpenWirelessGrid(playerUid) {
 		throttle: rsWirelessGridLastOpen,
 		noBindMsg: 'Wireless Grid is not bound to a network.',
 		noRangeMsg: 'There is no Wireless Transmitter in range.',
+		noTransmitterMsg: 'There is no Wireless Transmitter in the network.',
+		transmitterUnloadedMsg: 'The Wireless Transmitter is not loaded.',
 		noEnergyMsg: 'Wireless Grid is out of energy.'
 	});
 }

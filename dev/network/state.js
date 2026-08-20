@@ -116,6 +116,8 @@ Callback.addCallback("LevelLeft", function () {
 	if (typeof NetworkTimer !== 'undefined') NetworkTimer.reset();
 	if (typeof StorageProviders !== 'undefined') StorageProviders = {};
 	if (typeof _pendingUpdateItems !== 'undefined') _pendingUpdateItems = {};
+	if (typeof rsWirelessGridLastOpen !== 'undefined') rsWirelessGridLastOpen = {};
+	if (typeof rsWirelessMonitorLastOpen !== 'undefined') rsWirelessMonitorLastOpen = {};
 	RSChunkRebuildPending = false;
 	RSChunkRebuildTicks = 0;
 });
