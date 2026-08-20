@@ -114,26 +114,34 @@ var CraftingCalculator = {
 			}
 
 			while (needed > 0) {
-				if (info.crafts[ingUid]) {
-					var subPattern = info.crafts[ingUid][0];
+				var subUid = ingUid;
+				var subCraftable = !!info.crafts[subUid];
+				if (!subCraftable && ingr.data == -1 && info.craftsIDS[ingr.id]) {
+					for (var cdi = 0; cdi < info.craftsIDS[ingr.id].length; cdi++) {
+						var candUid = ingr.id + '_' + info.craftsIDS[ingr.id][cdi];
+						if (info.crafts[candUid]) { subUid = candUid; subCraftable = true; break; }
+					}
+				}
+				if (subCraftable) {
+					var subPattern = info.crafts[subUid][0];
 					var subBase = subPattern.result && subPattern.result[0] ? subPattern.result[0].count : 1;
 					var subQty = Math.ceil(needed / subBase);
 
 					this._calculateInternal(
-						ingUid, subQty, storageCopy, info, visited, startTime, timeout, plan
+						subUid, subQty, storageCopy, info, visited, startTime, timeout, plan
 					);
 
-					plan.toCraft[ingUid] = (plan.toCraft[ingUid] || 0) + subQty * subBase;
+					plan.toCraft[subUid] = (plan.toCraft[subUid] || 0) + subQty * subBase;
 
-					var produced = storageCopy[ingUid] || 0;
+					var produced = storageCopy[subUid] || 0;
 					if (produced > 0) {
 						var take2 = Math.min(needed, produced);
-						storageCopy[ingUid] -= take2;
+						storageCopy[subUid] -= take2;
 						needed -= take2;
 					}
 
 					if (needed <= 0) {
-						node.requirements.push({ uid: ingUid, count: ingr.count * m, altUids: [] });
+						node.requirements.push({ uid: subUid, count: ingr.count * m, altUids: [] });
 						break;
 					}
 				}
@@ -158,11 +166,7 @@ var CraftingCalculator = {
 				}
 
 				if (!foundAlt && needed > 0) {
-					if (altUids.length > 0) {
-						plan.missing[altUids[0]] = (plan.missing[altUids[0]] || 0) + needed;
-					} else {
-						plan.missing[ingUid] = (plan.missing[ingUid] || 0) + needed;
-					}
+					plan.missing[ingUid] = (plan.missing[ingUid] || 0) + needed;
 					needed = 0;
 				}
 			}

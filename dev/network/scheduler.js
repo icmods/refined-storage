@@ -116,7 +116,11 @@ var CraftingScheduler = {
 				}
 				crafter = tileCache[cacheKey] = World.getTileEntity(parsed.x, parsed.y, parsed.z, blockSource);
 			}
-			if (!crafter || !crafter.data || !crafter.data.isActive) continue;
+			if (!crafter || !crafter.data || !crafter.data.isActive) {
+				node._suspendSince = node._suspendSince == null ? tick : node._suspendSince;
+				node._lastTry = tick;
+				continue;
+			}
 			node._suspendSince = null;
 
 			var container = PatternContainerRegistry.get(crafter);
@@ -314,7 +318,7 @@ var CraftingScheduler = {
 					remaining -= front.addItemToSlot(slots[si], machineItem, remaining);
 				}
 				if (remaining > 0) {
-					var refundRemainder = info.pushItem({ id: machineItem.id, data: machineItem.data, count: remaining, extra: null }, remaining, false, ['autocraft']);
+					var refundRemainder = info.pushItem({ id: machineItem.id, data: machineItem.data, count: remaining, extra: null }, remaining, true, ['autocraft']);
 					if (refundRemainder > 0) task.addToBuffer(machineItem.id + '_' + machineItem.data, refundRemainder);
 				}
 			}
@@ -323,7 +327,7 @@ var CraftingScheduler = {
 				var result = pattern.result[ri];
 				var resultCount = result.count || 1;
 				var resultRemainder = info.pushItem({ id: result.id, data: result.data, count: resultCount, extra: null },
-					resultCount, false, ['fromCrafter']);
+					resultCount, true, ['fromCrafter']);
 				if (resultRemainder > 0) task.addToBuffer(result.id + '_' + result.data, resultRemainder);
 			}
 		}

@@ -34,18 +34,19 @@ var _RS = {
 		refreshItems: function(netId) { var info = RSNetworks[netId] && RSNetworks[netId].info; if (info) info.updateItems(); },
 		constructCraft: function(netId, item, count) { return RSNetworks[netId] && RSNetworks[netId].info.constructCraft(item, count || 1); },
 		provideCraft: function(netId, tree) { var info = RSNetworks[netId] && RSNetworks[netId].info; if (info) info.provideCraft(tree); },
-		requestCraft: function(netId, item, count) {
+		requestCraft: function(netId, item, count, callerKey) {
 			var info = RSNetworks[netId] && RSNetworks[netId].info;
 			if (!info) return false;
 			var now = World.getThreadTime();
-			if (info.isRequestThrottled('api:' + netId, now)) return false;
+			var sourceKey = 'api:' + netId + (callerKey ? ':' + callerKey : '');
+			if (info.isRequestThrottled(sourceKey, now)) return false;
 			var result = info.constructCraft(item, count || 1);
 			if (result && result.deduped) return true;
 			if (result && result.craftable) {
 				info.provideCraft(result);
 				return true;
 			}
-			info.markRequestFailed('api:' + netId, now);
+			info.markRequestFailed(sourceKey, now);
 			return false;
 		},
 		keepStock: function(netId, item, minimum) {

@@ -59,6 +59,12 @@ var NetworkInfo = {
 			},
 			markRequestFailed: function(sourceKey, now) {
 				this.lastFailedRequestTick[sourceKey] = now;
+				if (!this._throttlePruneAt || now - this._throttlePruneAt >= REQUEST_THROTTLE_TICKS) {
+					this._throttlePruneAt = now;
+					for (var tk in this.lastFailedRequestTick) {
+						if (now - this.lastFailedRequestTick[tk] >= REQUEST_THROTTLE_TICKS) delete this.lastFailedRequestTick[tk];
+					}
+				}
 			},
 			addMonitorListener: function(listener) {
 				if (this.monitorListeners.indexOf(listener) == -1) this.monitorListeners.push(listener);

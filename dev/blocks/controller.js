@@ -520,6 +520,8 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			if (info && info.craftingTasks) {
 				for (var ti = 0; ti < info.craftingTasks.length; ti++) {
 					var task = info.craftingTasks[ti];
+					if (!task) continue;
+					_RS._emit("taskCancelled", {netId: this.data.NETWORK_ID, taskId: task.id});
 					if (task.flushBuffer) task.flushBuffer(info);
 				}
 			}
