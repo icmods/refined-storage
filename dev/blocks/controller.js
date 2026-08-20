@@ -100,7 +100,7 @@ var controllerSwitchPage = function(num, container, data, ignore){
 	num = num || 1;
 	var aray_net_map = Object.keys(data.net_map);
 	var pages1 = controllerFuncs.getPages(aray_net_map.length);
-	var pages = Math.max(1, pages1 - 1);
+	var pages = Math.max(1, pages1);
 	num = Math.max(1, Math.min(num, pages)) - 1;
 	if(num == data.lastPage && !ignore) return false;
 	data.lastPage = num;
@@ -112,8 +112,8 @@ var controllerSwitchPage = function(num, container, data, ignore){
 			container.setText('block_energy_use' + i, '');
 		}
 	} else {
-		for (var i = num * 2; i < num * 2 + 4; i++) {
-			var a = i - (num * 2);
+		for (var i = num * 4; i < num * 4 + 4; i++) {
+			var a = i - (num * 4);
 			var item = aray_net_map[i] ? data.net_map[aray_net_map[i]] : {};
 			var _id = item.id ? Network.serverToLocalId(item.id) : 0;
 			container.setSlot("slot" + a, _id, 1, item.data || 0, item.extra || null);
@@ -125,6 +125,42 @@ var controllerSwitchPage = function(num, container, data, ignore){
 		}
 	}
 	return true;
+}
+var controllerFuncs = {
+	getPages: function(_length){
+		if(_length == 0) return 1;
+		_length = Math.ceil(_length / 4);
+		return _length;
+	},
+	getPageFromCoords: function(_coords, pages){
+		var max_y = controller_other_data.max_y;
+		var start_y = elementsGUI_controller["slider_button"].start_y;
+		var interval = (pages - 1) > 0 ? (max_y - start_y) / (pages - 1) : 0;
+		function __getY(i) {
+			return ((interval * i) + start_y);
+		}
+		var least_dec = 10001;
+		var finish_i = 0;
+		for (var i = 0; i < pages; i++) {
+			var dec = Math.abs(Math.round(_coords.y - __getY(i)));
+			if (dec < least_dec) {
+				least_dec = dec;
+				finish_i = i;
+			}
+		};
+		return finish_i + 1;
+	},
+	getCoordsFromPage: function(page, pages){
+		var max_y = controller_other_data.max_y;
+		var start_y = elementsGUI_controller["slider_button"].start_y;
+		var interval = (pages - 1) > 0 ? (max_y - start_y) / (pages - 1) : 0;
+		function __getY(i) {
+			return ((interval * i) + start_y);
+		}
+		if (page > pages) page = pages;
+		if (page < 1) page = 1;
+		return __getY(page - 1);
+	}
 }
 buildControllerElements(elementsGUI_controller, controller_other_data, controllerFuncs, controllerSwitchPage);
 
@@ -148,44 +184,6 @@ GUIs.push(CONTROLLER_GUI);
 testButtons(CONTROLLER_GUI.getWindow('header').getContent().elements, function(){
 	buildControllerElements(elementsGUI_controller, controller_other_data, controllerFuncs, controllerSwitchPage);
 });
-
-var controllerFuncs = {
-	getPages: function(_length){
-		if(_length == 0) return 1;
-		_length = Math.ceil(_length / 2);
-		return _length;//Math.max(_length - Math.min(_length, 4) + 1, 0) || 1;
-	},
-	getPageFromCoords: function(_coords, pages){
-		pages -= 1;
-		var max_y = controller_other_data.max_y;
-		var interval = (pages - 1) > 0 ? (max_y - elementsGUI_controller["slider_button"].start_y) / (pages - 1) : 0;
-		function __getY(i) {
-			return ((interval * i) + elementsGUI_controller["slider_button"].start_y);
-		}
-		var least_dec = 10001;
-		var finish_i = 0;
-		for (var i = 0; i < pages; i++) {
-			var dec = Math.abs(Math.round(_coords.y - __getY(i)));
-			if (dec < least_dec) {
-				least_dec = dec;
-				finish_i = i;
-			}
-		};
-		var page = finish_i;
-		return page + 1;
-	},
-	getCoordsFromPage: function(page, pages){
-		pages -= 1;
-		var max_y = controller_other_data.max_y;
-		var interval = (pages - 1) > 0 ? (max_y - elementsGUI_controller["slider_button"].start_y) / (pages - 1) : 0;
-		function __getY(i) {
-			return ((interval * i) + elementsGUI_controller["slider_button"].start_y);
-		}
-		if (page > pages) page = pages;
-		if (page < 1) page = 1;
-		return __getY(page - 1);
-	}
-}
 
 RefinedStorage.createTile(BlockID.RS_controller, {
 	defaultValues: {

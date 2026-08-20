@@ -122,18 +122,18 @@ function craftingGridSwitchCraftsPage(page, container, ignore, dontMoveSlider){
 	return true;
 }
 
-testButtons(craftingGridGUI.getWindow('header').getContent().elements, function(){
-	grid_set_elements(360 + 109, 70, CgridConsPercents*(UI.getScreenHeight() - 60), 0, _elementsGUI_craftingGrid, craftingGridData, craftingGridGUI, craftingGridSwitchPage, null);
-});
-
-var CgridConsPercents = 49/(575.5 - 60);
-grid_set_elements(360 + 109, 70, CgridConsPercents*(UI.getScreenHeight() - 60), 0, _elementsGUI_craftingGrid, craftingGridData, craftingGridGUI, craftingGridSwitchPage, null);
-
 var craftingGridFuncs = makePageHelpers(_elementsGUI_craftingGrid, {countX: "x_count", countY: "y_count", maxY: "max_y", slider: "slider_button"});
 var craftsPageHelpers = makePageHelpers(_elementsGUI_craftingGrid, {countX: "crafts_x_count", countY: "crafts_y_count", maxY: "crafts_max_y", slider: "crafts_slider"});
 craftingGridFuncs.craftsPages = craftsPageHelpers.getPages;
 craftingGridFuncs.getCraftsPageFromCoords = craftsPageHelpers.getPageFromCoords;
 craftingGridFuncs.getCraftsCoordsFromPage = craftsPageHelpers.getCoordsFromPage;
+
+testButtons(craftingGridGUI.getWindow('header').getContent().elements, function(){
+	grid_set_elements(360 + 109, 70, CgridConsPercents*(UI.getScreenHeight() - 60), 0, _elementsGUI_craftingGrid, craftingGridData, craftingGridGUI, craftingGridSwitchPage, craftingGridFuncs);
+});
+
+var CgridConsPercents = 49/(575.5 - 60);
+grid_set_elements(360 + 109, 70, CgridConsPercents*(UI.getScreenHeight() - 60), 0, _elementsGUI_craftingGrid, craftingGridData, craftingGridGUI, craftingGridSwitchPage, craftingGridFuncs);
 
 (function(){
 	_elementsGUI_craftingGrid["reverse_filter_button"].y = _elementsGUI_craftingGrid["search_frame"].y;

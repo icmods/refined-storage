@@ -384,6 +384,11 @@ RefinedStorage.createTile(BlockID.RS_crafter, {
 	},
 	pre_init: function(){
 		var tile = this;
+		this.container.setGlobalAddTransferPolicy({
+			transfer: function(itemContainer, slot, id, count, data, extra, player){
+				return 0;
+			}
+		});
 		for(var i = 0; i < 9; i++){
 			(function(slotName){
 				tile.container.setSlotAddTransferPolicy(slotName, {

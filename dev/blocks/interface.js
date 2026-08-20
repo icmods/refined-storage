@@ -244,7 +244,8 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 			if(importItem.id == 0) continue;
 			var slotItem = this.container.getSlot('slot_output' + k);
 			var item = {id: importItem.id, count: importItem.count - slotItem.count, data: this.data.useDamage ? importItem.data : -1, extra: this.data.useNbt ? importItem.extra : -1};
-			if(item.count <= 0 || (slotItem.id != importItem.id && slotItem.id != 0) || (slotItem.data != importItem.data && this.data.useDamage) || (slotItem.extra != importItem.extra && this.data.useNbt)) continue;
+			if(item.count <= 0) continue;
+			if(slotItem.id != 0 && ((slotItem.id != importItem.id) || (slotItem.data != importItem.data && this.data.useDamage) || (this.data.useNbt && fullExtraToString(slotItem.extra) != fullExtraToString(importItem.extra)))) continue;
 			var deleted = this.deleteItem(item);
 			if(deleted < item.count){
 				var count = item.count - deleted;

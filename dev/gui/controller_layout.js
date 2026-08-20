@@ -49,8 +49,8 @@ function buildControllerElements(elements, otherData, controllerFuncs, switchPag
 			event.y -= content.elements["slider_button"].scale * 15 / 2;
 			if (event.type != 'UP' && event.type != "CLICK") {
 				var page = controllerFuncs.getPageFromCoords(event, controllerFuncs.getPages(Object.keys(otherData.net_map).length));
-				switchPageFn(page, itemContainer, otherData);
 				itemContainerUiHandler.getElement("slider_button").setPosition(content.elements['slider_button'].x, Math.max(Math.min(event.y, max_y), content.elements["slider_button"].start_y));
+				switchPageFn(page, itemContainer, otherData);
 			}
 			if (event.type == "UP" || event.type == "CLICK") {
 				moving = false;
@@ -195,14 +195,33 @@ function buildControllerElements(elements, otherData, controllerFuncs, switchPag
 		bitmap: "slider",
 		scale: 1,
 		onTouchEvent: function (element, event) {
+			var content = {elements: elements};
+			var itemContainerUiHandler = element.window.getContainer();
+			if (!itemContainerUiHandler) return;
+			var itemContainer = itemContainerUiHandler.getParent();
 			if (event.type == 'DOWN') {
 				moving = true;
+				return;
 			}
 			if (event.type == 'CLICK') {
-				var itemContainerUiHandler = element.window.getContainer();
-				if (!itemContainerUiHandler) return;
 				var pages = controllerFuncs.getPages(Object.keys(otherData.net_map).length);
 				var page = controllerFuncs.getPageFromCoords(event, pages);
+				var ___y = controllerFuncs.getCoordsFromPage(page, pages);
+				itemContainerUiHandler.getElement("slider_button").setPosition(elements['slider_button'].x, ___y);
+				return;
+			}
+			if (!moving) return;
+			event.y -= content.elements["slider_button"].scale * 15 / 2;
+			if (event.type != 'UP') {
+				var page = controllerFuncs.getPageFromCoords(event, controllerFuncs.getPages(Object.keys(otherData.net_map).length));
+				itemContainerUiHandler.getElement("slider_button").setPosition(content.elements['slider_button'].x, Math.max(Math.min(event.y, max_y), content.elements["slider_button"].start_y));
+				switchPageFn(page, itemContainer, otherData);
+			}
+			if (event.type == "UP") {
+				moving = false;
+				var pages = controllerFuncs.getPages(Object.keys(otherData.net_map).length);
+				var page = controllerFuncs.getPageFromCoords(event, pages);
+				switchPageFn(page, itemContainer, otherData);
 				var ___y = controllerFuncs.getCoordsFromPage(page, pages);
 				itemContainerUiHandler.getElement("slider_button").setPosition(elements['slider_button'].x, ___y);
 			}
