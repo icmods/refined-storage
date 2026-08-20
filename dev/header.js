@@ -90,20 +90,23 @@ const RefinedStorage = {
 				this.networkData.putInt('block_data', this.data.block_data);
 				this.networkData.putBoolean('isActive', this.data.isActive || false);
 				var tile = this;
-				this.container.addServerOpenListener({
-					onOpen: function(container, client){
-						if(tile.onWindowOpen){
-							tile.onWindowOpen(container, client);
+				if(!tile.__serverListenersRegistered){
+					this.container.addServerOpenListener({
+						onOpen: function(container, client){
+							if(tile.onWindowOpen){
+								tile.onWindowOpen(container, client);
+							}
 						}
-					}
-				});
-				this.container.addServerCloseListener({
-					onClose: function(container, client){
-						if(tile.onWindowClose){
-							tile.onWindowClose(container, client);
+					});
+					this.container.addServerCloseListener({
+						onClose: function(container, client){
+							if(tile.onWindowClose){
+								tile.onWindowClose(container, client);
+							}
 						}
-					}
-				});
+					});
+					tile.__serverListenersRegistered = true;
+				}
 				if(this.unsaveableSlots && InnerCore_pack.packVersionCode >= 120){
 					if(Array.isArray(this.unsaveableSlots)){
 						for(var i in this.unsaveableSlots)this.container.setSlotSavingEnabled(this.unsaveableSlots[i], false);
@@ -156,9 +159,9 @@ const RefinedStorage = {
 						if (this.post_update_network) this.post_update_network(net_id);
 						return;
 					}
-					delete RSNetworks[lastNetId][cts(this)];
-					leftNetId = lastNetId;
-				}
+				delete RSNetworks[lastNetId][cts(this)];
+				leftNetId = lastNetId;
+			}
 				this.data.LAST_NETWORK_ID = lastNetId;
 				this.data.NETWORK_ID = net_id;
 				this.networkData.putInt('NETWORK_ID', net_id != 'f' ? net_id : -1);
@@ -168,13 +171,13 @@ const RefinedStorage = {
 						y: this.y,
 						z: this.z
 					}
-					RSNetworks[net_id][cts(this)] = {
-						id: this.blockInfo.id,
-						coords: coords_this,
-						upgrades: this.data.upgrades,
-						isActive: this.data.isActive || false
-					}
-					if (this.data.LAST_NETWORK_ID != net_id) _RS._emit("networkTileJoined", {netId: net_id, blockId: this.blockInfo.id, coords: coords_this, dimension: this.dimension});
+				RSNetworks[net_id][cts(this)] = {
+					id: this.blockInfo.id,
+					coords: coords_this,
+					upgrades: this.data.upgrades,
+					isActive: this.data.isActive || false
+				}
+				if (this.data.LAST_NETWORK_ID != net_id) _RS._emit("networkTileJoined", {netId: net_id, blockId: this.blockInfo.id, coords: coords_this, dimension: this.dimension});
 				} else if (leftNetId != null) {
 					_RS._emit("networkTileLeft", {netId: leftNetId, blockId: this.blockInfo.id, coords: {x: this.x, y: this.y, z: this.z}, dimension: this.dimension});
 				}

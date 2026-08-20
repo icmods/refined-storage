@@ -13,9 +13,10 @@ var _savedCraftingTasks = {};
 
 var RSpendingReconnect = {};
 var RSreconnectTicks = 0;
+const RSPENDING_RECONNECT_EXPIRY = 30;
 
 function rsAddReconnectPending(tile) {
-	RSpendingReconnect[tile.dimension + ':' + tile.coords_id()] = { x: tile.x, y: tile.y, z: tile.z, dimension: tile.dimension, blockSource: tile.blockSource };
+	RSpendingReconnect[tile.dimension + ':' + tile.coords_id()] = { x: tile.x, y: tile.y, z: tile.z, dimension: tile.dimension, blockSource: tile.blockSource, pendingPasses: 0 };
 }
 
 Callback.addCallback("tick", function () {
@@ -52,6 +53,12 @@ Callback.addCallback("tick", function () {
 				}
 			}
 		}
+	}
+	for (var cid in RSpendingReconnect) {
+		var pending = RSpendingReconnect[cid];
+		if (!pending) continue;
+		pending.pendingPasses = (pending.pendingPasses || 0) + 1;
+		if (pending.pendingPasses >= RSPENDING_RECONNECT_EXPIRY) delete RSpendingReconnect[cid];
 	}
 });
 

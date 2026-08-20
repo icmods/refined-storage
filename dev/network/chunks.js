@@ -60,7 +60,10 @@ Callback.addCallback("tick", function () {
 		if (!net || !net.info || !net.info.incomplete) continue;
 		var controllerCoords = searchController_net(i);
 		if (!controllerCoords) continue;
-		var cTile = World.getTileEntity(controllerCoords.x, controllerCoords.y, controllerCoords.z);
+		var dim = net.info.dimension;
+		var cTile = dim != null
+			? World.getTileEntity(controllerCoords.x, controllerCoords.y, controllerCoords.z, BlockSource.getDefaultForDimension(dim))
+			: World.getTileEntity(controllerCoords.x, controllerCoords.y, controllerCoords.z);
 		if (!cTile || !cTile.data || cTile.data.NETWORK_ID != i) continue;
 		if (!cTile.blockSource || !isChunkLoadedAtSafe(cTile.blockSource, cTile.x, cTile.y, cTile.z)) {
 			anyIncomplete = true;

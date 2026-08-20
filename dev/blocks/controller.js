@@ -294,6 +294,8 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			_data['info'] = NetworkInfo.create(_data, controllerTile, netId);
 			RSNetworks.push(_data);
 			_RS._emit("networkCreated", {netId: netId, tile: this});
+			this.data.ticks = 0;
+			this.data.timer = 20;
 		} else {
 			var existingNet = RSNetworks[netId];
 			existingNet[ownKey] = {
@@ -307,13 +309,18 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 				existingNet.info.netMapDirty = true;
 				existingNet.info.incomplete = true;
 			}
+			this.data.updateControllerNetwork = true;
+			restoreCraftingTasks(this);
+		}
+		var _info = RSNetworks[netId] && RSNetworks[netId].info;
+		if (_info) {
+			_info.dimension = this.dimension;
+			_info.controllerCoords = { x: this.x, y: this.y, z: this.z };
 		}
 		var _timerNet = NetworkTimer.networks[netId];
 		if(!_timerNet) _timerNet = NetworkTimer.networks[netId] = { heartbeat: 0, tasks: {} };
-		if(RSNetworks[netId] && RSNetworks[netId].info) NetworkTimer.ensureInternalTasks(_timerNet, RSNetworks[netId].info);
+		if(_info) NetworkTimer.ensureInternalTasks(_timerNet, _info);
 		this.networkData.sendChanges();
-		this.data.ticks = 0;
-		this.data.timer = 20;
 	},
 	updateItems: function(){
 		if(this.data.NETWORK_ID != 'f'){
@@ -326,6 +333,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			var info = RSNetworks[this.data.NETWORK_ID].info;
 			info.netMapDirty = true;
 			info.incomplete = !!incomplete;
+			info.controllerCoords = {x: this.x, y: this.y, z: this.z};
 		}
 	},
 	click: function (id, count, data, coords, player, extra) {
@@ -415,22 +423,26 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		if (this.data.NETWORK_ID != 'f') {
 			var _orphanNet = RSNetworks[this.data.NETWORK_ID];
 			if (!_orphanNet || !_orphanNet.info || !_orphanNet[cts(this)]) {
-				if (_orphanNet && _orphanNet.info) {
-					for (var _k in _orphanNet) {
-						if (_k != 'info' && _orphanNet[_k] && _orphanNet[_k].id == BlockID.RS_controller) delete _orphanNet[_k];
+			if (_orphanNet && _orphanNet.info) {
+				for (var _k in _orphanNet) {
+					if (_k != 'info' && _orphanNet[_k] && _orphanNet[_k].id == BlockID.RS_controller) {
+						if (typeof _savedCraftingTasks !== 'undefined') delete _savedCraftingTasks[_k];
+						delete _orphanNet[_k];
 					}
-					_orphanNet[cts(this)] = {
-						id: BlockID.RS_controller,
-						coords: {x: this.x, y: this.y, z: this.z},
-						upgrades: this.data.upgrades,
-						isActive: this.data.isActive || false
-					};
-					_orphanNet.info.updateControllerTile(this);
-					_orphanNet.info.netMapDirty = true;
-					_orphanNet.info.incomplete = true;
-					this.data.ticks = 0;
-					this.data.timer = 20;
-				} else {
+				}
+				_orphanNet[cts(this)] = {
+					id: BlockID.RS_controller,
+					coords: {x: this.x, y: this.y, z: this.z},
+					upgrades: this.data.upgrades,
+					isActive: this.data.isActive || false
+				};
+				_orphanNet.info.updateControllerTile(this);
+				_orphanNet.info.controllerCoords = {x: this.x, y: this.y, z: this.z};
+				_orphanNet.info.netMapDirty = true;
+				_orphanNet.info.incomplete = true;
+				this.data.ticks = 0;
+				this.data.timer = 20;
+			} else {
 					if (_orphanNet && !_orphanNet.info) delete RSNetworks[this.data.NETWORK_ID];
 					this.init();
 				}
@@ -516,7 +528,10 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			delete RSNetworks[this.data.NETWORK_ID];
 			NetworkTimer.destroyNetwork(this.data.NETWORK_ID);
 		}
-		if(!isDropAllowed && isDropAllowed !== undefined) return;
+		if(!isDropAllowed && isDropAllowed !== undefined){
+			if (typeof _savedCraftingTasks !== 'undefined') delete _savedCraftingTasks[cts(this)];
+			return;
+		}
 		this.data.LAST_NETWORK_ID = this.data.NETWORK_ID;
 		this.data.NETWORK_ID = "f";
 		if(this.data.isCreative){

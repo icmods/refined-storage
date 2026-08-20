@@ -60,7 +60,13 @@ const searchController = function (_coords, _self, _blockSource, _out, _visited)
 }
 
 const searchController_net = function (net_id) {
-	if (net_id == 'f') return false;
+	if (net_id == 'f' || !RSNetworks[net_id]) return false;
+	var info = RSNetworks[net_id].info;
+	if (info && info.controllerCoords) {
+		var cachedKey = info.controllerCoords.x + ',' + info.controllerCoords.y + ',' + info.controllerCoords.z;
+		var cachedEntry = RSNetworks[net_id][cachedKey];
+		if (cachedEntry && cachedEntry.id == BlockID.RS_controller) return info.controllerCoords;
+	}
 	for (var i in RSNetworks[net_id]) {
 		if (i != 'info' && RSNetworks[net_id][i].id == BlockID.RS_controller) return RSNetworks[net_id][i].coords;
 	}
@@ -92,7 +98,8 @@ function set_net_for_blocks(_coords, net_id, _self, _first, _defaultActive, _for
 			} else {
 				var tile = World.getTileEntity(_coords.x, _coords.y, _coords.z, blockSource_);
 				if (tile) {
-					tile.data.controller_coords = {x: _coords.x, y: _coords.y, z: _coords.z};
+					if(net_id == 'f') delete tile.data.controller_coords;
+					else tile.data.controller_coords = {x: _coords.x, y: _coords.y, z: _coords.z};
 					tile.update_network(net_id, _first || (_defaultActive != undefined));
 					if(_defaultActive)tile.setActive(_defaultActive);
 				} else {
@@ -138,7 +145,8 @@ function set_net_for_blocks(_coords, net_id, _self, _first, _defaultActive, _for
 				var tile = World.getTileEntity(coordss.x, coordss.y, coordss.z, blockSource_);
 				if (tile) {
 					if(!_forced && net_id == 'f' && !compareCoords(_coords, tile.data.controller_coords || {})) continue;
-					tile.data.controller_coords = {x: _coords.x, y: _coords.y, z: _coords.z};
+					if(net_id == 'f') delete tile.data.controller_coords;
+					else tile.data.controller_coords = {x: _coords.x, y: _coords.y, z: _coords.z};
 					tile.update_network(net_id, _first || (_defaultActive != undefined));
 					if(_defaultActive)tile.setActive(_defaultActive);
 				} else {
