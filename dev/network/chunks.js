@@ -44,7 +44,9 @@ Callback.addCallback("ChunkLoaded", function (dimensionId, chunkX, chunkZ) {
 	var needRebuild = false;
 	for (var i = 0; i < nets.length; i++) {
 		var info = RSNetworks[nets[i]] && RSNetworks[nets[i]].info;
-		if (info && info.incomplete) { needRebuild = true; break; }
+		if (!info) continue;
+		if (info.incomplete) needRebuild = true;
+		requestNetworkUpdateItems(info);
 	}
 	if (needRebuild) RSScheduleNetworkRebuild();
 });

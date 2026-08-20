@@ -285,7 +285,7 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 	},
 	useNetworkItemContainer: true,
 	post_init: function(){
-		if(!this.data.disks_percents)this.data.disks_percents = [];
+		this.data.disks_percents = [];
 		this.data.iinit = true;
 		this.networkData.putString('slots', JSON.stringify(this.getDiskDatas()));
 		this.container.setGlobalAddTransferPolicy({

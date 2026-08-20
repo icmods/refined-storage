@@ -348,11 +348,11 @@ var NetworkInfo = {
 							items.push(Object.assign({}, diskItem));
 							items_map.push(itemUid);
 						}
-						if(just_items_map[diskItem.id]){
-							just_items_map[diskItem.id].push(diskItem.data);
-						} else if(!just_items_map[diskItem.id]){
-							just_items_map[diskItem.id] = [diskItem.data];
-						}
+					if(just_items_map[diskItem.id]){
+						if(just_items_map[diskItem.id].indexOf(diskItem.data) == -1)just_items_map[diskItem.id].push(diskItem.data);
+					} else if(!just_items_map[diskItem.id]){
+						just_items_map[diskItem.id] = [diskItem.data];
+					}
 						if(diskItem.extra){
 							if(just_items_map_extra[diskItem.id+'_'+diskItem.data] && just_items_map_extra[diskItem.id+'_'+diskItem.data].indexOf(diskItem.extra) == -1){
 								just_items_map_extra[diskItem.id+'_'+diskItem.data].push(diskItem.extra);
@@ -490,11 +490,11 @@ var NetworkInfo = {
 					});
 					this.items_map.push(itemUid);
 					this.itemsIndex[itemUid] = this.items.length - 1;
-					if(this.just_items_map[item.id]){
-						this.just_items_map[item.id].push(item.data);
-					} else if(!this.just_items_map[item.id]){
-						this.just_items_map[item.id] = [item.data];
-					}
+				if(this.just_items_map[item.id]){
+					if(this.just_items_map[item.id].indexOf(item.data) == -1)this.just_items_map[item.id].push(item.data);
+				} else if(!this.just_items_map[item.id]){
+					this.just_items_map[item.id] = [item.data];
+				}
 					if(item.extra){
 						if(this.just_items_map_extra[itemUidExtra]){
 							this.just_items_map_extra[itemUidExtra].push(item.extra);
@@ -607,13 +607,17 @@ var NetworkInfo = {
 						var newItemsIndex = {};
 						for(var _mi = 0; _mi < this.items_map.length; _mi++) newItemsIndex[this.items_map[_mi]] = _mi;
 						this.itemsIndex = newItemsIndex;
-						var justIMap;
-				if((justIMap = this.just_items_map[item.id].indexOf(item.data)) != -1)this.just_items_map[item.id].splice(justIMap, 1);
-						if(this.just_items_map[item.id].length == 0)delete this.just_items_map[item.id];
-						if(item.extra){
-							if(this.just_items_map_extra[itemUidExtra] && (justIMap = this.just_items_map_extra[itemUidExtra].indexOf(item.extra)) != -1) this.just_items_map_extra[itemUidExtra].splice(justIMap, 1);
-							if(this.just_items_map_extra[itemUidExtra] && this.just_items_map_extra[itemUidExtra].length == 0) delete this.just_items_map_extra[itemUidExtra];
-						}
+					var justIMap;
+					if(item.extra){
+						if(this.just_items_map_extra[itemUidExtra] && (justIMap = this.just_items_map_extra[itemUidExtra].indexOf(item.extra)) != -1) this.just_items_map_extra[itemUidExtra].splice(justIMap, 1);
+						if(this.just_items_map_extra[itemUidExtra] && this.just_items_map_extra[itemUidExtra].length == 0) delete this.just_items_map_extra[itemUidExtra];
+					}
+					var _jm = this.just_items_map[item.id];
+					if(_jm){
+						var stillHasVariant = !!this.just_items_map_extra[itemUidExtra];
+						if(!stillHasVariant && (justIMap = _jm.indexOf(item.data)) != -1) _jm.splice(justIMap, 1);
+						if(_jm.length == 0) delete this.just_items_map[item.id];
+					}
 						var removed = 0;
 						for(var i in this.disk_map){
 							for(var k in this.disk_map[i]){

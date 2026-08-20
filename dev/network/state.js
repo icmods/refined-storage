@@ -114,6 +114,8 @@ Callback.addCallback("LevelLeft", function () {
 	RSreconnectTicks = 0;
 	if (typeof PatternContainerRegistry !== 'undefined') PatternContainerRegistry.reset();
 	if (typeof NetworkTimer !== 'undefined') NetworkTimer.reset();
+	if (typeof StorageProviders !== 'undefined') StorageProviders = {};
+	if (typeof _pendingUpdateItems !== 'undefined') _pendingUpdateItems = {};
 	RSChunkRebuildPending = false;
 	RSChunkRebuildTicks = 0;
 });
