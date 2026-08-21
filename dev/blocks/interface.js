@@ -382,6 +382,9 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 		}
 	},
 	client:{
+		load: function(){
+			this.refreshModel();
+		},
 		refreshModel: function(eventData, packetExtra) {
 			RefinedStorage.mapTexture(this, this.networkData.getBoolean('isActive') ? 'interface_on' : 'interface_off');
 		},

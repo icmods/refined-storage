@@ -343,10 +343,9 @@ var NetworkInfo = {
 					storage += disk_data.storage;
 					stored += disk_data.items_stored;
 					for(var s in disk_data.items){
-						var diskItem = disk_data.items[s];
-						var itemUid = getItemUid(diskItem);
-						if(Config.dev && diskItem.extra)Logger.Log('[RSDev] merge uid=' + itemUid + ' extraKind=' + (typeof diskItem.extra.getValue == 'function' ? 'real' : (diskItem.extra.json ? 'json' : 'plain')), 'RefinedStorageDebug');
-						var index = itemsIndexMap[itemUid];
+					var diskItem = disk_data.items[s];
+					var itemUid = getItemUid(diskItem);
+					var index = itemsIndexMap[itemUid];
 						if(index != undefined){
 							items[index].count += diskItem.count;
 						} else {
@@ -428,10 +427,9 @@ var NetworkInfo = {
 					if(Config.dev)Logger.Log('Banned item pushed: id=' + item.id, 'RefinedStorageDebug');
 					return count;
 				}
-				if(!this.itemCanBePushed(item, count)) return count;
-				var itemUid = getItemUid(item);
-				if(Config.dev && item.extra)Logger.Log('[RSDev] pushItem ' + item.id + ':' + item.data + ' uid=' + itemUid, 'RefinedStorageDebug');
-				var deleteListeners = [];
+			if(!this.itemCanBePushed(item, count)) return count;
+			var itemUid = getItemUid(item);
+			var deleteListeners = [];
 				for(var i in this.itemAddListeners){
 					if(!this.itemAddListeners[i]) continue;
 					var __answ = this.itemAddListeners[i](item, count, tags);

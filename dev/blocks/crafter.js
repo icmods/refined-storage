@@ -424,6 +424,9 @@ RefinedStorage.createTile(BlockID.RS_crafter, {
 		}
 	},
 	client: {
+		load: function(){
+			this.refreshModel();
+		},
 		refreshModel: function(){
 			var render = new ICRender.Model();
 			var model = BlockRenderer.createTexturedBlock(getCrafterTexture(this.networkData.getInt('block_data'), this.networkData.getBoolean('isActive')));

@@ -17,10 +17,9 @@ Saver.addSavesScope("RSDiskData",
 				}
 			}
 			}
-			return elem;
-		}) : [false];
-		if(Config.dev)Logger.Log('[RSDev] DiskData read: entries=' + DiskData.map(function(e){ return e ? Object.keys(e.items).length : 'x'; }).join(',') + ' len=' + DiskData.length, 'RefinedStorageDebug');
-	},
+		return elem;
+	}) : [false];
+},
 
 	function save(){
 		return {DiskData: DiskData.map(function(elem){

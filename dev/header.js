@@ -153,12 +153,17 @@ const RefinedStorage = {
 				var leftNetId = null;
 				var lastNetId = this.data.NETWORK_ID;
 				if(lastNetId != 'f' && RSNetworks[lastNetId] && (netElement = RSNetworks[lastNetId][cts(this)]) && netElement.id == this.blockInfo.id) {
-					if(lastNetId == net_id){
-						this.data.LAST_NETWORK_ID = lastNetId;
-						if(!_first)this.setActive(net_id != "f");
-						if (this.post_update_network) this.post_update_network(net_id);
-						return;
+				if(lastNetId == net_id){
+					this.data.LAST_NETWORK_ID = lastNetId;
+					if(!_first)this.setActive(net_id != "f");
+					if(!_first && this.refreshModel){
+						var _hasClients = this.container.getNetworkEntity().getClients().iterator().hasNext();
+						if(_hasClients && !this.data._hadClients)this.refreshModel();
+						this.data._hadClients = _hasClients;
 					}
+					if (this.post_update_network) this.post_update_network(net_id);
+					return;
+				}
 				delete RSNetworks[lastNetId][cts(this)];
 				leftNetId = lastNetId;
 			}
