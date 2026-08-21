@@ -104,6 +104,7 @@ var gridGUI = new UI.StandartWindow({
 GUIs.push(gridGUI);
 
 var gridConsPercents = 50/(575.5 - 60);
+var gridFuncs = makePageHelpers(_elementsGUI_grid, {countX: "x_count", countY: "y_count", maxY: "max_y", slider: "slider_button"});
 grid_set_elements(315, 70, gridConsPercents*(UI.getScreenHeight() - 60), 0, _elementsGUI_grid, gridData, gridGUI, null, gridFuncs);
 gridGUI.getWindow('main').forceRefresh();
 
@@ -124,7 +125,6 @@ inv_elements.elements["_CLICKFRAME_"] = {
 	onTouchEvent: createInventoryPushHandler(gridData)
 }
 
-var gridFuncs = makePageHelpers(_elementsGUI_grid, {countX: "x_count", countY: "y_count", maxY: "max_y", slider: "slider_button"});
 
 function gridOpenGui(container, window, content, eventData){
 	if(!content || !window || !window.isOpened()) return;
