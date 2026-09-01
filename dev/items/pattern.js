@@ -2,7 +2,7 @@ IDRegistry.genItemID("RSpattern");
 Item.createItem("RSpattern", "Pattern", {
 	name: 'RSpattern'
 }, {
-	stack: 1
+	stack: 64
 });
 
 Item.registerNameOverrideFunction(ItemID["RSpattern"], function(item, name){
@@ -14,10 +14,17 @@ Item.registerNameOverrideFunction(ItemID["RSpattern"], function(item, name){
 			if(!resultStr) break;
 			var parts = resultStr.split(',');
 			if(parts.length >= 2){
-				name += '\n§7' + (parts.length >= 3 ? parts[1] : 1) + 'x ' + Item.getName(parseInt(parts[0]), parseInt(parts[2] || 0));
+				name += '\nВ§7' + (parts.length >= 3 ? parts[1] : 1) + 'x ' + Item.getName(parseInt(parts[0]), parseInt(parts[2] || 0));
 			}
 		}
-	if(isProcessed) name += '\n§9' + Translation.translate('Processing');
-	if(!isProcessed && oredictEnabled) name += '\n§9' + Translation.translate('Ore Dictionary');
+	if(isProcessed) name += '\nВ§9' + Translation.translate('Processing');
+	if(!isProcessed && oredictEnabled) name += '\nВ§9' + Translation.translate('Ore Dictionary');
 	return name;
+});
+
+Item.registerUseFunctionForID(ItemID["RSpattern"], function(_, item, _, playerId){
+	if (!item.extra) return;
+	if (Entity.getSneaking(playerId)){
+        Entity.setCarriedItem(playerId, item.id, item.count, item.data);
+	}
 });
