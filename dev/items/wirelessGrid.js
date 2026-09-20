@@ -133,8 +133,8 @@ function rsBindWirelessItem(itemId, capacity, coords, playerUid, blockSource) {
 
 function rsOpenWirelessTerminal(cfg) {
 	var playerUid = cfg.playerUid;
-	var now = World.getThreadTime();
-	if (cfg.throttle[playerUid] && now - cfg.throttle[playerUid] < 10) return;
+	var now = TickScheduler.global.ticks;
+	if (cfg.throttle[playerUid] && now >= cfg.throttle[playerUid] && now - cfg.throttle[playerUid] < 10) return;
 	cfg.throttle[playerUid] = now;
 	var slotItem = searchItem(cfg.itemId, -1, -1, false, false, playerUid);
 	if (!slotItem || !slotItem.extra) return log(Translation.translate(cfg.noBindMsg));

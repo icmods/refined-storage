@@ -18,14 +18,8 @@ EnergyUse[BlockID['RS_cable']] = Config.energy_uses.cable;
 
 	RSgroup.add(BlockID.RS_cable, -1);
 
-	var boxes = [
-		{side: [1, 0, 0], box: [0.5 + width / 2, 0.5 - width / 2, 0.5 - width / 2, 1, 0.5 + width / 2, 0.5 + width / 2]},
-		{side: [-1, 0, 0], box: [0, 0.5 - width / 2, 0.5 - width / 2, 0.5 - width / 2, 0.5 + width / 2, 0.5 + width / 2]},
-		{side: [0, 1, 0], box: [0.5 - width / 2, 0.5 + width / 2, 0.5 - width / 2, 0.5 + width / 2, 1, 0.5 + width / 2]},
-		{side: [0, -1, 0], box: [0.5 - width / 2, 0, 0.5 - width / 2, 0.5 + width / 2, 0.5 - width / 2, 0.5 + width / 2]},
-		{side: [0, 0, 1], box: [0.5 - width / 2, 0.5 - width / 2, 0.5 + width / 2, 0.5 + width / 2, 0.5 + width / 2, 1]},
-		{side: [0, 0, -1], box: [0.5 - width / 2, 0.5 - width / 2, 0, 0.5 + width / 2, 0.5 + width / 2, 0.5 - width / 2]}
-	];
+	var _wireBoxes = CoreKit.Blocks.wireBoxes(width);
+	var boxes = _wireBoxes.wires;
 
 	var Dmodel = new ICRender.CollisionShape();
 	var render = new ICRender.Model();
@@ -37,9 +31,10 @@ EnergyUse[BlockID['RS_cable']] = Config.energy_uses.cable;
 		entry.addBox(wire[0], wire[1], wire[2], wire[3], wire[4], wire[5]);
 		entry.setCondition(new ICRender.BLOCK(side[0], side[1], side[2], RSgroup, false));
 	}
-	render.addEntry(new BlockRenderer.Model(0.5 - width / 2, 0.5 - width / 2, 0.5 - width / 2, 0.5 + width / 2, 0.5 + width / 2, 0.5 + width / 2, BlockID.RS_cable, 0));
+	var cbox = _wireBoxes.center;
+	render.addEntry(new BlockRenderer.Model(cbox[0], cbox[1], cbox[2], cbox[3], cbox[4], cbox[5], BlockID.RS_cable, 0));
 	var entry = Dmodel.addEntry();
-	entry.addBox(0.5 - width / 2, 0.5 - width / 2, 0.5 - width / 2, 0.5 + width / 2, 0.5 + width / 2, 0.5 + width / 2);
+	entry.addBox(cbox[0], cbox[1], cbox[2], cbox[3], cbox[4], cbox[5]);
 	BlockRenderer.setCustomCollisionShape(BlockID.RS_cable, -1, Dmodel);
 	BlockRenderer.setCustomRaycastShape(BlockID.RS_cable, -1, Dmodel);
 	BlockRenderer.setStaticICRender(BlockID.RS_cable, -1, render);

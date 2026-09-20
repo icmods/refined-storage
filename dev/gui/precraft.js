@@ -1,3 +1,14 @@
+var __rsPreSwipeState = null;
+
+function rsResetPrecraftSwipe() {
+	if (__rsPreSwipeState) {
+		__rsPreSwipeState.swipeY = false;
+		__rsPreSwipeState.swipeSum = 0;
+		__rsPreSwipeState.moving = false;
+		__rsPreSwipeState.swipeDir = 0;
+	}
+}
+
 if (typeof getTextElementWidth == 'undefined') {
 	getTextElementWidth = function(element, drawScale) {
 		var font = new JavaFONT(element.font);
@@ -142,6 +153,16 @@ var preCraftGUI = new UI.Window({
 		bitmap: 'slider_buttonOff',
 		scale: preCraftGUI_elements["slider_frame"].scale
 	}
+	var __uiPreSwipeState = { swipeY: false, swipeSum: 0, moving: false, swipeDir: 0 };
+	__rsPreSwipeState = __uiPreSwipeState;
+	var __uiPreSwipeHandler = UiCore.attachSwipe({
+		variant: "anchor",
+		drag: false,
+		thresholds: { move: 30, accumulate: 70 },
+		getLastPage: function () { return preCraftdata.page; },
+		switchPage: function (page) { preCraftSwitchPage(page + 1, preCraftdata.postData); },
+		state: __uiPreSwipeState
+	});
 	preCraftGUI_elements["preCraft_swipe"] = {
 		type: "frame",
 		x: preCraftGUI_elements['craftsMesh'].x,
@@ -151,24 +172,7 @@ var preCraftGUI = new UI.Window({
 		height: craftsMeshHeight,
 		bitmap: "empty1",
 		onTouchEvent: function(element, event) {
-			if (event.type == 'DOWN') {
-				preCraftdata.swipeY = event.y;
-				preCraftdata.swipeSum = 0;
-			}
-			if (preCraftdata.swipeY && event.type == 'MOVE') {
-				var d = event.y - preCraftdata.swipeY;
-				preCraftdata.swipeSum += Math.abs(d);
-				if (Math.abs(d) > 7 || preCraftdata.swipeSum > 15) {
-					var inc = d > 0 ? -1 : 1;
-					preCraftSwitchPage(preCraftdata.page + inc + 1, preCraftdata.postData);
-					preCraftdata.swipeY = event.y;
-					preCraftdata.swipeSum = 0;
-				}
-			}
-			if (event.type == 'UP' || event.type == 'CLICK') {
-				preCraftdata.swipeY = null;
-				preCraftdata.swipeSum = 0;
-			}
+			__uiPreSwipeHandler(element, event);
 		}
 	}
 	var craftsMeshPartWidth = craftsMeshWidth/3;
@@ -239,9 +243,14 @@ var preCraftGUI = new UI.Window({
 		scale: buttonsScale,
 		clicker: {
 			onClick: function(itemContainerUiHandler, itemContainer, element){
-				if(!preCraftdata.container || !preCraftdata.craftable) return;
+				if(!preCraftdata.container) return;
+				if(!preCraftdata.craftable){
+					if(preCraftdata.missing) showNotEnoughItemsAlert();
+					else alert(Translation.translate("Request failed"));
+					return;
+				}
 				preCraftdata.container.sendEvent("provideConstructedCraft", {item: preCraftdata.selectedItem, count: preCraftdata.craftCount});
-				preCraftGUI.close();
+				preCraftGUI.close(); rsResetPrecraftSwipe();
 				backgroundGUI.close();
 			}
 		}
@@ -277,7 +286,7 @@ var preCraftGUI = new UI.Window({
 		scale: buttonsScale,
 		clicker: {
 			onClick: function(itemContainerUiHandler, itemContainer, element){
-				preCraftGUI.close();
+				preCraftGUI.close(); rsResetPrecraftSwipe();
 				backgroundGUI.close();
 			}
 		}
@@ -323,7 +332,7 @@ var backgroundGUI = new UI.Window({
 			onTouchEvent: function (element, event) {
 				if (event.type == 'CLICK') {
 					backgroundGUI.close();
-					preCraftGUI.close();
+					preCraftGUI.close(); rsResetPrecraftSwipe();
 					preCraftCountGUI.close();
 				}
 			}
@@ -809,9 +818,15 @@ function createCraftPreviewPostData(_data){
 	return newData;
 }
 
+function showNotEnoughItemsAlert(){
+	alert(Translation.translate("Not enough items"));
+}
+
 function openCraftPreview(container, _data){
 	preCraftdata.container = container;
 	preCraftdata.craftable = _data.craftable;
+	preCraftdata.errorType = _data.errorType || null;
+	preCraftdata.missing = (_data.plan && _data.plan.missing) ? _data.plan.missing : null;
 	if (_data.errorType && _data.errorType !== "MISSING") {
 		var errorMsg = Translation.translate("Request failed");
 		if (_data.errorType === "RECURSIVE") errorMsg += "\n" + Translation.translate("One of the crafting ingredients ended up needing") + "\n" + Translation.translate("itself.");

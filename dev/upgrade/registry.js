@@ -21,7 +21,6 @@ const UpgradeRegistry = {
 			Item.createItem(itemIDName, name, {
 				name: texture,
 			}, {
-				//isTech: true,
 				stack: 64
 			});
 		}

@@ -1,12 +1,12 @@
 
 
 const _gridTexture = [
-	["disk_drive_bottom", 0], // bottom
-	["grid_top", 0], // top
-	["grid_back", 0], // back
-	["grid_front", 0], // front
-	["grid_left", 0], // left
-	["grid_right", 0]  // right
+	["disk_drive_bottom", 0],
+	["grid_top", 0],
+	["grid_back", 0],
+	["grid_front", 0],
+	["grid_left", 0],
+	["grid_right", 0]
 ];
 
 function getGridTexture(variation, _active){
@@ -31,18 +31,35 @@ for (var izxc = 0; izxc < 4; izxc++) {
 	BlockRenderer.enableCoordMapping(BlockID["RS_grid"], izxc, render);
 }
 
-var filter_size_map = [24, 36, 32];//6,9,8  *4
+var filter_size_map = [24, 36, 32];
 
 var gridData = {
 	maxY: 0,
 	lastPage: -1,
 	textSearch: false,
-	lowPriority: false,
 	slotsKeys: [],
 	updateGui: function(){}
 }
 
 function gridSwitchPage(page, container, ignore, dontMoveSlider){
+	if (gridData._switchUpdating) {
+		gridData._pendingSwitch = { page: page, container: container, ignore: ignore, dontMoveSlider: dontMoveSlider };
+		return;
+	}
+	gridData._switchUpdating = true;
+	try {
+		gridSwitchPageInner(page, container, ignore, dontMoveSlider);
+	} finally {
+		gridData._switchUpdating = false;
+		var pendingSwitch = gridData._pendingSwitch;
+		if (pendingSwitch) {
+			gridData._pendingSwitch = null;
+			gridSwitchPage(pendingSwitch.page, pendingSwitch.container, pendingSwitch.ignore, pendingSwitch.dontMoveSlider);
+		}
+	}
+}
+
+function gridSwitchPageInner(page, container, ignore, dontMoveSlider){
 	var window_ = getClientGuiWindow(container, 'main');
 	if(!window_ || typeof window_.isOpened != 'function' || !window_.isOpened()) return false;
 	var content = typeof window_.getContent == 'function' ? window_.getContent() : null;
@@ -58,7 +75,10 @@ function gridSwitchPage(page, container, ignore, dontMoveSlider){
 	gridData.lastPage = page + 1;
 	var pages = gridFuncs.getPages(slotsKeys.length);
 	var ___y = gridFuncs.getCoordsFromPage(page + 1, pages);
-	if(!dontMoveSlider)container.getUiAdapter().getElement("slider_button").setPosition(_elementsGUI_grid['slider_button'].x, ___y);
+	if(!dontMoveSlider){
+		rsSetSliderElement(container, "slider_button", _elementsGUI_grid['slider_button'].x, ___y);
+		rsSetSliderDescriptor(container, "slider_button", ___y);
+	}
 	if (!gridData.isWorkAllowed) {
 		for (var i = 0; i < slots_count; i++) {
 			container.setSlot("slot" + i, 0, 0, 0, null);
@@ -70,7 +90,6 @@ function gridSwitchPage(page, container, ignore, dontMoveSlider){
 	for (var i = page * x_count; i < page * x_count + slots_count; i++) {
 		var a = i - (page * x_count);
 		var item = slots[slotsKeys[i]] || { id: 0, data: 0, count: 0, extra: null };
-		container.markSlotDirty("slot" + a);
 		if(elements_.get) elements_.get("slot" + a).setBinding('text', (!item.count ? 'Craft' : cutNumber(item.count, true) + ""));
 		else if(elements_["slot" + a] && elements_["slot" + a].setBinding) elements_["slot" + a].setBinding('text', (!item.count ? 'Craft' : cutNumber(item.count, true) + ""));
 		container.setSlot("slot" + a, item.id, item.count, item.data, item.extra || null);
@@ -130,6 +149,7 @@ function gridOpenGui(container, window, content, eventData){
 	if(!content || !window || !window.isOpened()) return;
 	eventData.disksStorage = Number(eventData.disksStorage);
 	Object.assign(gridData, eventData);
+	if(!eventData.refresh) gridData._lastInfoSignature = null;
 	gridData.updateGui = function(refresh, updateFilters, nonlocal){
 		delete container.slots.bindings;
 		delete container.slots.slots;
@@ -138,7 +158,7 @@ function gridOpenGui(container, window, content, eventData){
 		gridData.networkData = synced;
 		if(updateFilters || refresh){
 			var _slotKeys = [];
-			for(var i in container.slots)if(i[0] >= 0 && container.slots[i].id != 0)_slotKeys.push(i);
+			for(var i in container.slots)if(i[0] >= 0 && container.slots[i] && container.slots[i].id != 0)_slotKeys.push(i);
 			gridData.slotsKeys = _slotKeys;
 			if(!refresh)gridData.textSearch = false;
 			var millis = 0;
@@ -169,14 +189,7 @@ function gridOpenGui(container, window, content, eventData){
 		}
 		gridSwitchPage(refresh ? gridData.lastPage : 1, container, true);
 	}
-	if(gridData.lowPriority){
-		gridData.lowPriority = false;
-		scheduleLowPrioritySort(function(){
-			gridData.updateGui(eventData.refresh, eventData.updateFilters, true);
-		});
-	} else {
-		gridData.updateGui(eventData.refresh, eventData.updateFilters, true);
-	}
+	gridData.updateGui(eventData.refresh, eventData.updateFilters, true);
 }
 
 function buildGridPayload(tile, first, updateFilters){
@@ -223,18 +236,20 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		return true;
 	},
 	onWindowClose: function(){
-		if(this.data.NETWORK_ID == 'f') return;
-		var coords_id = this.coords_id();
-		RSNetworks[this.data.NETWORK_ID][coords_id].isOpenedGrid = false;
-		var iIndex;
-		if((iIndex = RSNetworks[this.data.NETWORK_ID].info.openedGrids.findIndex(function(element){return cts(element) == coords_id})) != -1) RSNetworks[this.data.NETWORK_ID].info.openedGrids.splice(iIndex, 1);
+		rsResetStorageTouch();
+		rsRemoveOpenedGrid(this);
+	},
+	onDisconnectionPlayer: function(client){
+		if(client && this.data.pushDeleteEvents) delete this.data.pushDeleteEvents[client.getPlayerUid()];
 	},
 	onWindowOpen: function(container, client){
 		if(InnerCore_pack.packVersionCode >= 119)this.refreshGui(true, client); 
 		if(this.data.NETWORK_ID == 'f') return;
+		var net = RSNetworks[this.data.NETWORK_ID];
+		if(!net) return;
 		var coords_id = this.coords_id();
-		RSNetworks[this.data.NETWORK_ID][coords_id].isOpenedGrid = true;
-		if(RSNetworks[this.data.NETWORK_ID].info.openedGrids.findIndex(function(element){return cts(element) == coords_id}) == -1) RSNetworks[this.data.NETWORK_ID].info.openedGrids.push({x: this.x, y: this.y, z: this.z});
+		if(net[coords_id]) net[coords_id].isOpenedGrid = true;
+		if(net.info.openedGrids.findIndex(function(element){return cts(element) == coords_id}) == -1) net.info.openedGrids.push({x: this.x, y: this.y, z: this.z});
 	},
 	pre_init: function(){
 		this.container.setGlobalGetTransferPolicy({
@@ -445,7 +460,10 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 	},
 	events: {
 		pushDeleteEvents: function(packetData, packetExtra, connectedClient) {
-			this.data.pushDeleteEvents[connectedClient.getPlayerUid()] = packetData.pushDeleteEvents;
+			if(!packetData || !packetData.pushDeleteEvents) return;
+			if(!MpCore.isWatching(this, connectedClient)) return;
+			var playerUid = connectedClient.getPlayerUid();
+			this.data.pushDeleteEvents[playerUid] = GridEvents.mergePushDeleteEvents(this.data.pushDeleteEvents[playerUid], packetData.pushDeleteEvents);
 		}
 	}
 })

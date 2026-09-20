@@ -67,16 +67,14 @@ Block.registerPlaceFunction("RS_controller", function (coords, item, block, play
 	}
 	blockSource.setBlock(coords.x, coords.y, coords.z, item.id, item.data);
 	var tile = World.addTileEntity(coords.x, coords.y, coords.z, blockSource) || World.getTileEntity(coords.x, coords.y, coords.z, blockSource);
-	var energy = 0;
 	if(item.data == 3 && tile && tile.data){
 		tile.data.isCreative = true;
 		tile.data.energy = Config.controller.energyCapacity;
-		//tile.setActive(true);
 		return;
 	}
-	if (item.extra && item.extra.getInt('energy') && tile && tile.data) {
-		energy = item.extra.getInt('energy');
-		tile.data.energy = energy;
+	if (item.extra && typeof item.extra.getInt == 'function' && item.extra.getInt('energy') && tile && tile.data) {
+		var _placeEnergy = item.extra.getInt('energy');
+		if (isFinite(_placeEnergy) && _placeEnergy >= 0) tile.data.energy = Math.min(_placeEnergy, Config.controller.energyCapacity);
 	}
 	Entity.setCarriedItem(player, item.id, item.count - 1, item.data, item.extra);
 });
@@ -85,7 +83,9 @@ var controller_other_data = {
 	net_map:{},
 	isActive: false,
 	max_y: 0,
-	lastPage: -1
+	lastPage: -1,
+	countX: 4,
+	countY: 1
 };
 var controllerSwitchPage = function(num, container, data, ignore){
 	if(!data.isActive){
@@ -126,42 +126,7 @@ var controllerSwitchPage = function(num, container, data, ignore){
 	}
 	return true;
 }
-var controllerFuncs = {
-	getPages: function(_length){
-		if(_length == 0) return 1;
-		_length = Math.ceil(_length / 4);
-		return _length;
-	},
-	getPageFromCoords: function(_coords, pages){
-		var max_y = controller_other_data.max_y;
-		var start_y = elementsGUI_controller["slider_button"].start_y;
-		var interval = (pages - 1) > 0 ? (max_y - start_y) / (pages - 1) : 0;
-		function __getY(i) {
-			return ((interval * i) + start_y);
-		}
-		var least_dec = 10001;
-		var finish_i = 0;
-		for (var i = 0; i < pages; i++) {
-			var dec = Math.abs(Math.round(_coords.y - __getY(i)));
-			if (dec < least_dec) {
-				least_dec = dec;
-				finish_i = i;
-			}
-		};
-		return finish_i + 1;
-	},
-	getCoordsFromPage: function(page, pages){
-		var max_y = controller_other_data.max_y;
-		var start_y = elementsGUI_controller["slider_button"].start_y;
-		var interval = (pages - 1) > 0 ? (max_y - start_y) / (pages - 1) : 0;
-		function __getY(i) {
-			return ((interval * i) + start_y);
-		}
-		if (page > pages) page = pages;
-		if (page < 1) page = 1;
-		return __getY(page - 1);
-	}
-}
+var controllerFuncs = UiCore.pagination(controller_other_data, {countX: "countX", countY: "countY", maxY: "max_y", slider: "slider"});
 buildControllerElements(elementsGUI_controller, controller_other_data, controllerFuncs, controllerSwitchPage);
 
 const CONTROLLER_GUI = new UI.StandartWindow({
@@ -255,7 +220,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			if(this.data.NETWORK_ID != "f")_RS._emit("networkStateChanged", {netId: this.data.NETWORK_ID, isActive: state});
 		}
 		this.networkData.sendChanges();
-		if(!preventRefreshModel)this.refreshModel();
+		if(!preventRefreshModel) rsSafeServerRefresh(this, 'controllerSetActive');
 		if (this.post_setActive) this.post_setActive(state);
 		return true;
 	},
@@ -268,7 +233,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			var probeEntry = probeNet[ownKey];
 			if (probeEntry && probeEntry.id == BlockID.RS_controller) { existingNetId = nid; break; }
 		}
-		var netId = existingNetId != -1 ? existingNetId : RSNetworks.length;
+		var netId = existingNetId != -1 ? existingNetId : rsAllocNetId();
 		this.data.NETWORK_ID = netId;
 		var controllerTile = this;
 		this.networkData.putInt('energy', this.data.energy);
@@ -290,8 +255,10 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 				isActive: false
 			}
 			_data['info'] = NetworkInfo.create(_data, controllerTile, netId);
-			RSNetworks.push(_data);
+			RSNetworks[netId] = _data;
 			_RS._emit("networkCreated", {netId: netId, tile: this});
+			// Restore immediately so early processing outputs can be credited.
+			restoreCraftingTasks(this);
 			this.data.ticks = 0;
 			this.data.timer = 20;
 		} else {
@@ -318,6 +285,17 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		var _timerNet = NetworkTimer.networks[netId];
 		if(!_timerNet) _timerNet = NetworkTimer.networks[netId] = { heartbeat: 0, tasks: {} };
 		if(_info) NetworkTimer.ensureInternalTasks(_timerNet, _info);
+		var _ctrlTile = this;
+		MpCore.connectivity(_ctrlTile, {
+			onOpen: function(container, client, owner){
+				var t = owner || _ctrlTile;
+				if(t.onWindowOpen) t.onWindowOpen(container, client);
+			},
+			onClose: function(uid, container, client, owner){
+				var t = owner || _ctrlTile;
+				if(t.onWindowClose) t.onWindowClose(container, client);
+			}
+		});
 		this.networkData.sendChanges();
 	},
 	updateItems: function(){
@@ -340,6 +318,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		if(!client) return true;
 		if (this.container.getNetworkEntity().getClients().contains(client)) return true;
 		this.container.openFor(client, "main");
+		if (this._guiBinder) this._guiBinder.invalidate();
 		var _data = {
 			name: this.networkData.getName() + '', 
 			isActive: this.data.isActive, 
@@ -386,8 +365,9 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		this.data.usage = result.usage;
 	},
 	energyReceive: function (type, amount, voltage) {
+		if (typeof amount !== 'number' || !isFinite(amount) || amount <= 0) return 0;
 		amount = Math.min(amount * EnergyTypeRegistry.getValueRatio(type, 'FE'), Config.controller.controllerMaxReceive);
-		var add = Math.min(amount, this.getCapacity() - this.data.energy);
+		var add = Math.max(0, Math.min(amount, this.getCapacity() - this.data.energy));
 		if(!this.data.isActive && this.data.allowSetIsActive != false)this.setActive(true);
 		this.data.energy += add;
 		this.networkData.putInt('energy', this.data.energy);
@@ -406,18 +386,13 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 				this.updateItems();
 				this.updateNetMap(true);
 				this.setActive(this.data.energy > this.data.usage, true, true);
-				this.refreshModel();
+				rsSafeServerRefresh(this, 'controllerTimer');
 				restoreCraftingTasks(this);
 				this.data.timer = false;
 				this.data.ticks = 0;
 			}
 		}
-		// Self-heal for a piston-moved controller: on piston push the engine
-		// runs destroy(isDropAllowed=false) which tears the network down and
-		// returns before clearing NETWORK_ID, and neither created nor init run
-		// at the destination. Rebind into the surviving network object (moving
-		// the stale controller entry to the current coords) or recreate the
-		// network, then re-arm the boot flood.
+		// Self-heal a controller moved by a piston (destroy ran without clearing NETWORK_ID).
 		if (this.data.NETWORK_ID != 'f') {
 			var _orphanNet = RSNetworks[this.data.NETWORK_ID];
 			if (!_orphanNet || !_orphanNet.info || !_orphanNet[cts(this)]) {
@@ -450,24 +425,14 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			this.init();
 		}
 		if (this.container.getNetworkEntity().getClients().iterator().hasNext()) {
+			if (!this._guiBinder) this._guiBinder = UiCore.DeltaBinder.wrap(this.container);
 			var _scale = this.data.energy / this.getCapacity();
-			if (this.data._lastGuiScale !== _scale) {
-				this.data._lastGuiScale = _scale;
-				this.container.setScale('scale', _scale);
-				this.data.containerUpdate = true;
-			}
 			var _storageText = this.data.energy + '/' + this.getCapacity() + ' FE';
-			if (this.data._lastGuiStorageText !== _storageText) {
-				this.data._lastGuiStorageText = _storageText;
-				this.container.setText('storage', _storageText);
-				this.data.containerUpdate = true;
-			}
+			this._guiBinder.setScale('scale', _scale);
+			this._guiBinder.setText('storage', _storageText);
 		}
 		if(!this.isWorkAllowed()) {
-			if(this.data.containerUpdate){
-				this.container.sendChanges();
-				this.data.containerUpdate = false;
-			}
+			if (this._guiBinder) this._guiBinder.flush();
 			return;
 		}
 		if(this.data.updateControllerNetwork){
@@ -491,20 +456,18 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			this.networkData.sendChanges();
 			this.data.networkDataUpdate = false;
 		}
-		if(this.data.containerUpdate){
-			this.container.sendChanges();
-			this.data.containerUpdate = false;
-		}
+		if (this._guiBinder) this._guiBinder.flush();
 		if(this.data.updateModel){
 			var texture = getControllerTexture(getEnergyScaled(this.data.energy), this.data.isActive);
-			if(this.data.lastTexture != (this.data.lastTexture = texture)) this.refreshModel();
+			if(this.data.lastTexture != (this.data.lastTexture = texture)) rsSafeServerRefresh(this, 'controllerTexture');
 			this.data.updateModel = false;
 		}
 		if (this.data.NETWORK_ID != 'f' && RSNetworks[this.data.NETWORK_ID]) {
 			var info = RSNetworks[this.data.NETWORK_ID].info;
 			if (info && info.craftingTasks && info.craftingTasks.length > 0) {
 				this.data.networkTick++;
-				CraftingScheduler.processTick(info, this.blockSource, this.data.networkTick);
+				var _schedCtx = buildSchedulerCtx(info, this.blockSource, this.data.networkTick);
+				rsProcessCraftingTasks(info, _schedCtx);
 			}
 		}
 	},
@@ -570,6 +533,9 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			openGui: function(container, window, windowContent, eventData){ openControllerGui(this, container, window, windowContent, eventData); },
 			refreshGui:function(container, window, windowContent, eventData){ refreshControllerGui(this, container, window, windowContent, eventData); }
 		}
+	},
+	onWindowClose: function () {
+		rsResetControllerSwipe();
 	},
 	containerEvents: {
 		craftPreview: function(eventData, connectedClient) {

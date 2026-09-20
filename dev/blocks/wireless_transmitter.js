@@ -140,7 +140,11 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_wireless_transmitter, {
 	upgradesSlots: ["slot_upgrades0", "slot_upgrades1", "slot_upgrades2", "slot_upgrades3"],
 	containerEvents: Object.assign({}, RefinedStorage.paramsMap[BlockID.RS_grid].containerEvents, {
 		cancelTask: function (eventData, connectedClient) {
+			if (!MpCore.isWatching(this, connectedClient)) return;
 			var uid = connectedClient.getPlayerUid();
+			var _guard = MpCore.requestGuard(this, CRAFT_THROTTLE_TICKS);
+			if (_guard.isThrottled(uid)) return;
+			_guard.mark(uid);
 			var info = getNetworkInfo(this);
 			var cancelled = info && eventData && eventData.taskId ? info.cancelTask(eventData.taskId) : false;
 			if (cancelled && this.data.wirelessMonitorPlayers && this.data.wirelessMonitorPlayers[uid]) {
@@ -148,7 +152,11 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_wireless_transmitter, {
 			}
 		},
 		cancelAllTasks: function (eventData, connectedClient) {
+			if (!MpCore.isWatching(this, connectedClient)) return;
 			var uid = connectedClient.getPlayerUid();
+			var _guard = MpCore.requestGuard(this, CRAFT_THROTTLE_TICKS);
+			if (_guard.isThrottled(uid)) return;
+			_guard.mark(uid);
 			var info = getNetworkInfo(this);
 			if (info && info.craftingTasks && info.craftingTasks.length > 0) {
 				info.cancelAllTasks();
@@ -158,9 +166,15 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_wireless_transmitter, {
 			}
 		},
 		provideCraft: function (eventData, connectedClient) {
+			if (!MpCore.isWatching(this, connectedClient)) return;
+			var _uid = connectedClient.getPlayerUid();
+			var _guard = MpCore.requestGuard(this, CRAFT_THROTTLE_TICKS);
+			if (_guard.isThrottled(_uid)) return;
+			_guard.mark(_uid);
 			craftingGridProvideCraftEvent(this, eventData, connectedClient);
 		},
 		devOpenCraftingGrid: function (eventData, connectedClient) {
+			if (!MpCore.isWatching(this, connectedClient)) return;
 			var uid = connectedClient.getPlayerUid();
 			if (!this.data.openedScreens) this.data.openedScreens = {};
 			this.data.openedScreens[uid] = 'craftingGrid';
@@ -188,8 +202,8 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_wireless_transmitter, {
 			}
 		}
 		if (this.data.refreshMonitorPage) {
-			var _nowM = World.getThreadTime();
-			if (this.data.lastMonitorRefresh === undefined || _nowM - this.data.lastMonitorRefresh >= 5) {
+			var _nowM = TickScheduler.global.ticks;
+			if (this.data.lastMonitorRefresh === undefined || _nowM < this.data.lastMonitorRefresh || _nowM - this.data.lastMonitorRefresh >= 5) {
 				this.data.lastMonitorRefresh = _nowM;
 				this.data.refreshMonitorPage = false;
 				var anyMonitor = false;
@@ -278,12 +292,16 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_wireless_transmitter, {
 			return;
 		}
 		if (InnerCore_pack.packVersionCode >= 119) this.refreshGui(true, client, false, screen);
-		if (this.data.NETWORK_ID == 'f' || !RSNetworks[this.data.NETWORK_ID]) return;
+		if (this.data.NETWORK_ID == 'f') return;
+		var netOpen = RSNetworks[this.data.NETWORK_ID];
+		if (!netOpen) return;
 		var coords_id = this.coords_id();
-		RSNetworks[this.data.NETWORK_ID][coords_id].isOpenedGrid = true;
-		if (RSNetworks[this.data.NETWORK_ID].info.openedGrids.findIndex(function (element) { return cts(element) == coords_id }) == -1) RSNetworks[this.data.NETWORK_ID].info.openedGrids.push({ x: this.x, y: this.y, z: this.z });
+		if (netOpen[coords_id]) netOpen[coords_id].isOpenedGrid = true;
+		if (netOpen.info && netOpen.info.openedGrids && netOpen.info.openedGrids.findIndex(function (element) { return cts(element) == coords_id }) == -1) netOpen.info.openedGrids.push({ x: this.x, y: this.y, z: this.z });
 	},
 	onWindowClose: function (container, client) {
+		rsResetStorageTouch();
+		rsResetCraftsTouch();
 		var uid = client.getPlayerUid();
 		var screen = (this.data.openedScreens && this.data.openedScreens[uid]) || 'grid';
 		if (screen == 'monitor') {
@@ -303,18 +321,29 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_wireless_transmitter, {
 		if (client && this.data.wirelessPlayers) delete this.data.wirelessPlayers[client.getPlayerUid()];
 		if (this.data.wirelessCraftingGridPlayers) delete this.data.wirelessCraftingGridPlayers[uid];
 		if (this.data.openedScreens) delete this.data.openedScreens[uid];
-		if (this.data.NETWORK_ID == 'f' || !RSNetworks[this.data.NETWORK_ID]) return;
+		if (this.data.NETWORK_ID == 'f') return;
+		var netClose = RSNetworks[this.data.NETWORK_ID];
+		if (!netClose) return;
 		var coords_id = this.coords_id();
-		RSNetworks[this.data.NETWORK_ID][coords_id].isOpenedGrid = false;
+		if (netClose[coords_id]) netClose[coords_id].isOpenedGrid = false;
 		var iIndex;
-		if ((iIndex = RSNetworks[this.data.NETWORK_ID].info.openedGrids.findIndex(function (element) { return cts(element) == coords_id })) != -1) RSNetworks[this.data.NETWORK_ID].info.openedGrids.splice(iIndex, 1);
+		if (netClose.info && netClose.info.openedGrids && (iIndex = netClose.info.openedGrids.findIndex(function (element) { return cts(element) == coords_id })) != -1) netClose.info.openedGrids.splice(iIndex, 1);
 	},
 	onDisconnectionPlayer: function (client) {
 		var uid = client.getPlayerUid();
+		if (this.data.pushDeleteEvents) delete this.data.pushDeleteEvents[uid];
 		if (this.data.wirelessPlayers) delete this.data.wirelessPlayers[uid];
 		if (this.data.wirelessMonitorPlayers) delete this.data.wirelessMonitorPlayers[uid];
 		if (this.data.wirelessCraftingGridPlayers) delete this.data.wirelessCraftingGridPlayers[uid];
 		if (this.data.openedScreens) delete this.data.openedScreens[uid];
+		var anyMonitor = false;
+		if (this.data.wirelessMonitorPlayers) {
+			for (var k in this.data.wirelessMonitorPlayers) { anyMonitor = true; break; }
+		}
+		if (!anyMonitor && this._monitorListener) {
+			var info = getNetworkInfo(this);
+			if (info) info.removeMonitorListener(this._monitorListener);
+		}
 	},
 	post_init: function () {
 		this.data.pushDeleteEvents = {};

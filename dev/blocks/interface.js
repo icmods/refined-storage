@@ -285,15 +285,6 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 				this.pushItem(slot, count);
 			}
 		}
-		if(World.getThreadTime()%8 == 0){
-			var region = this.blockSource;
-			var _hopperNear = region.getBlockId(this.x, this.y - 1, this.z) == 154;
-			for(var _side = 1; _side < 6 && !_hopperNear; _side++){
-				var _dir = StorageInterface.getRelativeCoords(this, _side);
-				if(region.getBlockId(_dir.x, _dir.y, _dir.z) == 154)_hopperNear = true;
-			}
-			if(_hopperNear)this.data.guiDirty = true;
-		}
 		if(this.data.guiDirty){
 			if(this.container.getNetworkEntity().getClients().iterator().hasNext())this.container.sendChanges();
 			this.data.guiDirty = false;

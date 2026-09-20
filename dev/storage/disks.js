@@ -1,38 +1,61 @@
 var DiskData = [false];
-Saver.addSavesScope("RSDiskData",
-	function read(scope){
-		DiskData = scope && scope.DiskData ? scope.DiskData.map(function(elem){
-			if(elem){
-				if(elem.storage == 'Infinity')elem.storage = Infinity;
-				var itemsReplacing = [];
-				for(var i in elem.items){
-					if(elem.items[i].extra){
-						itemsReplacing.push([i, getItemUid(elem.items[i]), elem.items[i]]);
-					}
-				}
-			for(var i in itemsReplacing){
-				if(itemsReplacing[i][0] != itemsReplacing[i][1]){
-					elem.items[itemsReplacing[i][1]] = itemsReplacing[i][2];
-					delete elem.items[itemsReplacing[i][0]];
-				}
-			}
-			}
-		return elem;
-	}) : [false];
-},
 
-	function save(){
-		return {DiskData: DiskData.map(function(elem){
-			if(elem && elem.storage == Infinity){
+// v1 to v2: canonical uid re-key with count merge on collisions.
+function _diskRekeyMerge(data) {
+	if (!data || !Array.isArray(data)) return data;
+	for (var e = 0; e < data.length; e++) {
+		var elem = data[e];
+		if (!elem || !elem.items) continue;
+		var items = elem.items;
+		var out = {};
+		for (var key in items) {
+			if (!Object.prototype.hasOwnProperty.call(items, key)) continue;
+			var it = items[key];
+			if (!it) continue;
+			var newKey = it.extra ? getItemUid(it) : key;
+			if (out[newKey]) {
+				out[newKey].count = (out[newKey].count || 0) + (it.count || 0);
+			} else {
+				out[newKey] = it;
+			}
+		}
+		elem.items = out;
+	}
+	return data;
+}
+
+SaveCore.scope("RSDiskData", {
+	version: 2,
+	defaults: function () { return [false]; },
+	legacy: function (raw) {
+		return (raw && raw.DiskData) ? raw.DiskData : [false];
+	},
+	migrations: {
+		1: _diskRekeyMerge,
+		2: function (data) { return data; }
+	},
+	deserialize: function (data) {
+		if (!data || !Array.isArray(data)) { DiskData = [false]; return DiskData; }
+		for (var e = 0; e < data.length; e++) {
+			var elem = data[e];
+			if (!elem || !elem.items) continue;
+			if (elem.storage == 'Infinity') elem.storage = Infinity;
+		}
+		_diskRekeyMerge(data);
+		DiskData = data;
+		return data;
+	},
+	serialize: function (data) {
+		return (data || [false]).map(function (elem) {
+			if (elem && elem.storage == Infinity) {
 				elem = Object.assign({}, elem);
 				elem.storage = 'Infinity';
 			}
 			return elem;
-		})};
-	}
-);
-Callback.addCallback("LevelLeft", function(){
-	DiskData = [false];
+		});
+	},
+	validate: function (data) { return Array.isArray(data); },
+	onLevelLeft: function () { DiskData = [false]; }
 });
 
 const Disk = {

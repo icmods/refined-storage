@@ -1,51 +1,31 @@
+var __rsCraftsTouch = null;
+
+function rsResetCraftsTouch() {
+	if (__rsCraftsTouch) {
+		__rsCraftsTouch.swipeY = false;
+		__rsCraftsTouch.swipeSum = 0;
+		__rsCraftsTouch.moving = false;
+	}
+}
+
 function buildCraftsSection(ctx) {
 	var craftsSlotsCons = (ctx.xEnd - ctx.xStart) / ctx.columns;
 
-	ctx.elements[ctx.searchFrameName || "search_frame_crafts"] = {
-		type: "frame",
-		x: ctx.xStart,
-		y: ctx.yStart - 25,
-		width: ctx.xEnd - ctx.xStart,
+	var _searchFrameName = ctx.searchFrameName || "search_frame_crafts";
+	var _searchTextName = ctx.searchTextName || "search_text_crafts";
+	var craftsSearchBox = UiCore.searchBox(ctx.xStart, ctx.yStart - 25, ctx.xEnd - ctx.xStart, {
+		title: Translation.translate("Please type the keywords"),
+		textLabel: Translation.translate('Search'),
+		positiveLabel: Translation.translate("Search"),
 		height: 20,
-		bitmap: "search_bar",
-		scale: 0.8,
-		clicker: {
-			onClick: function (itemContainerUiHandler, itemContainer, element) {
-				UI.getContext().runOnUiThread(new java.lang.Runnable({
-					run: function () {
-						try {
-							var editText = new android.widget.EditText(UI.getContext());
-							new android.app.AlertDialog.Builder(UI.getContext())
-								.setTitle(Translation.translate("Please type the keywords"))
-								.setView(editText)
-								.setPositiveButton(Translation.translate("Search"), {
-									onClick: function () {
-										var keyword = editText.getText() + "";
-										ctx.onSearch(keyword, itemContainer, itemContainerUiHandler);
-									}
-								}).show();
-						} catch (e) {
-							alert(e);
-						}
-					}
-				}));
-			}
+		fontSize: 12,
+		onSearch: function (keyword, uiHandler, container) {
+			ctx.onSearch(keyword, container, uiHandler);
 		}
-	}
+	});
+	ctx.elements[_searchFrameName] = craftsSearchBox.frame;
+	ctx.elements[_searchTextName] = craftsSearchBox.text;
 
-	var searchTextName = ctx.searchTextName || "search_text_crafts";
-	ctx.elements[searchTextName] = {
-		type: "text",
-		x: ctx.elements[ctx.searchFrameName || "search_frame_crafts"].x + 10,
-		y: ctx.elements[ctx.searchFrameName || "search_frame_crafts"].y + 1,
-		z: 100,
-		text: Translation.translate('Search'),
-		font: {
-			color: android.graphics.Color.WHITE,
-			shadow: 0.5,
-			size: ctx.elements[ctx.searchFrameName || "search_frame_crafts"].height - 8
-		}
-	}
 
 	var slotPrefix = ctx.slotPrefix || "item_craft_slot";
 	var asd = 0;
@@ -63,7 +43,7 @@ function buildCraftsSection(ctx) {
 							var craft_ident = this.num + ((ctx.gridData.lastCraftsPage || 1) - 1) * ctx.elements[dataPrefix + "x_count"];
 							var craft = ctx.gridData.crafts[craft_ident];
 							ctx.onSelectCraft(craft, itemContainer);
-						} catch (eer) { if(Config.dev) Logger.Log('Craft slot onClick error: ' + JSON.stringify(eer), 'RefinedStorageDebug'); }
+						} catch (eer) {  }
 					},
 					onLongClick: function (itemContainerUiHandler, itemContainer, element) {
 					}
@@ -99,53 +79,43 @@ function buildCraftsSection(ctx) {
 	var swipe_y;
 	var swipe_sum = 0;
 
+	var __craftsTouch = { swipeY: false, swipeSum: 0, moving: false };
+	__rsCraftsTouch = __craftsTouch;
+	var __craftsItemContainerUiHandler = null;
+	var __craftsItemContainer = null;
+
 	var sliderName = ctx.sliderName || "crafts_slider";
 	var sliderFrameName = ctx.sliderFrameName || "crafts_slider_frame";
 
+	var __craftsAdapter = {
+		bounds: { xStart: ctx.elements[dataPrefix + "x_start"], xEnd: ctx.elements[dataPrefix + "x_end"], yStart: ctx.elements[dataPrefix + "y_start"], yEnd: ctx.elements[dataPrefix + "y_end"] },
+		itemCount: function () { return ctx.gridData.crafts.length; },
+		pagination: ctx,
+		getLastPage: function () { return ctx.gridData.lastCraftsPage; },
+		switchPage: function (page, fromSwipe, dontMoveSlider) { ctx.switchPage(page, __craftsItemContainer, fromSwipe, dontMoveSlider); },
+		state: __craftsTouch,
+		maxY: 0,
+		sliderStartY: 0,
+		sliderScale: 0,
+		sliderX: 0,
+		sliderElementName: sliderName,
+		getElement: function (name) { return __craftsItemContainerUiHandler.getElement(name); }
+	};
+	var __craftsSwipeHandler = UiCore.attachSwipe(__craftsAdapter);
 	ctx.elements.clickFrameTouchEvents.push(function (element, event) {
-		var content = { elements: ctx.elements };
-		var itemContainerUiHandler = element.window.getContainer();
-		var itemContainer = itemContainerUiHandler.getParent();
-		if (event.type == "DOWN" && !swipe_y && event.x > ctx.elements[dataPrefix + "x_start"] && event.x < ctx.elements[dataPrefix + "x_end"] && event.y > ctx.elements[dataPrefix + "y_start"] && event.y < ctx.elements[dataPrefix + "y_end"]) {
-			swipe_y = event.y;
-		} else if (swipe_y && event.type == "MOVE") {
-			var distance = Math.abs(event.y - swipe_y);
-			function moveSwitchPage_(_n) {
-				_n = (_n ? 1 : -1);
-				ctx.switchPage(ctx.gridData.lastCraftsPage + _n, itemContainer);
-			}
-			if (distance > 7) {
-				if (event.y > swipe_y) moveSwitchPage_(false);
-				if (event.y < swipe_y) moveSwitchPage_(true);
-				swipe_sum = 0;
-			} else {
-				swipe_sum += distance;
-				if (swipe_sum > 15) {
-					if (event.y > swipe_y) moveSwitchPage_(false);
-					if (event.y < swipe_y) moveSwitchPage_(true);
-					swipe_sum = 0;
-				}
-			}
-			swipe_y = event.y;
-		} else if (swipe_y && (event.type == "UP" || event.type == "CLICK")) {
-			swipe_y = false;
+		__craftsItemContainerUiHandler = element.window.getContainer();
+		__craftsItemContainer = __craftsItemContainerUiHandler.getParent();
+		__craftsAdapter.maxY = max_y;
+		var __cslider = ctx.elements[sliderName];
+		if (__cslider) {
+			__craftsAdapter.sliderStartY = __cslider.start_y;
+			__craftsAdapter.sliderScale = __cslider.scale;
+			__craftsAdapter.sliderX = __cslider.x;
 		}
-		if (!moving) return;
-		event.y -= content.elements[sliderName].scale * 15 / 2;
-		if (event.type != 'UP' && event.type != "CLICK") {
-			var page = ctx.getPageFromCoords(event, ctx.getPages(ctx.gridData.crafts.length));
-			itemContainerUiHandler.getElement(sliderName).setPosition(content.elements[sliderName].x, Math.max(Math.min(event.y, max_y), content.elements[sliderName].start_y));
-			ctx.switchPage(page, itemContainer, false, true);
-		}
-		if (event.type == "UP" || event.type == "CLICK") {
-			moving = false;
-			var pages = ctx.getPages(ctx.gridData.crafts.length);
-			var page = ctx.getPageFromCoords(event, pages);
-			ctx.switchPage(page, itemContainer);
-			var ___y = ctx.getCoordsFromPage(page, pages);
-			itemContainerUiHandler.getElement(sliderName).setPosition(ctx.elements[sliderName].x, ___y);
-		}
+		__craftsSwipeHandler(element, event);
 	});
+
+
 
 	ctx.elements[sliderName] = {
 		type: "button",
@@ -158,6 +128,12 @@ function buildCraftsSection(ctx) {
 		bitmap2: 'craftsSliderOn'
 	}
 
+	var __craftsSliderHandler = UiCore.attachSlider({
+		itemCount: function () { return ctx.gridData.crafts.length; },
+		pagination: ctx,
+		switchPage: function (page) { ctx.switchPage(page, __craftsItemContainer); },
+		state: __craftsTouch
+	});
 	ctx.elements[sliderFrameName] = {
 		type: "frame",
 		x: ctx.xEnd,
@@ -167,16 +143,9 @@ function buildCraftsSection(ctx) {
 		z: -1,
 		bitmap: 'empty1',
 		onTouchEvent: function (element, event) {
-			if (event.type == 'DOWN') {
-				moving = true;
-			}
-			if (event.type == 'CLICK') {
-				var itemContainerUiHandler = element.window.getContainer();
-				var itemContainer = itemContainerUiHandler.getParent();
-				var pages = ctx.getPages(ctx.gridData.crafts.length);
-				var page = ctx.getPageFromCoords(event, pages);
-				ctx.switchPage(page, itemContainer);
-			}
+			__craftsItemContainerUiHandler = element.window.getContainer();
+			__craftsItemContainer = __craftsItemContainerUiHandler.getParent();
+			__craftsSliderHandler(element, event);
 		}
 	}
 

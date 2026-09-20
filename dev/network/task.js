@@ -1,174 +1,17 @@
 var CraftingTask = {
 
 	create: function(fullCrafts, info, requestedItem, requestedCount) {
-		var plan = fullCrafts.plan;
-		if (!plan) return fullCrafts;
-
-		var totalSteps = 0;
-		var nodes = [];
-		for (var ni = 0; ni < plan.nodes.length; ni++) {
-			var pn = plan.nodes[ni];
-			totalSteps += pn.quantity;
-			nodes.push({
-				patternUid: pn.patternUid,
-				isProcessing: pn.isProcessing || false,
-				containerCoords: pn.containerCoords,
-				quantity: pn.quantity,
-				remaining: pn.quantity,
-				done: false,
-				received: 0,
-				expectedByUid: null,
-				receivedByUid: {},
-				requirements: (pn.requirements || []).map(function(r) {
-					return { uid: r.uid, count: r.count, provided: 0, altUids: r.altUids || [] };
-				})
-			});
+		var task = CraftTreeExecutor.createTask(fullCrafts, buildCraftHost(info), requestedItem, requestedCount);
+		if (!task) return null;
+		if (task === fullCrafts) return fullCrafts;
+		task.id = CraftingTask._generateId();
+		task._info = info;
+		task.requestedUid = getItemUid(requestedItem);
+		task.startTime = World.getThreadTime();
+		for (var k in fullCrafts) {
+			if (k === "results" || k === "crafts") continue;
+			task[k] = fullCrafts[k];
 		}
-
-		var task = Object.assign({}, fullCrafts, {
-			id: CraftingTask._generateId(),
-			_info: info,
-			requestedUid: getItemUid(requestedItem),
-			requestedCount: requestedCount || fullCrafts.results[0].count,
-			totalSteps: totalSteps,
-			currentStep: 0,
-			ticks: 0,
-			startTime: World.getThreadTime(),
-			cancelled: false,
-			nodes: nodes,
-			buffer: {},
-			toReserve: Object.assign({}, plan.toReserve || {}),
-			pendingOutputs: {},
-
-			reserveItems: function(info) {
-				for (var uid in this.toReserve) {
-					var count = this.toReserve[uid];
-					if (count <= 0) continue;
-					var parts = uid.split('_');
-					var item = { id: parseInt(parts[0]), data: parseInt(parts[1]), count: count, extra: null };
-					var deleted = info.deleteItem(item, count, true);
-					var reserved = count - deleted;
-					if (reserved > 0) {
-						this.buffer[uid] = (this.buffer[uid] || 0) + reserved;
-					}
-					if (deleted === 0) {
-						delete this.toReserve[uid];
-					} else {
-						this.toReserve[uid] = deleted;
-					}
-				}
-				return Object.keys(this.toReserve).length === 0;
-			},
-
-			flushBuffer: function(info) {
-				for (var uid in this.buffer) {
-					var count = this.buffer[uid];
-					if (count <= 0) { delete this.buffer[uid]; continue; }
-					var parts = uid.split('_');
-					var remainder = info.pushItem({ id: parseInt(parts[0]), data: parseInt(parts[1]), count: count, extra: null }, count, true, ['autocraft']);
-					if (remainder <= 0) {
-						delete this.buffer[uid];
-					} else {
-						this.buffer[uid] = remainder;
-					}
-				}
-				return Object.keys(this.buffer).length === 0;
-			},
-
-			getProgress: function() {
-				if (this.totalSteps === 0) return 0;
-				return Math.floor(this.currentStep * 100 / this.totalSteps);
-			},
-
-			consumeFromBuffer: function(uid, count) {
-				var available = this.buffer[uid] || 0;
-				var take = Math.min(count, available);
-				if (take > 0) {
-					this.buffer[uid] -= take;
-					if (this.buffer[uid] <= 0) delete this.buffer[uid];
-				}
-				return take;
-			},
-
-			addToBuffer: function(uid, count) {
-				if (count <= 0) return;
-				this.buffer[uid] = (this.buffer[uid] || 0) + count;
-			},
-
-			cacheExpectedOutputs: function(node, pattern) {
-				var expected = {};
-				for (var ri = 0; ri < pattern.result.length; ri++) {
-					var res = pattern.result[ri];
-					var uid = res.id + '_' + res.data;
-					expected[uid] = (expected[uid] || 0) + node.quantity * (res.count || 1);
-				}
-				node.expectedByUid = expected;
-				this.registerExpectedOutputs(node);
-			},
-
-			registerExpectedOutputs: function(node) {
-				if (!node || node.__registered || !node.expectedByUid) return;
-				node.__registered = true;
-				var idx = this.nodes.indexOf(node);
-				if (idx == -1) return;
-				for (var uid in node.expectedByUid) {
-					if (!this.pendingOutputs[uid]) this.pendingOutputs[uid] = [];
-					if (this.pendingOutputs[uid].indexOf(idx) == -1) this.pendingOutputs[uid].push(idx);
-					if (this._info && this._info.registerExpectedOutputTask) this._info.registerExpectedOutputTask(uid, this);
-				}
-			},
-
-			unregisterExpectedOutputs: function(node) {
-				if (!node || !node.__registered) return;
-				node.__registered = false;
-				var idx = this.nodes.indexOf(node);
-				for (var uid in node.expectedByUid) {
-					var list = this.pendingOutputs[uid];
-					if (!list) continue;
-					var li = list.indexOf(idx);
-					if (li != -1) list.splice(li, 1);
-					if (list.length === 0) {
-						delete this.pendingOutputs[uid];
-						if (this._info && this._info.unregisterExpectedOutputTask) this._info.unregisterExpectedOutputTask(uid, this);
-					}
-				}
-			},
-
-			outputsSatisfied: function(node) {
-				if (!node.expectedByUid || node.remaining > 0) return false;
-				for (var uid in node.expectedByUid) {
-					if ((node.receivedByUid[uid] || 0) < node.expectedByUid[uid]) return false;
-				}
-				return true;
-			},
-
-			onOutputArrived: function(uid, count) {
-				if (!this.nodes || count <= 0) return 0;
-				var consumed = 0;
-				var list = this.pendingOutputs[uid];
-				if (!list || list.length === 0) return 0;
-				for (var li = 0; li < list.length && count > 0; li++) {
-					var node = this.nodes[list[li]];
-					if (!node || node.done || !node.expectedByUid) continue;
-					var expected = node.expectedByUid[uid];
-					if (!expected) continue;
-					var received = node.receivedByUid[uid] || 0;
-					if (received >= expected) continue;
-					var take = Math.min(count, expected - received);
-					node.receivedByUid[uid] = received + take;
-					node.received = (node.received || 0) + take;
-					count -= take;
-					consumed += take;
-					if (this.outputsSatisfied(node)) {
-						node.done = true;
-						this.unregisterExpectedOutputs(node);
-						li--;
-					}
-				}
-				return consumed;
-			}
-		});
-
 		return task;
 	},
 
@@ -186,6 +29,7 @@ var CraftingTask = {
 			ticks: task.ticks || 0,
 			startTime: task.startTime,
 			cancelled: task.cancelled === true,
+			completingFlush: task.completingFlush === true,
 			nodes: (task.nodes || []).map(function(n) { return {
 				patternUid: n.patternUid,
 				isProcessing: n.isProcessing || false,
@@ -200,6 +44,7 @@ var CraftingTask = {
 			}; }),
 			buffer: task.buffer || {},
 			toReserve: task.toReserve || {},
+			reservedExtras: (task._host && task._host.reservedExtras) ? task._host.reservedExtras : {},
 			results: task.results || [],
 			crafts: (task.crafts || []).map(function(c) { return {
 				craftable: c.craftable,
@@ -217,34 +62,15 @@ var CraftingTask = {
 	},
 
 	restore: function(data, info) {
-		var requestedItem = data.results && data.results[0]
-			? { id: data.results[0].id, data: data.results[0].data, extra: null } : { id: 0, data: 0 };
-		var fakeFullCrafts = {
-			results: data.results,
-			crafts: data.crafts,
-			flatSteps: data.flatSteps,
-			plan: { nodes: data.nodes, toReserve: data.toReserve, toCraft: {}, toTake: {}, missing: {} }
-		};
-		var task = CraftingTask.create(fakeFullCrafts, info, requestedItem, data.requestedCount);
-		task.id = data.id;
-		task.startTime = data.startTime;
-		task.totalSteps = data.totalSteps;
-		task.currentStep = data.currentStep || 0;
-		task.ticks = data.ticks || 0;
-		task.buffer = data.buffer || {};
-		task.toReserve = data.toReserve || {};
-		task.cancelled = data.cancelled === true;
-		if (task.cancelled) task.completingFlush = true;
-		for (var ni = 0; ni < task.nodes.length; ni++) {
-			if (data.nodes[ni]) {
-				task.nodes[ni].remaining = data.nodes[ni].remaining;
-				task.nodes[ni].done = data.nodes[ni].done;
-				task.nodes[ni].received = data.nodes[ni].received || 0;
-				task.nodes[ni].expectedByUid = data.nodes[ni].expectedByUid || null;
-				task.nodes[ni].receivedByUid = data.nodes[ni].receivedByUid || {};
-			}
-			if (task.nodes[ni].expectedByUid) task.registerExpectedOutputs(task.nodes[ni]);
+		if (!data || !data.id || !Array.isArray(data.nodes) || !Array.isArray(data.results) || !Array.isArray(data.crafts)) {
+			throw new Error('invalid persisted task data');
 		}
+		var task = CraftTreeExecutor.restore(data, buildCraftHost(info, data.reservedExtras));
+		task.id = data.id;
+		task._info = info;
+		task.startTime = data.startTime;
+		task.requestedUid = data.requestedUid || task.requestedUid;
+		task.flatSteps = data.flatSteps || [];
 		return task;
 	}
 };

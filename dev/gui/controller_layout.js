@@ -1,7 +1,19 @@
+var __rsCtrlSwipeState = null;
+
+function rsResetControllerSwipe() {
+	if (__rsCtrlSwipeState) {
+		__rsCtrlSwipeState.swipeY = false;
+		__rsCtrlSwipeState.swipeSum = 0;
+		__rsCtrlSwipeState.moving = false;
+		__rsCtrlSwipeState.swipeDir = 0;
+	}
+}
+
 function buildControllerElements(elements, otherData, controllerFuncs, switchPageFn) {
 	var moving = false;
 	var swipe_y;
 	var swipe_sum = 0;
+	var swipe_dir = 0;
 	var max_y = 0;
 
 	elements["click_frame"] = {
@@ -27,7 +39,7 @@ function buildControllerElements(elements, otherData, controllerFuncs, switchPag
 					var pages = controllerFuncs.getPages(Object.keys(otherData.net_map).length);
 					if(!switchPageFn(otherData.lastPage + _n, itemContainer, otherData)) return;
 					var ___y = controllerFuncs.getCoordsFromPage(otherData.lastPage + _n, pages);
-					itemContainerUiHandler.getElement("slider_button").setPosition(elements['slider_button'].x, ___y);
+					rsSetSliderElement(itemContainerUiHandler, "slider_button", elements['slider_button'].x, ___y);
 				}
 				if (distance > 7) {
 					if (event.y > swipe_y) moveSwitchPage_(false);
@@ -49,7 +61,7 @@ function buildControllerElements(elements, otherData, controllerFuncs, switchPag
 			event.y -= content.elements["slider_button"].scale * 15 / 2;
 			if (event.type != 'UP' && event.type != "CLICK") {
 				var page = controllerFuncs.getPageFromCoords(event, controllerFuncs.getPages(Object.keys(otherData.net_map).length));
-				itemContainerUiHandler.getElement("slider_button").setPosition(content.elements['slider_button'].x, Math.max(Math.min(event.y, max_y), content.elements["slider_button"].start_y));
+				rsSetSliderElement(itemContainerUiHandler, "slider_button", content.elements['slider_button'].x, Math.max(Math.min(event.y, max_y), content.elements["slider_button"].start_y));
 				switchPageFn(page, itemContainer, otherData);
 			}
 			if (event.type == "UP" || event.type == "CLICK") {
@@ -58,7 +70,7 @@ function buildControllerElements(elements, otherData, controllerFuncs, switchPag
 				var page = controllerFuncs.getPageFromCoords(event, pages);
 				switchPageFn(page, itemContainer, otherData);
 				var ___y = controllerFuncs.getCoordsFromPage(page, pages);
-				itemContainerUiHandler.getElement("slider_button").setPosition(elements['slider_button'].x, ___y);
+				rsSetSliderElement(itemContainerUiHandler, "slider_button", elements['slider_button'].x, ___y);
 			}
 		}
 	}
@@ -207,14 +219,14 @@ function buildControllerElements(elements, otherData, controllerFuncs, switchPag
 				var pages = controllerFuncs.getPages(Object.keys(otherData.net_map).length);
 				var page = controllerFuncs.getPageFromCoords(event, pages);
 				var ___y = controllerFuncs.getCoordsFromPage(page, pages);
-				itemContainerUiHandler.getElement("slider_button").setPosition(elements['slider_button'].x, ___y);
+				rsSetSliderElement(itemContainerUiHandler, "slider_button", elements['slider_button'].x, ___y);
 				return;
 			}
 			if (!moving) return;
 			event.y -= content.elements["slider_button"].scale * 15 / 2;
 			if (event.type != 'UP') {
 				var page = controllerFuncs.getPageFromCoords(event, controllerFuncs.getPages(Object.keys(otherData.net_map).length));
-				itemContainerUiHandler.getElement("slider_button").setPosition(content.elements['slider_button'].x, Math.max(Math.min(event.y, max_y), content.elements["slider_button"].start_y));
+				rsSetSliderElement(itemContainerUiHandler, "slider_button", content.elements['slider_button'].x, Math.max(Math.min(event.y, max_y), content.elements["slider_button"].start_y));
 				switchPageFn(page, itemContainer, otherData);
 			}
 			if (event.type == "UP") {
@@ -223,7 +235,7 @@ function buildControllerElements(elements, otherData, controllerFuncs, switchPag
 				var page = controllerFuncs.getPageFromCoords(event, pages);
 				switchPageFn(page, itemContainer, otherData);
 				var ___y = controllerFuncs.getCoordsFromPage(page, pages);
-				itemContainerUiHandler.getElement("slider_button").setPosition(elements['slider_button'].x, ___y);
+				rsSetSliderElement(itemContainerUiHandler, "slider_button", elements['slider_button'].x, ___y);
 			}
 		}
 	}
@@ -238,6 +250,48 @@ function buildControllerElements(elements, otherData, controllerFuncs, switchPag
 		scale: (elements["slider_frame"].width - slider_frame_border * 2) / 12
 	}
 	max_y = (elements["slider_frame"].y + elements["slider_frame"].height) - 7 - elements["slider_button"].scale * 15;
+
+	// Dedicated frame over the mesh: the z:-50 click_frame sits below the slots.
+	var __uiCtrlSwipeState = { swipeY: false, swipeSum: 0, moving: false, swipeDir: 0 };
+	__rsCtrlSwipeState = __uiCtrlSwipeState;
+	var __uiCtrlContainerUiHandler = null;
+	var __uiCtrlContainer = null;
+	var __uiCtrlSwipeAdapter = {
+		variant: "anchor",
+		drag: false,                         // No drag section (the slider is a separate element).
+		thresholds: { move: 30, accumulate: 70 },
+		itemCount: function () { return Object.keys(otherData.net_map).length; },
+		pagination: controllerFuncs,
+		getLastPage: function () { return otherData.lastPage + 1; },   // controllerSwitchPage is 1-based.
+		switchPage: function (page) { return switchPageFn(page, __uiCtrlContainer, otherData); },
+		state: __uiCtrlSwipeState,
+		sliderX: elements["slider_button"].x,
+		sliderElementName: "slider_button",
+		getElement: function (name) { return __uiCtrlContainerUiHandler.getElement(name); },
+		snapAfterSwipe: true                 // Snap to the new page Y when switchPage succeeds.
+	};
+	var __uiCtrlSwipeHandler = UiCore.attachSwipe(__uiCtrlSwipeAdapter);
+	elements["mesh_swipe"] = {
+		type: "frame",
+		x: elements['mesh'].x,
+		y: elements['mesh'].y,
+		z: 110,
+		width: elements['mesh'].width,
+		height: elements['mesh'].height,
+		bitmap: "empty1",
+		scale: 1,
+		onTouchEvent: function (element, event) {
+			var h = element.window.getContainer();
+			if (h) {
+				__uiCtrlContainerUiHandler = h;
+				__uiCtrlContainer = h.getParent();
+				__uiCtrlSwipeAdapter.sliderX = elements["slider_button"].x;
+			} else if (event.type != 'DOWN') {
+				return;
+			}
+			__uiCtrlSwipeHandler(element, event);
+		}
+	}
 	var settings_cons = 10;
 	elements["redstone_button"] = {
 		type: "button",
@@ -265,4 +319,6 @@ function buildControllerElements(elements, otherData, controllerFuncs, switchPag
 		scale: elements["redstone_button"].scale*20/16,
 	}
 	otherData.max_y = max_y;
+	// Live reference for UiCore.pagination (slider_button is recreated on every build).
+	otherData.slider = elements["slider_button"];
 }

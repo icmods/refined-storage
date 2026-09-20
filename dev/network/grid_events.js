@@ -1,15 +1,51 @@
-var MAX_PUSH_DELETE_COUNT = 10000;
-
 var GridEvents = {
+	// CS-B02: two packets from the same player before the server tick must NOT
+	// overwrite each other. Same key+type: counts add, updateFull ORs; unsafe or
+	// inherited keys are skipped.
+	mergePushDeleteEvents: function(target, incoming) {
+		if(!incoming) return target || {};
+		if(!target) target = {};
+		for(var key in incoming){
+			if(!Object.prototype.hasOwnProperty.call(incoming, key)) continue;
+			if(key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+			var ev = incoming[key];
+			if(!ev) continue;
+			var existing = target[key];
+			if(existing && existing.type === ev.type){
+				existing.count = (existing.count || 0) + (ev.count || 0);
+				if(ev.updateFull) existing.updateFull = true;
+			} else {
+				target[key] = { type: ev.type, count: ev.count || 0, slot: ev.slot, slotKey: ev.slotKey, updateFull: !!ev.updateFull };
+			}
+		}
+		return target;
+	},
+
+	maxConstructCount: function() {
+		if (typeof Config !== 'undefined' && Config.craftingMaxRequestCount > 0) return Math.floor(Config.craftingMaxRequestCount);
+		return 64;
+	},
+
+	validatedCraftCount: function(eventData) {
+		if(!eventData || !eventData.item || typeof eventData.item.id !== 'number' || eventData.item.id < 0) return 0;
+		var count = Math.floor(Number(eventData.count));
+		if(!isFinite(count) || count <= 0) return 0;
+		var maxCount = GridEvents.maxConstructCount();
+		return count > maxCount ? maxCount : count;
+	},
+
 	craftPreview: function(tile, eventData, connectedClient) {
-		if(!eventData.item || !eventData.count || tile.data.NETWORK_ID == 'f') return;
+		if(!MpCore.isWatching(tile, connectedClient)) return;
+		if(tile.data.NETWORK_ID == 'f') return;
+		var count = GridEvents.validatedCraftCount(eventData);
+		if(!count) return;
 		var net = RSNetworks[tile.data.NETWORK_ID];
 		if (!net || !net.info) return;
 		var info = net.info;
 		var sourceKey = connectedClient ? connectedClient.getPlayerUid() : 'unknown';
-		var now = World.getThreadTime();
+		var now = TickScheduler.global.ticks;
 		if (info.isRequestThrottled(sourceKey, now)) return;
-		var constructedCraft = info.constructCraft(eventData.item, eventData.count, true);
+		var constructedCraft = info.constructCraft(eventData.item, count, true);
 		if (!constructedCraft || !constructedCraft.craftable) info.markRequestFailed(sourceKey, now);
 		if(constructedCraft){
 			var craftsData = constructedCraft.crafts ? constructedCraft.crafts.map(function(c){ return {completedIngridients: c.completedIngridients, result: c.result, craftable: c.craftable}; }) : [];
@@ -19,20 +55,23 @@ var GridEvents = {
 	},
 
 	provideConstructedCraft: function(tile, eventData, connectedClient) {
-		if(!eventData.item || !eventData.count || tile.data.NETWORK_ID == 'f') return;
+		if(!MpCore.isWatching(tile, connectedClient)) return;
+		if(tile.data.NETWORK_ID == 'f') return;
+		var count = GridEvents.validatedCraftCount(eventData);
+		if(!count) return;
 		var net = RSNetworks[tile.data.NETWORK_ID];
 		if (!net || !net.info) return;
 		var info = net.info;
 		var sourceKey = connectedClient ? connectedClient.getPlayerUid() : 'unknown';
-		var now = World.getThreadTime();
+		var now = TickScheduler.global.ticks;
 		if (info.isRequestThrottled(sourceKey, now)) return;
-		var constructedCraft = info.constructCraft(eventData.item, eventData.count);
+		var constructedCraft = info.constructCraft(eventData.item, count);
 		if(constructedCraft && constructedCraft.deduped) return;
 		if(constructedCraft && constructedCraft.craftable){
 			var task = info.provideCraft(constructedCraft);
 			tile.items();
 			tile.refreshGui(false, false, true);
-			_RS._emit("wirelessGridAction", {netId: tile.data.NETWORK_ID, playerUid: sourceKey, kind: 'autocraft', count: task ? task.requestedCount : eventData.count, source: isWirelessSourceTile(tile) ? 'wireless' : 'block'});
+			_RS._emit("wirelessGridAction", {netId: tile.data.NETWORK_ID, playerUid: sourceKey, kind: 'autocraft', count: task ? task.requestedCount : count, source: isWirelessSourceTile(tile) ? 'wireless' : 'block'});
 		} else {
 			info.markRequestFailed(sourceKey, now);
 		}
@@ -50,63 +89,37 @@ var GridEvents = {
 	},
 
 	processPushDeleteEvents: function(tile, onEventHandled) {
-		for(var p in tile.data.pushDeleteEvents){
-			var events = tile.data.pushDeleteEvents[p];
-			var player = null;
-			var needRefresh = false;
-			var fullRefresh = false;
-			for(var slotKey in events){
-				var event = events[slotKey];
-			if(!event) {
-				delete events[slotKey];
-				continue;
-			}
-			var eventCount = Math.floor(Number(event.count));
-			if(!isFinite(eventCount) || eventCount <= 0) {
-				delete events[slotKey];
-				continue;
-			}
-			event.count = Math.min(eventCount, MAX_PUSH_DELETE_COUNT);
-			if(!player) player = new PlayerActor(Number(p));
-				if(event.type == 'push'){
-					var item = player.getInventorySlot(event.slot);
-					if(item.id == 0) {
-						delete events[slotKey];
-						continue;
+		ContainerSync.processEvents(tile.data.pushDeleteEvents, {
+			push: function(item, count) { return tile.pushItem(item, count, true); },
+			remove: function(item, count) { return tile.deleteItem(item, count, true); },
+			getSlot: function(slotKey) { return tile.container.getSlot(slotKey); },
+			onPushed: function(item, pushed) {
+				var _index;
+				if((_index = tile.originalItemsMap().indexOf(getItemUid(item))) != -1)tile.container.markSlotDirty(_index+'slot');
+			},
+			onLeftover: function(playerUid, leftover, items) {
+				// Return leftover items to the player's inventory instead of dropping them.
+				if(items && items.length){
+					var player = new PlayerActor(playerUid);
+					if(player && player.addItemToInventory){
+						for(var i = 0; i < items.length; i++){
+							var it = items[i];
+							player.addItemToInventory(it.id, it.count, it.data, it.extra || null, true);
+						}
 					}
-					var count = Math.min(event.count, item.count);
-					var pushed = tile.pushItem(item, count, true);
-					if(pushed < count){
-						player.setInventorySlot(event.slot, item.id, item.count - (count - pushed), item.data, item.extra);
-					}
-					var _index;
-					if((_index = tile.originalItemsMap().indexOf(getItemUid(item))) != -1)tile.container.markSlotDirty(_index+'slot');
-					needRefresh = true;
-					if(item.count <= count || event.updateFull) fullRefresh = true;
-					if(onEventHandled)onEventHandled(Number(p), 'push');
-					delete events[slotKey];
 				}
-				if(event.type == 'delete'){
-					var item = tile.container.getSlot(slotKey);
-					var itemMaxStack = Item.getMaxStack(item.id);
-					var this_item = searchItem(item.id, item.data, item.extra, false, true, p);
-					var count = this_item && this_item.count < itemMaxStack ? Math.min(event.count, item.count, itemMaxStack - this_item.count) : Math.min(event.count, item.count);
-					var res;
-					if((res = tile.deleteItem(item, count, true)) < count) {
-						var _extra = (this_item ? this_item.extra : item.extra);
-						player.addItemToInventory(item.id, count - res, item.data, _extra || null, true);
-						needRefresh = true;
-						if(item.count <= count || event.updateFull) fullRefresh = true;
-					}
-					if(onEventHandled)onEventHandled(Number(p), 'delete');
-					delete events[slotKey];
-				}
-			}
-			if(needRefresh){
+			},
+			onHandled: function(playerUid, kind) {
+				if(onEventHandled)onEventHandled(playerUid, kind);
+			},
+			onChanged: function(playerUid, fullUpdate) {
 				tile.items();
-				tile.refreshGui(false, false, fullRefresh);
+				tile.refreshGui(false, false, fullUpdate);
+			},
+			onInvalid: function(record) {
+				if (Config.dev) Logger.Log('[CS] rejected ' + record.reason + ' type=' + record.type + ' slot=' + record.slotKey + ' count=' + record.count, 'RefinedStorageDebug');
 			}
-			delete tile.data.pushDeleteEvents[p];
-		}
+		});
+
 	}
 };

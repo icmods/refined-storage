@@ -1,10 +1,10 @@
 const _craftingGridTexture = [
-	["disk_drive_bottom", 0], // bottom
-	["grid_top", 0], // top
-	["grid_back", 0], // back
-	["crafting_grid_front", 0], // front
-	["grid_left", 0], // left
-	["grid_right", 0]  // right
+	["disk_drive_bottom", 0],
+	["grid_top", 0],
+	["grid_back", 0],
+	["crafting_grid_front", 0],
+	["grid_left", 0],
+	["grid_right", 0]
 ];
 
 function getCraftingGridTexture(variation, _active){
@@ -53,6 +53,24 @@ var craftingGridGUI = new UI.StandartWindow({
 GUIs.push(craftingGridGUI);
 
 function craftingGridSwitchPage(page, container, ignore, dontMoveSlider){
+	if (craftingGridData._switchUpdating) {
+		craftingGridData._pendingSwitch = { page: page, container: container, ignore: ignore, dontMoveSlider: dontMoveSlider };
+		return;
+	}
+	craftingGridData._switchUpdating = true;
+	try {
+		craftingGridSwitchPageInner(page, container, ignore, dontMoveSlider);
+	} finally {
+		craftingGridData._switchUpdating = false;
+		var pendingSwitch = craftingGridData._pendingSwitch;
+		if (pendingSwitch) {
+			craftingGridData._pendingSwitch = null;
+			craftingGridSwitchPage(pendingSwitch.page, pendingSwitch.container, pendingSwitch.ignore, pendingSwitch.dontMoveSlider);
+		}
+	}
+}
+
+function craftingGridSwitchPageInner(page, container, ignore, dontMoveSlider){
 	var window_ = getClientGuiWindow(container, 'main');
 	if(!window_ || typeof window_.isOpened != 'function' || !window_.isOpened()) return false;
 	var slots = container.slots;
@@ -67,7 +85,8 @@ function craftingGridSwitchPage(page, container, ignore, dontMoveSlider){
 	if(!dontMoveSlider){
 		var pages = craftingGridFuncs.getPages(slotsKeys.length);
 		var ___y = craftingGridFuncs.getCoordsFromPage(page + 1, pages);
-		container.getUiAdapter().getElement("slider_button").setPosition(_elementsGUI_craftingGrid['slider_button'].x, ___y);
+		rsSetSliderElement(container, "slider_button", _elementsGUI_craftingGrid['slider_button'].x, ___y);
+		rsSetSliderDescriptor(container, "slider_button", ___y);
 	}
 	if (!craftingGridData.isWorkAllowed) {
 		for (var i = 0; i < slots_count; i++) {
@@ -80,7 +99,6 @@ function craftingGridSwitchPage(page, container, ignore, dontMoveSlider){
 	for (var i = page * x_count; i < page * x_count + slots_count; i++) {
 		var a = i - (page * x_count);
 		var item = slots[slotsKeys[i]] || { id: 0, data: 0, count: 0, extra: null };
-		container.markSlotDirty("slot" + a);
 		if(elements_.get) elements_.get("slot" + a).setBinding('text', (!item.count ? 'Craft' : cutNumber(item.count, true) + ""));
 		else if(elements_["slot" + a] && elements_["slot" + a].setBinding) elements_["slot" + a].setBinding('text', (!item.count ? 'Craft' : cutNumber(item.count, true) + ""));
 		container.setSlot("slot" + a, item.id, item.count, item.data, item.extra || null);
@@ -92,6 +110,7 @@ function craftingGridSwitchCraftsPage(page, container, ignore, dontMoveSlider){
 	var window_ = getClientGuiWindow(container, 'main');
 	if(!window_ || typeof window_.isOpened != 'function' || !window_.isOpened()) return false;
 	var crafts = craftingGridData.crafts;
+	if(!crafts) return false; // crafts not computed yet (swipe/slider before the first updateCrafts)
 	var slots_count = craftingGridData.crafts_slots_count;
 	var x_count = craftingGridData.crafts_x_count;
 	var pages1 = craftingGridFuncs.craftsPages(crafts.length);
@@ -99,10 +118,10 @@ function craftingGridSwitchCraftsPage(page, container, ignore, dontMoveSlider){
 	page = Math.max(1, Math.min(page, pages)) - 1;
 	if(page == craftingGridData.lastCraftsPage - 1 && !ignore) return false;
 	craftingGridData.lastCraftsPage = page + 1;
-	var uiAdapter = container.getUiAdapter();
 	if(!dontMoveSlider){
 		var ___y = craftingGridFuncs.getCraftsCoordsFromPage(page + 1, pages1);
-		uiAdapter.getElement("crafts_slider").setPosition(_elementsGUI_craftingGrid['crafts_slider'].x, ___y);
+		rsSetSliderElement(container, "crafts_slider", _elementsGUI_craftingGrid['crafts_slider'].x, ___y);
+		rsSetSliderDescriptor(container, "crafts_slider", ___y);
 	}
 	if (!craftingGridData.isWorkAllowed) {
 		for (var i = 0; i < slots_count; i++) {
@@ -189,6 +208,7 @@ grid_set_elements(360 + 109, 70, CgridConsPercents*(UI.getScreenHeight() - 60), 
 					itemContainer.setSlot('craft_slot' + i, 0, 0, 0);
 					itemContainer.setSlot('WB_craft_slot' + i, 0, 0, 0);
 				}
+				itemContainer.sendEvent("clearCraft", {});
 			},
 			onLongClick: function (itemContainerUiHandler, itemContainer, element) {
 			}
@@ -418,13 +438,20 @@ function craftingGridProvideCraft(tile, player){
 }
 
 function craftingGridProvideCraftEvent(tile, eventData, connectedClient){
+	if(!eventData || !eventData.uid) return;
+	var requestCount = Math.floor(Number(eventData.count));
+	if(!isFinite(requestCount) || requestCount < 1) return;
+	if(requestCount > 64) requestCount = 64;
+	var javaRecipe = Recipes.getRecipeByUid(eventData.uid);
+	if(!javaRecipe || typeof javaRecipe.getResult != 'function') return;
+	var result = javaRecipe.getResult();
+	if(!result || !(result.count > 0)) return;
 	tile.data.selectedRecipe = eventData;
-	tile.data.selectedRecipe.javaRecipe = Recipes.getRecipeByUid(eventData.uid);
-	tile.data.selectedRecipe.result = tile.data.selectedRecipe.javaRecipe.getResult();
-	var result = tile.data.selectedRecipe.result;
+	tile.data.selectedRecipe.javaRecipe = javaRecipe;
+	tile.data.selectedRecipe.result = result;
 	var playerUid = connectedClient.getPlayerUid();
 	var crafted = 0;
-	for(var count = 0; count < eventData.count; count += result.count){
+	for(var count = 0; count < requestCount; count += result.count) {
 		if(!craftingGridProvideCraft(tile, playerUid)) break;
 		crafted++;
 	}
@@ -469,7 +496,7 @@ function craftingGridOpenGui(container, window, content, eventData){
 		if(updateFilters || refresh){
 			var originalOnlyItemsExtraMap = {};
 			var originalOnlyItemsMap = {};
-			for(var i in container.slots)if(i[0] >= 0 && container.slots[i].id != 0){
+			for(var i in container.slots)if(i[0] >= 0 && container.slots[i] && container.slots[i].id != 0){
 				_slotKeys.push(i);
 				var item_ = container.slots[i];
 				if(originalOnlyItemsMap[item_.id] && originalOnlyItemsMap[item_.id].indexOf(item_.data) == -1){
@@ -527,28 +554,27 @@ function craftingGridOpenGui(container, window, content, eventData){
 		}
 		craftingGridSwitchPage(refresh ? craftingGridData.lastPage : 1, container, true);
 		if(updateCrafts){
-			scheduleLowPrioritySort(function(){
-				craftingGridData.isDarkenMap = {};
-				craftingGridData.crafts = craftingGridFuncs.updateCrafts(craftingGridData.slotsKeys, craftingGridData.craftsTextSearch, craftingGridData.originalOnlyItemsMap, container.slots);
-				craftingGridSwitchCraftsPage(refresh ? craftingGridData.lastCraftsPage : 1, container, true);
-			});
+			craftingGridData.isDarkenMap = {};
+			craftingGridData.crafts = craftingGridFuncs.updateCrafts(craftingGridData.slotsKeys, craftingGridData.craftsTextSearch, craftingGridData.originalOnlyItemsMap, container.slots);
+			craftingGridSwitchCraftsPage(refresh ? craftingGridData.lastCraftsPage : 1, container, true);
 		}
 	}
-	if(!eventData.refresh)craftingGridData.selectedRecipe = null;
-	for(var s = 0; s < 9; s++)content.elements['craft_slot' + s].parent = null;
-	if(craftingGridData.lowPriority){
-		craftingGridData.lowPriority = false;
-		scheduleLowPrioritySort(function(){
-			craftingGridData.updateGui(eventData.refresh, eventData.updateFilters, eventData.updateCrafts, true);
-		});
-	} else {
-		craftingGridData.updateGui(eventData.refresh, eventData.updateFilters, eventData.updateCrafts, true);
+	if(!eventData.refresh){
+		craftingGridData.selectedRecipe = null;
+		craftingGridData._lastInfoSignature = null;
 	}
+	for(var s = 0; s < 9; s++)content.elements['craft_slot' + s].parent = null;
+	craftingGridData.updateGui(eventData.refresh, eventData.updateFilters, eventData.updateCrafts, true);
 }
 
 RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_crafting_grid, {
 	blockInfo: {
 		id: BlockID.RS_crafting_grid
+	},
+	onWindowClose: function () {
+		rsResetStorageTouch();
+		rsResetCraftsTouch();
+		rsRemoveOpenedGrid(this);
 	},
 	click: function (id, count, data, coords, player, extra) {
 		if(Entity.getSneaking(player)) return false;
@@ -626,7 +652,9 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_crafting_grid, {
 		},
 		containerEvents: {
 			reselectRecipe: function(container, window, content, eventData){
-				craftingGridFuncs.selectRecipe(craftingGridData.selectedRecipe.javaRecipe, container, craftingGridData.originalOnlyItemsExtraMap, craftingGridData.originalOnlyItemsMap, craftingGridData.originalItemsMap);
+				var _selected = craftingGridData.selectedRecipe;
+				if(!_selected || !_selected.javaRecipe) return;
+				craftingGridFuncs.selectRecipe(_selected.javaRecipe, container, craftingGridData.originalOnlyItemsExtraMap, craftingGridData.originalOnlyItemsMap, craftingGridData.originalItemsMap);
 			},
 			openCraftPreview: function(container, window, content, eventData){
 				openCraftPreview(container, eventData);
@@ -643,7 +671,22 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_crafting_grid, {
 		updateReverseFilter: function(eventData, connectedClient) {
 			GridEvents.updateReverseFilter(this);
 		},
+		clearCraft: function(eventData, connectedClient){
+			if(!MpCore.isWatching(this, connectedClient)) return;
+			this.container.setSlot('craft_result', 0, 0, 0);
+			for(var i = 0; i < 9; i++){
+				this.container.setSlot('craft_slot' + i, 0, 0, 0);
+				this.container.setSlot('WB_craft_slot' + i, 0, 0, 0);
+			}
+			this.data.selectedRecipe = null;
+			this.container.sendChanges();
+		},
 		provideCraft: function(eventData, connectedClient){
+			if(!MpCore.isWatching(this, connectedClient)) return;
+			var _uid = connectedClient.getPlayerUid();
+			var _guard = MpCore.requestGuard(this, CRAFT_THROTTLE_TICKS);
+			if(_guard.isThrottled(_uid)) return;
+			_guard.mark(_uid);
 			craftingGridProvideCraftEvent(this, eventData, connectedClient);
 		},
 	craftPreview: function(eventData, connectedClient){
@@ -655,7 +698,10 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_crafting_grid, {
 },
 	events: {
 		pushDeleteEvents: function(packetData, packetExtra, connectedClient) {
-			this.data.pushDeleteEvents[connectedClient.getPlayerUid()] = packetData.pushDeleteEvents;
+			if(!packetData || !packetData.pushDeleteEvents) return;
+			if(!MpCore.isWatching(this, connectedClient)) return;
+			var playerUid = connectedClient.getPlayerUid();
+			this.data.pushDeleteEvents[playerUid] = GridEvents.mergePushDeleteEvents(this.data.pushDeleteEvents[playerUid], packetData.pushDeleteEvents);
 		}
 	}
 });

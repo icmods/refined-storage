@@ -1,25 +1,19 @@
+// on() returns an unsubscribe closure; listener exceptions are isolated and logged.
+var _RS_bus = EventBus.ns("rs");
 var _RS = {
-	_listeners: {},
-
 	on: function(event, callback) {
-		if (!this._listeners[event]) this._listeners[event] = [];
-		this._listeners[event].push(callback);
-		return function() {
-			var list = _RS._listeners[event];
-			if (list) _RS._listeners[event] = list.filter(function(h) { return h !== callback; });
-		};
-	},
-
-	_emit: function(event, data) {
-		var list = this._listeners[event];
-		if (!list) return;
-		for (var i = 0; i < list.length; i++) {
+		var wrapped = function(data) {
 			try {
-				list[i](data);
+				callback(data);
 			} catch (e) {
 				Logger.Log('Event listener for "' + event + '" failed: ' + e, 'RefinedStorageError');
 			}
-		}
+		};
+		_RS_bus.on(event, wrapped);
+		return function() { _RS_bus.off(event, wrapped); };
+	},
+	_emit: function(event, data) {
+		_RS_bus.emit(event, data);
 	},
 
 	networks: {
@@ -37,7 +31,7 @@ var _RS = {
 		requestCraft: function(netId, item, count, callerKey) {
 			var info = RSNetworks[netId] && RSNetworks[netId].info;
 			if (!info) return false;
-			var now = World.getThreadTime();
+			var now = TickScheduler.global.ticks;
 			var sourceKey = 'api:' + netId + (callerKey ? ':' + callerKey : '');
 			if (info.isRequestThrottled(sourceKey, now)) return false;
 			var result = info.constructCraft(item, count || 1);
@@ -49,7 +43,7 @@ var _RS = {
 			info.markRequestFailed(sourceKey, now);
 			return false;
 		},
-		keepStock: function(netId, item, minimum) {
+		keepStock: function(netId, item, minimum, callerKey) {
 			var result = { have: 0, requested: 0, status: 'noNetwork' };
 			var info = RSNetworks[netId] && RSNetworks[netId].info;
 			if (!info) return result;
@@ -70,8 +64,8 @@ var _RS = {
 				return result;
 			}
 			var needed = minimum - have;
-			var sourceKey = 'keepStock:' + netId + ':' + targetId + '_' + targetData;
-			var now = World.getThreadTime();
+			var sourceKey = 'keepStock:' + netId + (callerKey ? ':' + callerKey : '') + ':' + targetId + '_' + targetData;
+			var now = TickScheduler.global.ticks;
 			if (info.isRequestThrottled(sourceKey, now)) {
 				result.status = 'throttled';
 				return result;
@@ -176,49 +170,19 @@ var _RS = {
 				ingridients: normalized.ingridients,
 				result: normalized.result
 			};
-			for (var ri = 0; ri < craft.result.length; ri++) {
-				var resultUid = craft.result[ri].id + '_' + craft.result[ri].data;
-				if (!info.crafts[resultUid]) info.crafts[resultUid] = [];
-				var exists = false;
-				for (var ci = 0; ci < info.crafts[resultUid].length; ci++) {
-					var existing = info.crafts[resultUid][ci];
-					if (existing.coordsId === coordsId && existing.id === craft.id && existing.isProcessed === craft.isProcessed) {
-						exists = true;
-						break;
-					}
-				}
-				if (!exists) info.crafts[resultUid].push(craft);
-				if (!info.craftsIDS[craft.result[ri].id]) info.craftsIDS[craft.result[ri].id] = [];
-				if (info.craftsIDS[craft.result[ri].id].indexOf(craft.result[ri].data) == -1) info.craftsIDS[craft.result[ri].id].push(craft.result[ri].data);
-				info.addPatternContainer(resultUid, coordsId);
-			}
-			info.netMapDirty = true;
-			info.refreshOpenedGrids(true);
+			if (!info.apiPatterns) info.apiPatterns = {};
+			info.apiPatterns[coordsId + '|' + craft.id + '|' + craft.isProcessed] = craft;
+			rsRegisterCraftInInfo(info, craft, coordsId);
 			return craft;
 		},
 		unregisterPattern: function(netId, coordsId, craft) {
 			var info = RSNetworks[netId] && RSNetworks[netId].info;
 			if (!info || !craft) return;
-			for (var ri = 0; ri < craft.result.length; ri++) {
-				var resultUid = craft.result[ri].id + '_' + craft.result[ri].data;
-				if (info.crafts[resultUid]) {
-					for (var ci = info.crafts[resultUid].length - 1; ci >= 0; ci--) {
-						var existing = info.crafts[resultUid][ci];
-						if (existing.coordsId === coordsId && existing.id === craft.id && existing.isProcessed === craft.isProcessed) {
-							info.crafts[resultUid].splice(ci, 1);
-						}
-					}
-					if (info.crafts[resultUid].length == 0) delete info.crafts[resultUid];
-				}
-				if (!info.crafts[resultUid] && info.craftsIDS[craft.result[ri].id]) {
-					var idIdx = info.craftsIDS[craft.result[ri].id].indexOf(craft.result[ri].data);
-					if (idIdx != -1) info.craftsIDS[craft.result[ri].id].splice(idIdx, 1);
-					if (info.craftsIDS[craft.result[ri].id].length == 0) delete info.craftsIDS[craft.result[ri].id];
-				}
-				info.removePatternContainer(resultUid, coordsId);
+			if (info.apiPatterns) {
+				var _apiKey = coordsId + '|' + craft.id + '|' + craft.isProcessed;
+				delete info.apiPatterns[_apiKey];
 			}
-			info.netMapDirty = true;
-			info.refreshOpenedGrids(true);
+			rsUnregisterCraftFromInfo(info, craft, coordsId);
 		}
 	},
 
@@ -261,14 +225,7 @@ var _RS = {
 
 	registerStorageProvider: function(blockId, provider) { return registerStorageProvider(blockId, provider); },
 
-	// Addon-facing Network Timer API. Tasks are runtime-only: re-register on
-	// ModAPI.addAPICallback / PostLoaded (same pattern as StorageProviders) and
-	// unregister at teardown; the registry is cleared on LevelLeft and on
-	// networkDestroyed. Callback signature: fn(netId). Callbacks run on the
-	// server thread inside the controller heartbeat, i.e. only while the
-	// network's controller chunk is ticking. A throwing callback is logged and
-	// isolated (failures are counted, other tasks keep running). Prefer
-	// interval >= 20 for expensive work; do NOT persist task state.
+	// Addon-facing network timer API: runtime-only tasks, cleared on LevelLeft / networkDestroyed.
 	timer: {
 		register: function(netId, name, interval, offset, fn) {
 			if (typeof NetworkTimer === 'undefined') return false;

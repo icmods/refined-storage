@@ -27,40 +27,26 @@ var PhantomSessions = {
 
 var phantomClientPending = {};
 
-var RSPhantomDeferredDestroy = [];
-
 function rsDeferPhantomDestroy(tile, reason) {
 	if (!tile || tile.data.removed) return;
 	tile.data.removed = true;
-	RSPhantomDeferredDestroy.push({ tile: tile, reason: reason || 'deferred', ticks: 5 });
-	Logger.Log('Phantom #' + (tile.data.phantomId != null ? tile.data.phantomId : '?') + ' at ' + tile.x + ',' + tile.y + ',' + tile.z + ' teardown deferred (' + (reason || 'deferred') + ')', 'RSPhantom');
+	var attempt = 0;
+	TickScheduler.global.defer(function () {
+		attempt++;
+		try {
+			tile.performPhantomTeardown(reason || 'deferred');
+		} catch (e) {
+			tile.data.teardownDone = false;
+			tile.data.removed = false;
+			throw e;
+		}
+	}, { ticks: 5, retries: 3, reason: reason || 'deferred' });
 }
 
 Callback.addCallback("tick", function () {
 	AutocraftingTickManager.flushTick();
-	if (RSPhantomDeferredDestroy.length === 0) return;
-	var remaining = [];
-	for (var i = 0; i < RSPhantomDeferredDestroy.length; i++) {
-		var entry = RSPhantomDeferredDestroy[i];
-		entry.ticks--;
-		if (entry.ticks > 0) { remaining.push(entry); continue; }
-		try {
-			entry.tile.performPhantomTeardown(entry.reason);
-		} catch (e) {
-			Logger.Log('Phantom deferred teardown failed: ' + e, 'RSPhantom');
-			entry.attempts = (entry.attempts || 0) + 1;
-			if (entry.attempts < 3) {
-				entry.tile.data.teardownDone = false;
-				entry.tile.data.removed = false;
-				entry.ticks = 5;
-				remaining.push(entry);
-			} else {
-				Logger.Log('Phantom teardown permanently failed after 3 attempts (' + entry.reason + ')', 'RSPhantom');
-			}
-		}
-	}
-	RSPhantomDeferredDestroy = remaining;
 });
+
 
 function phantomIsWorkAllowed(tile) {
 	return tile && !tile.data.removed && tile.data.NETWORK_ID != 'f' && RSNetworks[tile.data.NETWORK_ID] && tile.data.isActive !== false;
@@ -82,24 +68,26 @@ function spawnPhantom(playerUid, netId, screen, blockSource) {
 			tile.data.screen = screen;
 			tile.data.phantomId = ++PhantomSessions.nextId;
 			PhantomSessions.register(playerUid, tile);
-			Logger.Log('Phantom #' + tile.data.phantomId + ' spawned at ' + baseX + ',' + y + ',' + baseZ + ' player=' + playerUid + ' net=' + netId + ' screen=' + screen, 'RSPhantom');
 			return tile;
 		}
 		blockSource.setBlock(baseX, y, baseZ, 0);
 	}
-	Logger.Log('Phantom spawn FAILED at ' + baseX + ',' + baseY + ',' + baseZ + ' player=' + playerUid + ' net=' + netId + ' screen=' + screen, 'RSPhantom');
 	return null;
 }
 
 function registerPhantomListeners(tile) {
 	if (tile.__listenersRegistered || !tile.container) return;
 	tile.__listenersRegistered = true;
-	tile.container.addServerOpenListener({ onOpen: function(container, client) {
-		if (tile.onWindowOpen) tile.onWindowOpen(container, client);
-	}});
-	tile.container.addServerCloseListener({ onClose: function(container, client) {
-		if (tile.onWindowClose) tile.onWindowClose(container, client);
-	}});
+	MpCore.connectivity(tile, {
+		onOpen: function(container, client, owner) {
+			var t = owner || tile;
+			if (t.onWindowOpen) t.onWindowOpen(container, client);
+		},
+		onClose: function(uid, container, client, owner) {
+			var t = owner || tile;
+			if (t.onWindowClose) t.onWindowClose(container, client);
+		}
+	});
 }
 
 function phantomClientOpenGui(container, window, content, eventData) {
@@ -117,7 +105,7 @@ function phantomClientOpenGui(container, window, content, eventData) {
 	gridOpenGui(container, window, content, eventData);
 }
 
-TileEntity.registerPrototype(BlockID.RS_phantom, {
+var _rsPhantomProto = {
 	useNetworkItemContainer: true,
 	defaultValues: {
 		NETWORK_ID: 'f',
@@ -381,8 +369,8 @@ TileEntity.registerPrototype(BlockID.RS_phantom, {
 			else { this.items(); this.refreshGui(false, false, full, this.data.screen, full); }
 		}
 		if (this.data.refreshMonitorPage) {
-			var now = World.getThreadTime();
-			if (this.data.lastMonitorRefresh === undefined || now - this.data.lastMonitorRefresh >= 5) {
+			var now = TickScheduler.global.ticks;
+			if (this.data.lastMonitorRefresh === undefined || now < this.data.lastMonitorRefresh || now - this.data.lastMonitorRefresh >= 5) {
 				this.data.lastMonitorRefresh = now;
 				this.data.refreshMonitorPage = false;
 				this.refreshGui(false, false, false, 'monitor');
@@ -405,7 +393,10 @@ TileEntity.registerPrototype(BlockID.RS_phantom, {
 	},
 	events: {
 		pushDeleteEvents: function(packetData, packetExtra, connectedClient) {
-			this.data.pushDeleteEvents[connectedClient.getPlayerUid()] = packetData.pushDeleteEvents;
+			if(!packetData || !packetData.pushDeleteEvents) return;
+			if(!MpCore.isWatching(this, connectedClient)) return;
+			var playerUid = connectedClient.getPlayerUid();
+			this.data.pushDeleteEvents[playerUid] = GridEvents.mergePushDeleteEvents(this.data.pushDeleteEvents[playerUid], packetData.pushDeleteEvents);
 		}
 	},
 	containerEvents: {
@@ -422,10 +413,19 @@ TileEntity.registerPrototype(BlockID.RS_phantom, {
 			GridEvents.provideConstructedCraft(this, eventData, connectedClient);
 		},
 		provideCraft: function(eventData, connectedClient) {
+			if(!MpCore.isWatching(this, connectedClient)) return;
+			var _uid = connectedClient.getPlayerUid();
+			var _guard = MpCore.requestGuard(this, CRAFT_THROTTLE_TICKS);
+			if(_guard.isThrottled(_uid)) return;
+			_guard.mark(_uid);
 			craftingGridProvideCraftEvent(this, eventData, connectedClient);
 		},
 		cancelTask: function(eventData, connectedClient) {
+			if(!MpCore.isWatching(this, connectedClient)) return;
 			var uid = connectedClient.getPlayerUid();
+			var _guard = MpCore.requestGuard(this, CRAFT_THROTTLE_TICKS);
+			if(_guard.isThrottled(uid)) return;
+			_guard.mark(uid);
 			var info = RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID].info;
 			var cancelled = info && eventData && eventData.taskId ? info.cancelTask(eventData.taskId) : false;
 			if (cancelled && this.data.wirelessMonitorPlayers && this.data.wirelessMonitorPlayers[uid]) {
@@ -433,7 +433,11 @@ TileEntity.registerPrototype(BlockID.RS_phantom, {
 			}
 		},
 		cancelAllTasks: function(eventData, connectedClient) {
+			if(!MpCore.isWatching(this, connectedClient)) return;
 			var uid = connectedClient.getPlayerUid();
+			var _guard = MpCore.requestGuard(this, CRAFT_THROTTLE_TICKS);
+			if(_guard.isThrottled(uid)) return;
+			_guard.mark(uid);
 			var info = RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID].info;
 			if (info && info.craftingTasks && info.craftingTasks.length > 0) {
 				info.cancelAllTasks();
@@ -443,6 +447,7 @@ TileEntity.registerPrototype(BlockID.RS_phantom, {
 			}
 		},
 		updateRedstoneMode: function(eventData, connectedClient) {
+			if(!MpCore.isWatching(this, connectedClient)) return;
 			this.data.redstone_mode = this.data.redstone_mode >= 2 ? 0 : this.data.redstone_mode + 1;
 			this.data.pollDirty = true;
 		}
@@ -455,7 +460,6 @@ TileEntity.registerPrototype(BlockID.RS_phantom, {
 		if (this.data.teardownDone) return;
 		this.data.teardownDone = true;
 		this.data.removed = true;
-		Logger.Log('Phantom #' + (this.data.phantomId != null ? this.data.phantomId : '?') + ' at ' + this.x + ',' + this.y + ',' + this.z + ' destroyed (' + (reason || 'unknown') + ')', 'RSPhantom');
 		var net = this.data.NETWORK_ID != 'f' ? RSNetworks[this.data.NETWORK_ID] : null;
 		if (net && net.info) {
 			if (this._monitorListener) net.info.removeMonitorListener(this._monitorListener);
@@ -475,7 +479,6 @@ TileEntity.registerPrototype(BlockID.RS_phantom, {
 		if (this.data.teardownDone) return;
 		this.data.teardownDone = true;
 		this.data.removed = true;
-		Logger.Log('Phantom #' + (this.data.phantomId != null ? this.data.phantomId : '?') + ' at ' + this.x + ',' + this.y + ',' + this.z + ' destroyed (engine destroy)', 'RSPhantom');
 		this.clearPhantomContainer();
 		var net = this.data.NETWORK_ID != 'f' ? RSNetworks[this.data.NETWORK_ID] : null;
 		if (net && net.info) {
@@ -488,6 +491,7 @@ TileEntity.registerPrototype(BlockID.RS_phantom, {
 		PhantomSessions.remove(this.data.playerUid, this);
 	},
 	onDisconnectionPlayer: function(client) {
+		if (client && this.data.pushDeleteEvents) delete this.data.pushDeleteEvents[client.getPlayerUid()];
 		if (client && client.getPlayerUid() == this.data.playerUid) rsDeferPhantomDestroy(this, 'player disconnected');
 	},
 	client: {
@@ -536,7 +540,12 @@ TileEntity.registerPrototype(BlockID.RS_phantom, {
 			}
 		}
 	}
-});
+};
+(function(){
+	var _rsPhantomScreens = _rsPhantomProto.getScreenByName;
+	MpCore.attachScreens(_rsPhantomProto, function(screenName){ return _rsPhantomScreens.call(_rsPhantomProto, screenName); });
+})();
+TileEntity.registerPrototype(BlockID.RS_phantom, _rsPhantomProto);
 
 Callback.addCallback("ServerPlayerLeft", function(playerUid) {
 	var session = PhantomSessions.get(playerUid);
@@ -576,7 +585,6 @@ var AutocraftingTickManager = {
 				delete this.bboxes[netId];
 				var removedName = this.names[netId] || ('rsnet_' + netId);
 				Commands.exec('/tickingarea remove ' + removedName);
-				Logger.Log('Ticking area REMOVED: ' + removedName + ' (net ' + netId + ', no tasks)', 'RSTickingArea');
 				delete this.names[netId];
 			}
 			return;
@@ -596,7 +604,8 @@ var AutocraftingTickManager = {
 			for (var ni = 0; ni < nodes.length; ni++) {
 				var node = nodes[ni];
 				if (node.done || node.remaining <= 0) continue;
-				var containers = info.getPatternContainers(node.patternUid);
+				var containers = (info.patternToContainersByKey && info.patternToContainersByKey[node.patternUid])
+					|| info.getPatternContainers(rsResultUid(node.patternUid));
 				for (var ci = 0; ci < containers.length; ci++) {
 					var parsedCoords = info.patternContainersParsed ? info.patternContainersParsed[containers[ci]] : null;
 					if (parsedCoords) {
@@ -637,23 +646,19 @@ var AutocraftingTickManager = {
 			var fallbackError = Commands.exec('/tickingarea add ' + minX + ' ' + minY + ' ' + minZ + ' ' + maxX + ' ' + maxY + ' ' + maxZ + ' ' + baseName);
 			if (fallbackError != null) {
 				this.areas[netId] = false;
-				Logger.Log('Ticking area ADD FAILED: ' + baseName + ' (net ' + netId + ') error: ' + fallbackError, 'RSTickingArea');
 			} else {
 				this.areas[netId] = true;
 				this.names[netId] = baseName;
 				this.bboxes[netId] = bboxKey;
-				Logger.Log('Ticking area ADDED (fallback): ' + baseName + ' bbox=' + bboxKey + ' (net ' + netId + ')', 'RSTickingArea');
 			}
 			return;
 		}
 		if (this.areas[netId]) {
 			Commands.exec('/tickingarea remove ' + activeName);
-			Logger.Log('Ticking area REMOVED (resized): ' + activeName + ' (net ' + netId + ')', 'RSTickingArea');
 		}
 		this.areas[netId] = true;
 		this.names[netId] = tempName;
 		this.bboxes[netId] = bboxKey;
-		Logger.Log('Ticking area ADDED: ' + tempName + ' bbox=' + bboxKey + ' (net ' + netId + ')', 'RSTickingArea');
 	}
 };
 
@@ -667,7 +672,6 @@ var AutocraftingTickManager = {
 		if (AutocraftingTickManager.areas[data.netId]) {
 			var removedName = AutocraftingTickManager.names[data.netId] || ('rsnet_' + data.netId);
 			Commands.exec('/tickingarea remove ' + removedName);
-			Logger.Log('Ticking area REMOVED: ' + removedName + ' (net ' + data.netId + ', network destroyed)', 'RSTickingArea');
 			AutocraftingTickManager.areas[data.netId] = false;
 			delete AutocraftingTickManager.names[data.netId];
 			delete AutocraftingTickManager.bboxes[data.netId];
@@ -696,7 +700,6 @@ Callback.addCallback("ServerLevelLoaded", function() {
 Callback.addCallback("LevelLeft", function() {
 	PhantomSessions.sessions = {};
 	phantomClientPending = {};
-	RSPhantomDeferredDestroy = [];
 	AutocraftingTickManager.areas = {};
 	AutocraftingTickManager.bboxes = {};
 	AutocraftingTickManager.names = {};

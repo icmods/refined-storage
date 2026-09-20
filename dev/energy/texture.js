@@ -12,5 +12,6 @@ function getEnergyScaled(scale, energy) {
 		var energy = scale;
 		var scale = 100;
 	}
-	return Math.floor(energy / Config.controller.energyCapacity * scale);
+	var b = EnergyMeter.budget(energy, 0, Config.controller.energyCapacity);
+	return Math.floor(b.scaled * scale);
 }

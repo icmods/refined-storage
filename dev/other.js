@@ -1,3 +1,18 @@
+IMPORT("CoreKit");
+IMPORT("UiCore");
+IMPORT("TickScheduler");
+IMPORT("EnergyMeter");
+IMPORT("StorageCore");
+IMPORT("ContainerSync");
+IMPORT("EventBus");
+IMPORT("CraftTreeExecutor");
+IMPORT("CraftTreePlanner");
+IMPORT("TopologyCore");
+IMPORT("SaveCore");
+IMPORT("RecipeIndex");
+IMPORT("MpCore");
+
+
 const Timer = java.util.Timer;
 const TimerTask = java.util.TimerTask;
 
@@ -113,46 +128,7 @@ const jSetInterval = function (__fun, __mil) {
 	return timer;
 }
 
-const scheduleLowPrioritySort = (function () {
-	var pending = null;
-	var timer = null;
-	var running = false;
-	function run() {
-		if (running || !pending) return;
-		var fn = pending;
-		pending = null;
-		running = true;
-		try {
-			fn();
-		} catch (err) {
-			alert('Sorry, i broke :_(' + JSON.stringify(err));
-		}
-		running = false;
-		if (timer) {
-			timer.cancel();
-			timer = null;
-		}
-		if (pending) {
-			timer = new Timer();
-			timer.schedule(new TimerTask({ run: run }), 50);
-		}
-	}
-	return function (fn) {
-		pending = fn;
-		if (timer || running) return;
-		timer = new Timer();
-		timer.schedule(new TimerTask({ run: run }), 50);
-	};
-})();
-
-const sides = [
-	[1, 0, 0],
-	[-1, 0, 0],
-	[0, 0, 1],
-	[0, 0, -1],
-	[0, 1, 0],
-	[0, -1, 0]
-];
+const sides = CoreKit.coords.sides;
 
 const onCallbacks = {};
 
@@ -200,7 +176,7 @@ const setIntervalLocal = function (func, _ticks, _first) {
 }
 
 const cts = function (coords) {
-	return coords.x + (coords.y != undefined ? "," + coords.y : "") + "," + coords.z;
+	return CoreKit.coords.cts(coords);
 }
 
 if (!Object.assign) {
@@ -236,30 +212,12 @@ if (!Object.assign) {
 }
 
 const numberWithCommas = function(_num) {
-    return _num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
-
-function getExtraJsonText(extra){
-	var json = extra.json;
-	if(typeof json == 'string') return json;
-	if(!json) return "";
-	var str = String(json);
-	if(str && str != '[object Object]' && str != '[object JavaObject]') return str;
-	var parsed = JSON.stringify(json);
-	return parsed == undefined ? "" : parsed;
+	return CoreKit.util.numberWithCommas(_num);
 }
 
 function getExtraUidSuffix(extra){
-	if(typeof extra.getValue == 'function') return extra.getValue();
-	if(extra.asJson && typeof extra.asJson == 'function') return String(extra.asJson());
-	if(extra.json) return getExtraJsonText(extra);
-	var str = "";
-	try {
-		str = String(extra);
-	} catch(e) {}
-	if(str && str != '[object Object]') return str;
-	var json = JSON.stringify(extra);
-	return json == undefined ? 0 : json;
+	// Deprecated wrapper over the canonical CoreKit extra key.
+	return extra ? CoreKit.Items.extraKey(extra) : "";
 }
 
 function getClientGuiWindow(container, name) {
@@ -292,36 +250,106 @@ function getClientGuiWindow(container, name) {
 }
 
 function getItemUid(item){
-	var extra = item.extra ? getExtraUidSuffix(item.extra) : 0;
-	return item.id + '_' + item.data + (extra ? '_' + extra : '');
+	return CoreKit.Items.uidOf(item);
 }
 
-function compareCoords(_coords1, _coords2){
-	if(_coords1.x == _coords2.x && _coords1.y == _coords2.y && _coords1.z == _coords2.z) return true;
-	return false;
+function rsRemoveOpenedGrid(tile){
+	if(!tile || tile.data.NETWORK_ID == 'f') return;
+	var net = RSNetworks[tile.data.NETWORK_ID];
+	if(!net || !net.info) return;
+	var coords_id = tile.coords_id();
+	if(net[coords_id]) net[coords_id].isOpenedGrid = false;
+	if(!net.info.openedGrids) return;
+	var iIndex = net.info.openedGrids.findIndex(function(element){return cts(element) == coords_id});
+	if(iIndex != -1) net.info.openedGrids.splice(iIndex, 1);
 }
 
 function cutNumber(num, forGrid){
-	return num > 999 ? (num > 999999 ? (num > 999999999 ? ((num3 = (num/1000000000))%1 && (!forGrid || num3 <= 9.95) ? num3.toFixed(1) : Math.round(num3)) + 'B' : ((num2 = (num/1000000))%1 && (!forGrid || num2 <= 9.95) ? num2.toFixed(1) : Math.round(num2)) + 'M') : ((num2 = (num/1000))%1 && (!forGrid || num2 <= 9.95) ? num2.toFixed(1) : Math.round(num2)) + 'K') : num;
+	return CoreKit.util.cutNumber(num, forGrid);
 }
 
 function fullExtraToString(extra, usenbt){
-	if(!extra) return "";
-	if(typeof extra.asJson != 'function'){
-		if(extra.json) return getExtraJsonText(extra);
-		var str = "";
-		try {
-			str = String(extra);
-		} catch(e) {}
-		if(str && str != '[object Object]') return str;
-		var json = JSON.stringify(extra);
-		return json == undefined ? "" : json;
+	return CoreKit.Items.fullExtraToString(extra);
+}
+
+// Java-like pattern identity: content-based (id/processed/oredict/ingredients/result),
+// NOT the physical tile. All containers holding the same pattern share this key, so
+// duplicate crafters keep working in parallel; different patterns with the same
+// result never share containers.
+function rsPatternKey(craft, resultUid) {
+	var ing = "";
+	for (var i = 0; i < (craft.ingridients || []).length; i++) {
+		var g = craft.ingridients[i];
+		ing += (i ? "," : "") + g.id + ":" + g.data + ":" + (g.count || 1);
 	}
-	var str = "";
-	if(jsonExtra = extra.asJson()){
-		if((_value = jsonExtra.opt('data')) && _value.length() == 0) jsonExtra.remove('data');
-		if((_value = jsonExtra.opt('name')) && _value.length() == 0) jsonExtra.remove('name');
-		str += jsonExtra.toString();
+	return craft.id + "|" + (craft.isProcessed ? 1 : 0) + "|" + (craft.oredictEnabled ? 1 : 0) + "|" + ing + "|" + resultUid;
+}
+
+function rsRegisterCraftInInfo(info, craft, coordsId) {
+	if (!info || !craft || !coordsId) return;
+	for (var ri = 0; ri < craft.result.length; ri++) {
+		var resultUid = craft.result[ri].id + '_' + craft.result[ri].data;
+		if (!info.crafts[resultUid]) info.crafts[resultUid] = [];
+		var exists = false;
+		for (var ci = 0; ci < info.crafts[resultUid].length; ci++) {
+			var existing = info.crafts[resultUid][ci];
+			if (existing.coordsId === coordsId && existing.id === craft.id && existing.isProcessed === craft.isProcessed) {
+				exists = true;
+				break;
+			}
+		}
+		if (!exists) info.crafts[resultUid].push(craft);
+		if (!info.craftsIDS[craft.result[ri].id]) info.craftsIDS[craft.result[ri].id] = [];
+		if (info.craftsIDS[craft.result[ri].id].indexOf(craft.result[ri].data) == -1) info.craftsIDS[craft.result[ri].id].push(craft.result[ri].data);
+		info.addPatternContainer(resultUid, coordsId);
+		var pkey = rsPatternKey(craft, resultUid);
+		if (!info.craftsByKey[pkey]) info.craftsByKey[pkey] = craft;
+		info.addPatternContainerKey(pkey, coordsId);
 	}
-	return str;
+	info.netMapDirty = true;
+	info.refreshOpenedGrids(true);
+}
+
+function rsUnregisterCraftFromInfo(info, craft, coordsId) {
+	if (!info || !craft) return;
+	for (var ri = 0; ri < craft.result.length; ri++) {
+		var resultUid = craft.result[ri].id + '_' + craft.result[ri].data;
+		if (info.crafts[resultUid]) {
+			for (var ci = info.crafts[resultUid].length - 1; ci >= 0; ci--) {
+				var existing = info.crafts[resultUid][ci];
+				if (existing.coordsId === coordsId && existing.id === craft.id && existing.isProcessed === craft.isProcessed) {
+					info.crafts[resultUid].splice(ci, 1);
+				}
+			}
+			if (info.crafts[resultUid].length == 0) delete info.crafts[resultUid];
+		}
+		if (!info.crafts[resultUid] && info.craftsIDS[craft.result[ri].id]) {
+			var idIdx = info.craftsIDS[craft.result[ri].id].indexOf(craft.result[ri].data);
+			if (idIdx != -1) info.craftsIDS[craft.result[ri].id].splice(idIdx, 1);
+			if (info.craftsIDS[craft.result[ri].id].length == 0) delete info.craftsIDS[craft.result[ri].id];
+		}
+		info.removePatternContainer(resultUid, coordsId);
+		var pkeyU = rsPatternKey(craft, resultUid);
+		if (info.craftsByKey[pkeyU] === craft) delete info.craftsByKey[pkeyU];
+		info.removePatternContainerKey(pkeyU, coordsId);
+	}
+	info.netMapDirty = true;
+	info.refreshOpenedGrids(true);
+}
+
+function rsAllocNetId() {
+	for (var i = 0; i < RSNetworks.length; i++) if (!RSNetworks[i]) return i;
+	return RSNetworks.length;
+}
+
+function rsRunOnUiThread(fn) {
+	return UiCore.safeRun(fn, 'RefinedStorageError');
+}
+
+function rsSafeServerRefresh(tile, label) {
+	return MpCore.safeTileCall(tile, function (t) { t.refreshModel(); }, {
+		requireNetworkEntity: true,
+		label: label || 'refreshModel',
+		logTag: 'RefinedStorageError'
+	});
 }

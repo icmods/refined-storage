@@ -1,15 +1,18 @@
 other.js
 header.js
+crafting_adapter.js
 
 network/state.js
 network/topology.js
 network/chunks.js
+network/topology_authoritative.js
 network/pattern_containers.js
 network/info.js
 network/network_timer.js
-network/calculator.js
+network/crafttree_adapter.js
 network/task.js
 network/scheduler.js
+network/scheduler_adapter.js
 network/grid_events.js
 
 storage/disks.js

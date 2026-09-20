@@ -3,12 +3,12 @@ Block.createBlockWithRotation("diskDrive", [
 	{
 		name: "Disk Drive",
 		texture: [
-			["disk_drive_bottom", 0], // bottom
-			["disk_drive_top", 0], // top
-			["disk_drive_side", 0], // back
-			["disk_drive", 0], // front
-			["disk_drive_side", 0], // left
-			["disk_drive_side", 0]  // right
+			["disk_drive_bottom", 0],
+			["disk_drive_top", 0],
+			["disk_drive_side", 0],
+			["disk_drive", 0],
+			["disk_drive_side", 0],
+			["disk_drive_side", 0]
 		],
 		inCreative: true
 	}
@@ -17,12 +17,12 @@ RS_blocks.push(BlockID.diskDrive);
 EnergyUse[BlockID['diskDrive']] = Config.energy_uses.diskDrive;
 
 const diskDriveTexture = [
-	["disk_drive_bottom", 0], // bottom
-	["disk_drive_top", 0], // top
-	["disk_drive_side", 0], // back
-	["disk_drive", 0], // front
-	["disk_drive_side", 0], // left
-	["disk_drive_side", 0]  // right
+	["disk_drive_bottom", 0],
+	["disk_drive_top", 0],
+	["disk_drive_side", 0],
+	["disk_drive", 0],
+	["disk_drive_side", 0],
+	["disk_drive_side", 0]
 ];
 const diskDriveTextures = [[diskDriveTexture[0], [diskDriveTexture[1][0], 0], diskDriveTexture[2], diskDriveTexture[3], diskDriveTexture[4], diskDriveTexture[5]], [diskDriveTexture[0], [diskDriveTexture[1][0], 1], diskDriveTexture[3], diskDriveTexture[2], diskDriveTexture[5], diskDriveTexture[4]], [diskDriveTexture[0], [diskDriveTexture[1][0], 2], diskDriveTexture[5], diskDriveTexture[4], diskDriveTexture[2], diskDriveTexture[3]], [diskDriveTexture[0], [diskDriveTexture[1][0], 3], diskDriveTexture[4], diskDriveTexture[5], diskDriveTexture[3], diskDriveTexture[2]]];
 
@@ -31,12 +31,12 @@ const diskDriveLedTextures = function(index, block_data){
 	var sideTexture = "disk_drive_disks";
 	if(block_data == 1 || block_data == 3)sideTexture = "reverse_disk_drive_disks";
 	return [
-		["disk_drive_disks_top", 0], // bottom
-		["disk_drive_disks_top", 0], // top
-		[sideTexture, index], // back
-		[sideTexture, index], // front
-		[sideTexture, index], // left
-		[sideTexture, index]  // right
+		["disk_drive_disks_top", 0],
+		["disk_drive_disks_top", 0],
+		[sideTexture, index],
+		[sideTexture, index],
+		[sideTexture, index],
+		[sideTexture, index]
 	]
 }
 
@@ -138,7 +138,7 @@ function initDDelements() {
 	elementsGUI_dd["scale"].overlayScale = elementsGUI_dd["scale"].scale;
 
 	var asd = 0;
-	var cons = UI.getScreenHeight()*0.576/5;//60;
+	var cons = UI.getScreenHeight()*0.576/5;
 	y += cons/2;
 	for (var k = 0; k < 4; k++) {
 		x = 650;
@@ -304,9 +304,7 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 		if(!client) return true;
 		if (this.container.getNetworkEntity().getClients().contains(client)) return true;
 		this.container.openFor(client, "main");
-		this.data._lastGuiScale = null;
-		this.data._lastGuiPercents = null;
-		this.data._lastGuiItems = null;
+		if (this._guiBinder) this._guiBinder.invalidate();
 		var _data = {
 			name: this.networkData.getName() + '', 
 			isActive: this.data.isActive, 
@@ -321,8 +319,13 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 	},
 	getDiskDatas: function(){
 		var diskDatas = [];
+		if(!this.container) return diskDatas;
 		for (var i = 0; i < 8; i++) {
 			var item = this.container.getSlot('slot' + i);
+			if (!item) {
+				diskDatas.push({id: 0, data: 0, storage: 0, items_stored: 0});
+				continue;
+			}
 			if (!Disk.items[item.id]) {
 				diskDatas.push({id: 0, data: 0, storage: 0, items_stored: 0});
 				continue;
@@ -346,8 +349,13 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 		var disks = 0;
 		var stored = 0;
 		var diskDatas = [];
+		if(!this.container) return;
 		for (var i = 0; i < 8; i++) {
 			var item = this.container.getSlot('slot' + i);
+			if (!item) {
+				diskDatas.push({id: 0, data: 0, storage: 0, items_stored: 0});
+				continue;
+			}
 			var lastDiskPercent = this.data.disks_percents[i];
 			if (!Disk.items[item.id]) {
 				if(lastDiskPercent != undefined)this.data.refreshModel = true;
@@ -380,18 +388,14 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 		this.data.storage = String(storage);
 		this.data.stored = stored;
 		if (this.container.getNetworkEntity().getClients().iterator().hasNext()) {
+			if (!this._guiBinder) this._guiBinder = UiCore.DeltaBinder.wrap(this.container);
 			var _scale = stored == 0 ? 0 : stored / storage;
 			var _percents = stored == 0 ? '0%' : Math.ceil(stored / (storage / 100)) + '%';
 			var _items = cutNumber(stored) + (storage != Infinity ? '/' + cutNumber(storage) : '');
-			if (this.data._lastGuiScale !== _scale || this.data._lastGuiPercents !== _percents || this.data._lastGuiItems !== _items) {
-				this.data._lastGuiScale = _scale;
-				this.data._lastGuiPercents = _percents;
-				this.data._lastGuiItems = _items;
-				this.container.setScale('scale', _scale);
-				this.container.setText('percents', _percents);
-				this.container.setText('items', _items);
-				this.container.sendChanges();
-			}
+			this._guiBinder.setScale('scale', _scale);
+			this._guiBinder.setText('percents', _percents);
+			this._guiBinder.setText('items', _items);
+			this._guiBinder.flush();
 		}
 		return;
 	},
@@ -456,8 +460,8 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 	}
 });
 
-Callback.addCallback('LocalTick', function(){
-	if(!diskDriveGUI.isOpened()) return;
+TickScheduler.local.ensureInterval("rs:diskDriveText", 1, function () {
+	if (!diskDriveGUI.isOpened()) return;
 	var element = diskDriveGUI.getWindow('main').getElements().get('items');
 	element.setPosition(Math.max(elementsGUI_dd['items'].start_x - getDiskDriveTextItemsWidth()/2, elementsGUI_dd['scale'].x), elementsGUI_dd['items'].y);
 });

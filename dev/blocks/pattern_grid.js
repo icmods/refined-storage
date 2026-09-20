@@ -195,6 +195,24 @@ patternGridFuncs.selectRecipe = function(javaRecipe, container){
 };
 
 function patternGridSwitchPage(page, container, ignore, dontMoveSlider){
+	if (patternGridData._switchUpdating) {
+		patternGridData._pendingSwitch = { page: page, container: container, ignore: ignore, dontMoveSlider: dontMoveSlider };
+		return;
+	}
+	patternGridData._switchUpdating = true;
+	try {
+		patternGridSwitchPageInner(page, container, ignore, dontMoveSlider);
+	} finally {
+		patternGridData._switchUpdating = false;
+		var pendingSwitch = patternGridData._pendingSwitch;
+		if (pendingSwitch) {
+			patternGridData._pendingSwitch = null;
+			patternGridSwitchPage(pendingSwitch.page, pendingSwitch.container, pendingSwitch.ignore, pendingSwitch.dontMoveSlider);
+		}
+	}
+}
+
+function patternGridSwitchPageInner(page, container, ignore, dontMoveSlider){
 	var window_ = getClientGuiWindow(container, 'main');
 	if(!window_ || typeof window_.isOpened != 'function' || !window_.isOpened()){ return false; }
 	var slots = container.slots;
@@ -209,10 +227,9 @@ function patternGridSwitchPage(page, container, ignore, dontMoveSlider){
 	if(!dontMoveSlider){
 		var pages = patternGridFuncs.getPages(slotsKeys.length);
 		var ___y = patternGridFuncs.getCoordsFromPage(page + 1, pages);
-		var _sliderEl = null;
-		try { _sliderEl = container.getUiAdapter().getElement("slider_button"); } catch(e) { _sliderEl = null; }
-		if(_sliderEl)_sliderEl.setPosition(_elementsGUI_patternGrid['slider_button'].x, ___y);
-			}
+		rsSetSliderElement(container, "slider_button", _elementsGUI_patternGrid['slider_button'].x, ___y);
+		rsSetSliderDescriptor(container, "slider_button", ___y);
+	}
 	if (!patternGridData.isWorkAllowed) {
 		for (var i = 0; i < slots_count; i++) {
 			container.setSlot("slot" + i, 0, 0, 0, null);
@@ -224,7 +241,6 @@ function patternGridSwitchPage(page, container, ignore, dontMoveSlider){
 	for (var i = page * x_count; i < page * x_count + slots_count; i++) {
 		var a = i - (page * x_count);
 		var item = slots[slotsKeys[i]] || { id: 0, data: 0, count: 0, extra: null };
-		container.markSlotDirty("slot" + a);
 		var _text = (!item.count ? 'Craft' : (cutNumber(item.count, true) + ""));
 		var _el = null;
 		if(elements_.get) _el = elements_.get("slot" + a);
@@ -239,6 +255,7 @@ function patternGridSwitchCraftsPage(page, container, ignore, dontMoveSlider){
 	var window_ = getClientGuiWindow(container, 'main');
 	if(!window_ || typeof window_.isOpened != 'function' || !window_.isOpened()){ return false; }
 	var crafts = patternGridData.crafts;
+	if(!crafts) return false; // crafts not computed yet (swipe/slider before the first updateCrafts)
 	var slots_count = patternGridData.crafts_slots_count;
 	var x_count = patternGridData.crafts_x_count;
 	var pages1 = patternGridFuncs.craftsPages(crafts.length);
@@ -246,13 +263,11 @@ function patternGridSwitchCraftsPage(page, container, ignore, dontMoveSlider){
 	page = Math.max(1, Math.min(page, pages)) - 1;
 	if(page == patternGridData.lastCraftsPage - 1 && !ignore){ return false; }
 	patternGridData.lastCraftsPage = page + 1;
-	var uiAdapter = container.getUiAdapter();
 	if(!dontMoveSlider){
 		var ___y = patternGridFuncs.getCraftsCoordsFromPage(page + 1, pages1);
-		var _craftsSliderEl = null;
-		try { _craftsSliderEl = uiAdapter.getElement("crafts_slider"); } catch(e) { _craftsSliderEl = null; }
-		if(_craftsSliderEl)_craftsSliderEl.setPosition(_elementsGUI_patternGrid['crafts_slider'].x, ___y);
-			}
+		rsSetSliderElement(container, "crafts_slider", _elementsGUI_patternGrid['crafts_slider'].x, ___y);
+		rsSetSliderDescriptor(container, "crafts_slider", ___y);
+	}
 	if (!patternGridData.isWorkAllowed) {
 		for (var i = 0; i < slots_count; i++) {
 			container.setSlot("item_craft_slot" + i, 0, 0, 0, null);
@@ -708,11 +723,15 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 		return true;
 	},
 	onWindowClose: function(){
+		rsResetStorageTouch();
+		rsResetCraftsTouch();
 		if(this.data.NETWORK_ID == 'f') return;
+		var net = RSNetworks[this.data.NETWORK_ID];
+		if(!net) return;
 		var coords_id = this.coords_id();
-		RSNetworks[this.data.NETWORK_ID][coords_id].isOpenedGrid = false;
+		if(net[coords_id]) net[coords_id].isOpenedGrid = false;
 		var iIndex;
-		if((iIndex = RSNetworks[this.data.NETWORK_ID].info.openedGrids.findIndex(function(element){return cts(element) == coords_id})) != -1) RSNetworks[this.data.NETWORK_ID].info.openedGrids.splice(iIndex, 1);
+		if((iIndex = net.info.openedGrids.findIndex(function(element){return cts(element) == coords_id})) != -1) net.info.openedGrids.splice(iIndex, 1);
 	},
 	pre_init: function(){
 		var tile=this;
@@ -996,7 +1015,9 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 		updateReverseFilter: function(eventData, connectedClient){
 			GridEvents.updateReverseFilter(this);
 		},
-		craftPattern: function(eventData, connectedClient){			if(!this.data.patternMode && this.data.selectedRecipe){
+		craftPattern: function(eventData, connectedClient){
+			if(!MpCore.isWatching(this, connectedClient)) return;
+			if(!this.data.patternMode && this.data.selectedRecipe){
 				if(!checkCraft(this.data.selectedRecipe.javaRecipe)){
 					return;
 				}
@@ -1040,6 +1061,7 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 			this.container.sendChanges();
 		},
 		updatePatternMode: function(eventData, connectedClient){
+			if(!MpCore.isWatching(this, connectedClient)) return;
 			var newMode = eventData.val != null ? eventData.val : !this.data.patternMode;
 			this.data.patternMode = newMode;
 			if(!this.data.patternMode){
@@ -1058,11 +1080,14 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 			this.refreshGui();
 		},
 		updateOredictMode: function(eventData, connectedClient){
+			if(!MpCore.isWatching(this, connectedClient)) return;
 			var newOre = eventData.val != null ? eventData.val : !this.data.oredictMode;
 			this.data.oredictMode = newOre;
 			this.refreshGui();
 		},
-		clearCraft: function(eventData, connectedClient){			this.container.setSlot('craft_result', 0, 0, 0);
+		clearCraft: function(eventData, connectedClient){
+			if(!MpCore.isWatching(this, connectedClient)) return;
+			this.container.setSlot('craft_result', 0, 0, 0);
 			for(var i = 0; i < 9; i++){
 				this.container.setSlot('craft_slot' + i, 0, 0, 0);
 				this.container.setSlot('WB_craft_slot' + i, 0, 0, 0);
@@ -1071,8 +1096,11 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 			this.data.selectedRecipe = null;
 			this.container.sendChanges();
 		},
-		selectRecipe: function(eventData, connectedClient){			if(eventData.uid == undefined){ return; }
-			var javaRecipe = Recipes.getRecipeByUid(eventData.uid);			this.selectRecipe(javaRecipe, connectedClient.getPlayerUid());
+		selectRecipe: function(eventData, connectedClient){
+			if(!MpCore.isWatching(this, connectedClient)) return;
+			if(eventData.uid == undefined){ return; }
+			var javaRecipe = Recipes.getRecipeByUid(eventData.uid);
+			this.selectRecipe(javaRecipe, connectedClient.getPlayerUid());
 		},
 		craftPreview: function(eventData, connectedClient){
 			GridEvents.craftPreview(this, eventData, connectedClient);
@@ -1126,6 +1154,7 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 				eventData.disksStorage = Number(eventData.disksStorage);
 				if(!eventData.refresh){
 					patternGridData.selectedSlot = null;
+					patternGridData._lastInfoSignature = null;
 					patternGridData.selectedRecipe = null;
 					patternGridData.lastPage = -1;
 					patternGridData.lastCraftsPage = -1;
@@ -1162,7 +1191,7 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 					if(updateFilters || refresh){
 						var originalOnlyItemsExtraMap = {};
 						var originalOnlyItemsMap = {};
-						for(var i in container.slots)if(i[0] >= 0 && container.slots[i].id != 0){
+						for(var i in container.slots)if(i[0] >= 0 && container.slots[i] && container.slots[i].id != 0){
 							_slotKeys.push(i);
 							var item_ = container.slots[i];
 							if(originalOnlyItemsMap[item_.id] && originalOnlyItemsMap[item_.id].indexOf(item_.data) == -1){
@@ -1208,11 +1237,9 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 					}
 					patternGridSwitchPage(refresh ? patternGridData.lastPage : 1, container, true);
 					if(updateCrafts){
-						scheduleLowPrioritySort(function(){
-							patternGridData.isDarkenMap = {};
-							patternGridData.crafts = patternGridFuncs.updateCrafts(patternGridData.slotsKeys, patternGridData.craftsTextSearch, patternGridData.originalOnlyItemsMap, container.slots);
-							patternGridSwitchCraftsPage(refresh ? patternGridData.lastCraftsPage : 1, container, true);
-						});
+						patternGridData.isDarkenMap = {};
+						patternGridData.crafts = patternGridFuncs.updateCrafts(patternGridData.slotsKeys, patternGridData.craftsTextSearch, patternGridData.originalOnlyItemsMap, container.slots);
+						patternGridSwitchCraftsPage(refresh ? patternGridData.lastCraftsPage : 1, container, true);
 					}
 					moveCraftsSlots(patternGridData.patternMode);
 					} finally {
@@ -1224,14 +1251,7 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 						}
 					}
 				}
-				if(patternGridData.lowPriority){
-					patternGridData.lowPriority = false;
-					scheduleLowPrioritySort(function(){
-						patternGridData.updateGui(eventData.refresh, eventData.updateFilters, eventData.updateCrafts, true);
-					});
-				} else {
-					patternGridData.updateGui(eventData.refresh, eventData.updateFilters, eventData.updateCrafts, true);
-				}
+				patternGridData.updateGui(eventData.refresh, eventData.updateFilters, eventData.updateCrafts, true);
 			}
 		}
 	},

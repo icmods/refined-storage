@@ -1,11 +1,13 @@
 var REQUEST_THROTTLE_TICKS = 60;
+var CRAFT_THROTTLE_TICKS = 5;
+// While autocrafting runs, opened grids are refreshed at most once per window.
+var GRID_REFRESH_THROTTLE_TICKS = 5;
+// Monitor notifications are coalesced: at most one burst per network per 5 ticks.
+var MONITOR_NOTIFY_THROTTLE_TICKS = 5;
 
 var StorageProviders = {};
 
-// Contract: provider.getEntries(tile) must return an array of LIVE references to the addon's persisted
-// storage entries, shaped like DiskData entries: { storage: number, items_stored: number,
-// items: { [getItemUid(item)]: { id, data, count, extra } } }. Counts must be finite numbers.
-// Entries are mutated in place by pushItem/deleteItem and must survive updateItems rebuilds.
+// provider.getEntries(tile) returns live DiskData-shaped entries, mutated in place.
 function registerStorageProvider(blockId, provider) {
 	if (!blockId || !provider || typeof provider.getEntries !== 'function') return false;
 	StorageProviders[String(blockId)] = provider;
@@ -31,6 +33,9 @@ var NetworkInfo = {
 			crafts: {},
 			patternToContainers: {},
 			patternContainersParsed: {},
+			craftsByKey: {},
+			patternToContainersByKey: {},
+			apiPatterns: {},
 			disk_map: [],
 			just_items_map: {},
 			just_items_map_extra: {},
@@ -40,6 +45,8 @@ var NetworkInfo = {
 			openedGrids: [],
 			storage: 0,
 			stored: 0,
+			// Public addon hooks: push(fn) into either array for the network's info;
+			// fn(item, count, tags) may return true (unsubscribe) or a number (new count).
 			itemAddListeners: [],
 			itemRemoveListeners: [],
 			providingCrafts: [],
@@ -47,6 +54,10 @@ var NetworkInfo = {
 			scheduledByUid: {},
 			expectedOutputIndex: {},
 			netMapDirty: false,
+			_gridRefreshPending: false,
+			_gridRefreshPendingFull: false,
+			_gridRefreshTimerArmed: false,
+			_lastGridRefreshTick: 0,
 			incomplete: false,
 			updateControllerTile: function(tile) {
 				controllerRef.tile = tile;
@@ -54,17 +65,10 @@ var NetworkInfo = {
 			monitorListeners: [],
 			lastFailedRequestTick: {},
 			isRequestThrottled: function(sourceKey, now) {
-				var last = this.lastFailedRequestTick[sourceKey];
-				return last != null && now - last < REQUEST_THROTTLE_TICKS;
+				return MpCore.requestGuard(this, REQUEST_THROTTLE_TICKS).isThrottled(sourceKey);
 			},
 			markRequestFailed: function(sourceKey, now) {
-				this.lastFailedRequestTick[sourceKey] = now;
-				if (!this._throttlePruneAt || now - this._throttlePruneAt >= REQUEST_THROTTLE_TICKS) {
-					this._throttlePruneAt = now;
-					for (var tk in this.lastFailedRequestTick) {
-						if (now - this.lastFailedRequestTick[tk] >= REQUEST_THROTTLE_TICKS) delete this.lastFailedRequestTick[tk];
-					}
-				}
+				MpCore.requestGuard(this, REQUEST_THROTTLE_TICKS).mark(sourceKey);
 			},
 			addMonitorListener: function(listener) {
 				if (this.monitorListeners.indexOf(listener) == -1) this.monitorListeners.push(listener);
@@ -75,9 +79,18 @@ var NetworkInfo = {
 			},
 			notifyMonitorListeners: function(task) {
 				if (this.monitorListeners.length === 0) return;
-				for (var i = 0; i < this.monitorListeners.length; i++) {
-					if (this.monitorListeners[i]) this.monitorListeners[i](this, task || null);
-				}
+				if (task) this._monitorNotifyTask = task;
+				if (this._monitorNotifyPending) return;
+				this._monitorNotifyPending = true;
+				var self = this;
+				TickScheduler.global.ensureDefer('rsMonNotify:' + this.net_id, function() {
+					self._monitorNotifyPending = false;
+					var pendingTask = self._monitorNotifyTask;
+					self._monitorNotifyTask = null;
+					for (var i = 0; i < self.monitorListeners.length; i++) {
+						if (self.monitorListeners[i]) self.monitorListeners[i](self, pendingTask);
+					}
+				}, { ticks: MONITOR_NOTIFY_THROTTLE_TICKS, retries: 1 });
 			},
 			registerExpectedOutputTask: function(uid, task) {
 				if (!this.expectedOutputIndex[uid]) this.expectedOutputIndex[uid] = {};
@@ -138,7 +151,7 @@ var NetworkInfo = {
 					for (var ni = 0; ni < t.nodes.length; ni++) {
 						var node = t.nodes[ni];
 						if (node.done) continue;
-						var pattern = this.crafts[node.patternUid] && this.crafts[node.patternUid][0];
+						var pattern = rsPickCraft(this, node.patternUid, node.containerCoords);
 						if (!pattern) continue;
 						for (var ri = 0; ri < pattern.result.length; ri++) {
 							relevantUids[pattern.result[ri].id + '_' + pattern.result[ri].data] = true;
@@ -187,7 +200,7 @@ var NetworkInfo = {
 					for (var ni = 0; ni < t.nodes.length; ni++) {
 						var node = t.nodes[ni];
 						if (node.done || node.isProcessing) continue;
-						var pattern = this.crafts[node.patternUid] && this.crafts[node.patternUid][0];
+						var pattern = rsPickCraft(this, node.patternUid, node.containerCoords);
 						if (!pattern) continue;
 						for (var ri = 0; ri < pattern.result.length; ri++) {
 							var res = pattern.result[ri];
@@ -201,7 +214,7 @@ var NetworkInfo = {
 					for (var ni = 0; ni < t.nodes.length; ni++) {
 						var node = t.nodes[ni];
 						if (node.done || !node.isProcessing) continue;
-						var pattern = this.crafts[node.patternUid] && this.crafts[node.patternUid][0];
+						var pattern = rsPickCraft(this, node.patternUid, node.containerCoords);
 						if (!pattern) continue;
 						var dispatched = node.quantity - node.remaining;
 						var finishedCrafts = node.expectedByUid ? node.quantity : 0;
@@ -231,6 +244,31 @@ var NetworkInfo = {
 				}
 				return result;
 			},
+			addPatternContainerKey: function(key, coordsStr){
+				if(!this.patternToContainersByKey[key]) this.patternToContainersByKey[key] = [];
+				if(this.patternToContainersByKey[key].indexOf(coordsStr) == -1){
+					this.patternToContainersByKey[key].push(coordsStr);
+					if(!this.patternContainersParsed[coordsStr]){
+						var parts = coordsStr.split(',');
+						if(parts.length >= 3){
+							this.patternContainersParsed[coordsStr] = { x: parseInt(parts[0]), y: parseInt(parts[1]), z: parseInt(parts[2]) };
+						}
+					}
+				}
+			},
+			removePatternContainerKey: function(key, coordsStr){
+				var list = this.patternToContainersByKey[key];
+				if(!list) return;
+				var idx = list.indexOf(coordsStr);
+				if(idx != -1) list.splice(idx, 1);
+				if(list.length == 0){
+					delete this.patternToContainersByKey[key];
+					delete this.craftsByKey[key];
+				}
+			},
+			getPatternContainersByKey: function(key){
+				return this.patternToContainersByKey[key] || [];
+			},
 			addPatternContainer: function(resultUid, coordsStr){
 				if(!this.patternToContainers[resultUid]) this.patternToContainers[resultUid] = [];
 				if(this.patternToContainers[resultUid].indexOf(coordsStr) == -1){
@@ -258,7 +296,29 @@ var NetworkInfo = {
 				var newPatternContainersParsed = {};
 				var newCrafts = {};
 				var newCraftsIDS = {};
+				var newCraftsByKey = {};
+				var newPatternToContainersByKey = {};
 				var dedupeKeys = {};
+				function addCraft(craft, coordsId){
+					for(var ri = 0; ri < craft.result.length; ri++){
+						var res = craft.result[ri];
+						var resultUid = res.id + '_' + res.data;
+						var dedupeKey = coordsId + '|' + craft.id + '|' + craft.isProcessed + '|' + resultUid;
+						if(!newCrafts[resultUid]) newCrafts[resultUid] = [];
+						if(!dedupeKeys[dedupeKey]){
+							dedupeKeys[dedupeKey] = true;
+							newCrafts[resultUid].push(craft);
+						}
+						if(!newCraftsIDS[res.id]) newCraftsIDS[res.id] = [];
+						if(newCraftsIDS[res.id].indexOf(res.data) == -1) newCraftsIDS[res.id].push(res.data);
+						if(!newPatternToContainers[resultUid]) newPatternToContainers[resultUid] = [];
+						if(newPatternToContainers[resultUid].indexOf(coordsId) == -1) newPatternToContainers[resultUid].push(coordsId);
+						var pkey = rsPatternKey(craft, resultUid);
+						if(!newCraftsByKey[pkey]) newCraftsByKey[pkey] = craft;
+						if(!newPatternToContainersByKey[pkey]) newPatternToContainersByKey[pkey] = [];
+						if(newPatternToContainersByKey[pkey].indexOf(coordsId) == -1) newPatternToContainersByKey[pkey].push(coordsId);
+					}
+				}
 				var containers = PatternContainerRegistry.forNetwork(this.net_id, controllerTile.blockSource, controllerTile.dimension);
 				for(var ci = 0; ci < containers.length; ci++){
 					var entry = containers[ci];
@@ -277,37 +337,59 @@ var NetworkInfo = {
 							if(Config.dev)Logger.Log('[PatternContainer] invalid pattern at ' + entry.coordsId, 'RefinedStorageError');
 							continue;
 						}
-						var craft = {
+						addCraft({
 							id: normalized.id,
 							coordsId: entry.coordsId,
 							isProcessed: normalized.isProcessed,
 							oredictEnabled: normalized.oredictEnabled,
 							ingridients: normalized.ingridients,
 							result: normalized.result
-						};
-						for(var ri = 0; ri < craft.result.length; ri++){
-							var res = craft.result[ri];
-							var resultUid = res.id + '_' + res.data;
-							var dedupeKey = entry.coordsId + '|' + normalized.id + '|' + normalized.isProcessed + '|' + resultUid;
-							if(!newCrafts[resultUid]) newCrafts[resultUid] = [];
-							if(!dedupeKeys[dedupeKey]){
-								dedupeKeys[dedupeKey] = true;
-								newCrafts[resultUid].push(craft);
-							}
-							if(!newCraftsIDS[res.id]) newCraftsIDS[res.id] = [];
-							if(newCraftsIDS[res.id].indexOf(res.data) == -1) newCraftsIDS[res.id].push(res.data);
-							if(!newPatternToContainers[resultUid]) newPatternToContainers[resultUid] = [];
-							if(newPatternToContainers[resultUid].indexOf(entry.coordsId) == -1) newPatternToContainers[resultUid].push(entry.coordsId);
-						}
+						}, entry.coordsId);
 					}
+				}
+				var apiPatterns = this.apiPatterns || {};
+				for(var akey in apiPatterns){
+					var apiCraft = apiPatterns[akey];
+					if(!apiCraft || !apiCraft.coordsId) continue;
+					addCraft(apiCraft, apiCraft.coordsId);
 				}
 				this.patternToContainers = newPatternToContainers;
 				this.patternContainersParsed = newPatternContainersParsed;
 				this.crafts = newCrafts;
 				this.craftsIDS = newCraftsIDS;
+				this.craftsByKey = newCraftsByKey;
+				this.patternToContainersByKey = newPatternToContainersByKey;
 				this.refreshOpenedGrids(true);
 			},
 			refreshOpenedGrids: function(_full){
+				var canDefer = typeof TickScheduler != "undefined" && TickScheduler && TickScheduler.global &&
+					typeof TickScheduler.global.defer == "function";
+				var now = canDefer ? TickScheduler.global.ticks : 0;
+				if (canDefer && this.craftingTasks && this.craftingTasks.length > 0) {
+					var elapsed = now - (this._lastGridRefreshTick || 0);
+					if (elapsed < GRID_REFRESH_THROTTLE_TICKS) {
+						this._gridRefreshPending = true;
+						if (_full) this._gridRefreshPendingFull = true;
+						if (!this._gridRefreshTimerArmed) {
+							this._gridRefreshTimerArmed = true;
+							var info = this;
+							TickScheduler.global.defer(function () {
+								info._gridRefreshTimerArmed = false;
+								if (!info._gridRefreshPending) return;
+								var full = info._gridRefreshPendingFull === true;
+								info._gridRefreshPending = false;
+								info._gridRefreshPendingFull = false;
+								info._lastGridRefreshTick = TickScheduler.global.ticks;
+								info._refreshOpenedGridsNow(full);
+							}, { ticks: Math.max(1, GRID_REFRESH_THROTTLE_TICKS - elapsed), retries: 1 });
+						}
+						return;
+					}
+				}
+				this._lastGridRefreshTick = now;
+				this._refreshOpenedGridsNow(_full);
+			},
+			_refreshOpenedGridsNow: function(_full){
 				for(var i in this.openedGrids){
 					var __coords = this.openedGrids[i];
 					var tile = World.getTileEntity(__coords.x, __coords.y, __coords.z, controllerRef.tile.blockSource);
@@ -370,10 +452,11 @@ var NetworkInfo = {
 				var diskDrives = byId[BlockID['diskDrive']] || [];
 				for(var i in diskDrives){
 					var tile = World.getTileEntity(diskDrives[i].coords.x, diskDrives[i].coords.y, diskDrives[i].coords.z, controllerRef.tile.blockSource);
-					if(!tile || !tile.data.isActive) continue;
+					if(!tile || !tile.data || !tile.data.isActive || !tile.container) continue;
 					var newDiskData = [];
 					for (var k = 0; k < 8; k++) {
 						var item = tile.container.getSlot('slot' + k);
+						if (!item) continue;
 						if (!Disk.items[item.id]) continue;
 						if (item.data == 0) continue;
 						if (seenDiskData[item.data]) continue;
@@ -424,7 +507,6 @@ var NetworkInfo = {
 				count = count || item.count;
 				var _origCount = count;
 				if(RSbannedItems.indexOf(item.id) != -1){
-					if(Config.dev)Logger.Log('Banned item pushed: id=' + item.id, 'RefinedStorageDebug');
 					return count;
 				}
 			if(!this.itemCanBePushed(item, count)) return count;
@@ -562,6 +644,11 @@ var NetworkInfo = {
 					if(!this.just_items_map[item.id]) return false;
 					item.data = this.just_items_map[item.id][0];
 				}
+				if(item.extra === undefined)item.extra = null;
+				if((!item.extra && item.extra != null) || item.extra === -1){
+					var _extraMap = this.just_items_map_extra[item.id+'_'+item.data];
+					item.extra = (_extraMap && _extraMap[0]) || null;
+				}
 				var itemUid = getItemUid(item);
 				var iItem = this.itemsIndex[itemUid];
 				if(iItem != undefined){
@@ -688,7 +775,12 @@ var NetworkInfo = {
 					if (remaining <= 0) return { deduped: true, item: item, count: count || 1 };
 					count = remaining;
 				}
-				var result = CraftingCalculator.calculate(item, count, this);
+				var _ceWorld = buildCraftWorld(this);
+				var _cePlan = CraftTreePlanner.plan(
+					{ key: item.id + '_' + item.data, amount: count },
+					buildCraftTreePlannerCtx(_ceWorld, Config.craftingCalculationTimeout || 5000)
+				);
+				var result = buildCraftTreePlannerResult(_ceWorld, item, count, _cePlan);
 				if (!result.craftable && result.errorType === "NO_PATTERN") return false;
 				return result;
 			},
@@ -704,16 +796,17 @@ var NetworkInfo = {
 				else this.scheduledByUid[uid] = next;
 			},
 			scheduleTask: function(_craft_) {
+				if (!_craft_ || !_craft_.craftable) return false;
 				var requestedItem = _craft_.results && _craft_.results[0]
 					? { id: _craft_.results[0].id, data: _craft_.results[0].data, extra: null } : { id: 0, data: 0 };
 				var task = CraftingTask.create(_craft_, this, requestedItem, _craft_.requestedCount);
+				if (!task || typeof task.reserveItems !== "function") return false;
 				task.reserveItems(this);
 			this.refreshOpenedGrids();
 			this.craftingTasks.push(task);
 			this.providingCrafts.push(task);
 			this.scheduledByUid[task.requestedUid] = (this.scheduledByUid[task.requestedUid] || 0) + (task.requestedCount || 0);
 			this.notifyMonitorListeners();
-			if(Config.dev)Logger.Log('[CRAFT] Task ' + task.id + ' scheduled: ' + task.requestedCount + 'x ' + task.requestedUid, 'RefinedStorageDebug');
 			_RS._emit("taskAdded", {netId: this.net_id, task: {id: task.id, requestedUid: task.requestedUid, requestedCount: task.requestedCount}});
 			return task;
 		},
@@ -735,7 +828,6 @@ var NetworkInfo = {
 				}
 				this.notifyMonitorListeners(task);
 				_RS._emit("taskCancelled", {netId: this.net_id, taskId: taskId});
-					if(Config.dev)Logger.Log('[CRAFT] Task ' + taskId + ' cancelled', 'RefinedStorageDebug');
 					return true;
 				},
 			cancelAllTasks: function() {
