@@ -16,15 +16,37 @@ if (typeof getTextElementWidth == 'undefined') {
 	};
 }
 
+/* Text width in UI units (the engine measurement is in pixels at drawScale). */
+function rsTextWidthUnits(element, drawScale) {
+	var px = getTextElementWidth(element, drawScale);
+	return drawScale > 0 ? px / drawScale : px;
+}
+
+/* frame[name=... size=W,H] bitmap — buttons take their size from the texture, so the
+ * frame must be expanded to the exact target size (width/height fields are ignored). */
+function rsFrameButton(name, w, h) {
+	return "frame[name=" + name + " size=" + Math.round(w) + "," + Math.round(h) + "]";
+}
+
+function rsApplyFrameButton(element, w, h) {
+	if (!element) return element;
+	w = Math.round(w);
+	h = Math.round(h);
+	element.width = w;
+	element.height = h;
+	element.bitmap = rsFrameButton("classic_button_up", w, h);
+	element.bitmap2 = rsFrameButton("classic_button_down", w, h);
+	element.scale = 1;
+	return element;
+}
+
 var preCraftdata = {
 	container: null,
 	craftable: true,
 	craftCount: 1,
 	selectedItem: null,
 	page: 0,
-	postData: [],
-	swipeY: null,
-	swipeSum: 0
+	postData: []
 }
 
 function preCraftSwitchPage(page, _data, container){
@@ -268,8 +290,9 @@ var preCraftGUI = new UI.Window({
 			size: 30
 		}
 	}
-	var textStart = getTextElementWidth(preCraftGUI_elements['textStart'], drawScale);
-	preCraftGUI_elements['buttonStart'].width = Math.max(170, textStart + 16);
+	var textStart = rsTextWidthUnits(preCraftGUI_elements['textStart'], drawScale);
+	preCraftGUI_elements['buttonStart'].width = Math.max(170, Math.round(textStart + 16));
+	rsApplyFrameButton(preCraftGUI_elements['buttonStart'], preCraftGUI_elements['buttonStart'].width, 75);
 	preCraftGUI_elements['buttonStart'].x -= preCraftGUI_elements['buttonStart'].width;
 	preCraftGUI_elements['textStart'].x = preCraftGUI_elements['buttonStart'].x + preCraftGUI_elements['buttonStart'].width/2 - textStart/2;
 	preCraftGUI_elements['textStart'].y = preCraftGUI_elements['buttonStart'].y + preCraftGUI_elements['buttonStart'].height/2 - (preCraftGUI_elements['textStart'].font.size + (preCraftGUI_elements['textStart'].font.shadow || 0))*1.1/2 - 1;
@@ -304,8 +327,9 @@ var preCraftGUI = new UI.Window({
 			size: 30
 		}
 	}
-	var textCancel = getTextElementWidth(preCraftGUI_elements['textCancel'], drawScale);
-	preCraftGUI_elements['buttonCancel'].width = Math.max(170, textCancel + 16);
+	var textCancel = rsTextWidthUnits(preCraftGUI_elements['textCancel'], drawScale);
+	preCraftGUI_elements['buttonCancel'].width = Math.max(170, Math.round(textCancel + 16));
+	rsApplyFrameButton(preCraftGUI_elements['buttonCancel'], preCraftGUI_elements['buttonCancel'].width, 75);
 	preCraftGUI_elements['textCancel'].x = preCraftGUI_elements['buttonCancel'].x + preCraftGUI_elements['buttonCancel'].width/2 - textCancel/2;
 	preCraftGUI_elements['textCancel'].y = preCraftGUI_elements['buttonCancel'].y + preCraftGUI_elements['buttonCancel'].height/2 - (preCraftGUI_elements['textCancel'].font.size + (preCraftGUI_elements['textCancel'].font.shadow || 0))*1.1/2 - 1;
 })();
@@ -451,7 +475,7 @@ preCraftCountGUI.setEventListener({
 	var buttonsOffset = 15;
 	var buttonsHeight = 110;
 	var buttonsScale = 4
-	var buttonsWidth = buttonsHeight*1.65;
+	var buttonsWidth = Math.round(buttonsHeight*1.65);
 	preCraftCountGUI_elements['button-1'] = {
 		type: "button",
 		x: offSet,
@@ -480,7 +504,7 @@ preCraftCountGUI.setEventListener({
 			size: 47
 		}
 	}
-	var text_1Width = getTextElementWidth(preCraftCountGUI_elements['text-1'], drawScale);
+	var text_1Width = rsTextWidthUnits(preCraftCountGUI_elements['text-1'], drawScale);
 	preCraftCountGUI_elements['text-1'].x += preCraftCountGUI_elements['button-1'].width/2 - text_1Width/2;
 	preCraftCountGUI_elements['text-1'].y += preCraftCountGUI_elements['button-1'].height/2 - (preCraftCountGUI_elements['text-1'].font.size + (preCraftCountGUI_elements['text-1'].font.shadow || 0))*1.1/2 - 1;
 
@@ -512,7 +536,7 @@ preCraftCountGUI.setEventListener({
 			size: 47
 		}
 	}
-	var text_10Width = getTextElementWidth(preCraftCountGUI_elements['text-10'], drawScale);
+	var text_10Width = rsTextWidthUnits(preCraftCountGUI_elements['text-10'], drawScale);
 	preCraftCountGUI_elements['text-10'].x += preCraftCountGUI_elements['button-10'].width/2 - text_10Width/2;
 	preCraftCountGUI_elements['text-10'].y += preCraftCountGUI_elements['button-10'].height/2 - (preCraftCountGUI_elements['text-10'].font.size + (preCraftCountGUI_elements['text-10'].font.shadow || 0))*1.1/2 - 1;
 	
@@ -544,7 +568,7 @@ preCraftCountGUI.setEventListener({
 			size: 47
 		}
 	}
-	var text_64Width = getTextElementWidth(preCraftCountGUI_elements['text-64'], drawScale);
+	var text_64Width = rsTextWidthUnits(preCraftCountGUI_elements['text-64'], drawScale);
 	preCraftCountGUI_elements['text-64'].x += preCraftCountGUI_elements['button-64'].width/2 - text_64Width/2;
 	preCraftCountGUI_elements['text-64'].y += preCraftCountGUI_elements['button-64'].height/2 - (preCraftCountGUI_elements['text-64'].font.size + (preCraftCountGUI_elements['text-64'].font.shadow || 0))*1.1/2 - 1;
 	
@@ -576,7 +600,7 @@ preCraftCountGUI.setEventListener({
 			size: 47
 		}
 	}
-	var text1Width = getTextElementWidth(preCraftCountGUI_elements['text1'], drawScale);
+	var text1Width = rsTextWidthUnits(preCraftCountGUI_elements['text1'], drawScale);
 	preCraftCountGUI_elements['text1'].x += preCraftCountGUI_elements['button1'].width/2 - text1Width/2;
 	preCraftCountGUI_elements['text1'].y += preCraftCountGUI_elements['button1'].height/2 - (preCraftCountGUI_elements['text1'].font.size + (preCraftCountGUI_elements['text1'].font.shadow || 0))*1.1/2 - 1;
 
@@ -608,7 +632,7 @@ preCraftCountGUI.setEventListener({
 			size: 47
 		}
 	}
-	var text10Width = getTextElementWidth(preCraftCountGUI_elements['text10'], drawScale);
+	var text10Width = rsTextWidthUnits(preCraftCountGUI_elements['text10'], drawScale);
 	preCraftCountGUI_elements['text10'].x += preCraftCountGUI_elements['button10'].width/2 - text10Width/2;
 	preCraftCountGUI_elements['text10'].y += preCraftCountGUI_elements['button10'].height/2 - (preCraftCountGUI_elements['text10'].font.size + (preCraftCountGUI_elements['text10'].font.shadow || 0))*1.1/2 - 1;
 	
@@ -640,7 +664,7 @@ preCraftCountGUI.setEventListener({
 			size: 47
 		}
 	}
-	var text64Width = getTextElementWidth(preCraftCountGUI_elements['text64'], drawScale);
+	var text64Width = rsTextWidthUnits(preCraftCountGUI_elements['text64'], drawScale);
 	preCraftCountGUI_elements['text64'].x += preCraftCountGUI_elements['button64'].width/2 - text64Width/2;
 	preCraftCountGUI_elements['text64'].y += preCraftCountGUI_elements['button64'].height/2 - (preCraftCountGUI_elements['text64'].font.size + (preCraftCountGUI_elements['text64'].font.shadow || 0))*1.1/2 - 1;
 	
@@ -675,10 +699,10 @@ preCraftCountGUI.setEventListener({
 			size: 57
 		}
 	}
-	var textStart = getTextElementWidth(preCraftCountGUI_elements['textStart'], drawScale);
+	var textStart = rsTextWidthUnits(preCraftCountGUI_elements['textStart'], drawScale);
 	var bonusTextSize = Math.min((preCraftCountGUI_elements['buttonStart'].width - 16)/textStart, 1);
 	preCraftCountGUI_elements['textStart'].font.size *= bonusTextSize;
-	textStart = getTextElementWidth(preCraftCountGUI_elements['textStart'], drawScale);
+	textStart = rsTextWidthUnits(preCraftCountGUI_elements['textStart'], drawScale);
 	preCraftCountGUI_elements['textStart'].x += preCraftCountGUI_elements['buttonStart'].width/2 - textStart/2;
 	preCraftCountGUI_elements['textStart'].y += preCraftCountGUI_elements['buttonStart'].height/2 - (preCraftCountGUI_elements['textStart'].font.size + (preCraftCountGUI_elements['textStart'].font.shadow || 0))*1.1/2;
 	
@@ -713,12 +737,17 @@ preCraftCountGUI.setEventListener({
 			size: 57
 		}
 	}
-	var textCancel = getTextElementWidth(preCraftCountGUI_elements['textCancel'], drawScale);
+	var textCancel = rsTextWidthUnits(preCraftCountGUI_elements['textCancel'], drawScale);
 	var bonusTextSize = Math.min((preCraftCountGUI_elements['buttonCancel'].width - 16)/textCancel, 1);
 	preCraftCountGUI_elements['textCancel'].font.size *= bonusTextSize;
-	textCancel = getTextElementWidth(preCraftCountGUI_elements['textCancel'], drawScale);
+	textCancel = rsTextWidthUnits(preCraftCountGUI_elements['textCancel'], drawScale);
 	preCraftCountGUI_elements['textCancel'].x += preCraftCountGUI_elements['buttonCancel'].width/2 - textCancel/2;
 	preCraftCountGUI_elements['textCancel'].y += preCraftCountGUI_elements['buttonCancel'].height/2 - (preCraftCountGUI_elements['textCancel'].font.size + (preCraftCountGUI_elements['textCancel'].font.shadow || 0))*1.1/2;
+	var _frameButtons = ['button-1', 'button-10', 'button-64', 'button1', 'button10', 'button64', 'buttonStart', 'buttonCancel'];
+	for (var _fbi = 0; _fbi < _frameButtons.length; _fbi++) {
+		var _fbe = preCraftCountGUI_elements[_frameButtons[_fbi]];
+		if (_fbe) rsApplyFrameButton(_fbe, _fbe.width, _fbe.height);
+	}
 })();
 preCraftCountGUI.forceRefresh();
 preCraftGUI.forceRefresh();
@@ -732,9 +761,9 @@ function createCraftPreviewPostData(_data){
 		var toCraft = _data.plan.toCraft || {};
 		var missing = _data.plan.missing || {};
 		for(var uid in toTake){
-			var parts = uid.split('_');
-			var id = parseInt(parts[0]);
-			var data = parseInt(parts[1]);
+			var parts = CoreKit.Items.parseUid(uid);
+			var id = parts.id;
+			var data = parts.data;
 			if(missing[uid]){
 				missingRows.push([{id: id, data: data, need: missing[uid]}, Translation.translate("Available") + ": " + toTake[uid], Translation.translate("Missing") + ": " + missing[uid]]);
 			} else if(toCraft[uid]){
@@ -745,9 +774,9 @@ function createCraftPreviewPostData(_data){
 		}
 		for(var uid in toCraft){
 			if(toTake[uid]) continue;
-			var parts = uid.split('_');
-			var id = parseInt(parts[0]);
-			var data = parseInt(parts[1]);
+			var parts = CoreKit.Items.parseUid(uid);
+			var id = parts.id;
+			var data = parts.data;
 			if(missing[uid]){
 				missingRows.push([{id: id, data: data, need: missing[uid]}, "", Translation.translate("Missing") + ": " + missing[uid]]);
 			} else {
@@ -756,9 +785,9 @@ function createCraftPreviewPostData(_data){
 		}
 		for(var uid in missing){
 			if(toTake[uid] || toCraft[uid]) continue;
-			var parts = uid.split('_');
-			var id = parseInt(parts[0]);
-			var data = parseInt(parts[1]);
+			var parts = CoreKit.Items.parseUid(uid);
+			var id = parts.id;
+			var data = parts.data;
 			missingRows.push([{id: id, data: data, need: missing[uid]}, "", Translation.translate("Missing") + ": " + missing[uid]]);
 		}
 		var newData = toCraftRows.slice();

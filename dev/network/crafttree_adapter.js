@@ -1,10 +1,37 @@
 // Maps the RS world view onto the host-neutral CraftTreePlanner.
 
+/* Identity keys are pure (id,data) -> "id:data:" strings; memoize them so planning
+ * never recomputes the same key (cookies: deterministic, no invalidation needed). */
+var _ceKeyCache = Object.create(null);
+
+function _ceKey(id, data) {
+	var k = id + ":" + data;
+	var v = _ceKeyCache[k];
+	if (v === undefined) v = _ceKeyCache[k] = CoreKit.Items.uidOf({ id: id, data: data, extra: null });
+	return v;
+}
+
+var _ceParseCache = Object.create(null);
+
+/* parseUid results are read-only in this file; memoize by uid string. */
+function _ceParseUid(uid) {
+	uid = String(uid);
+	var v = _ceParseCache[uid];
+	if (v === undefined) v = _ceParseCache[uid] = CoreKit.Items.parseUid(uid);
+	return v;
+}
+
+/* Optional: clear the identity memo (tests/benchmarks; keys are deterministic). */
+function _ceResetIdentityCache() {
+	_ceKeyCache = Object.create(null);
+	_ceParseCache = Object.create(null);
+}
+
 function _ceAdapterOutputs(pattern) {
 	var outs = [];
 	for (var i = 0; i < pattern.result.length; i++) {
 		var r = pattern.result[i];
-		outs.push({ key: r.id + "_" + r.data, amount: r.count || 1 });
+		outs.push({ key: r.uid || _ceKey(r.id, r.data), amount: r.count || 1 });
 	}
 	return outs;
 }
@@ -14,22 +41,22 @@ function _ceAdapterAltUids(world, ingr) {
 	var datas = world.altDatas && world.altDatas[ingr.id];
 	if (!datas || !datas.length) return uids;
 	if (ingr.data == -1) {
-		for (var i = 0; i < datas.length; i++) uids.push(ingr.id + "_" + datas[i]);
+		for (var i = 0; i < datas.length; i++) uids.push(_ceKey(ingr.id, datas[i]));
 		return uids;
 	}
 	if (datas.length <= 1) return uids;
 	for (var j = 0; j < datas.length; j++) {
-		if (datas[j] !== ingr.data) uids.push(ingr.id + "_" + datas[j]);
+		if (datas[j] !== ingr.data) uids.push(_ceKey(ingr.id, datas[j]));
 	}
 	return uids;
 }
 
 function _ceAdapterCandidates(world, ingr) {
 	// Remap a wildcard ingredient (data == -1) to its first concrete craftable data.
-	var craftUid = ingr.id + "_" + ingr.data;
+	var craftUid = ingr.uid || _ceKey(ingr.id, ingr.data);
 	if (!world.crafts[craftUid] && ingr.data == -1 && world.craftsIDS[ingr.id]) {
 		for (var i = 0; i < world.craftsIDS[ingr.id].length; i++) {
-			var cand = ingr.id + "_" + world.craftsIDS[ingr.id][i];
+			var cand = _ceKey(ingr.id, world.craftsIDS[ingr.id][i]);
 			if (world.crafts[cand]) { craftUid = cand; break; }
 		}
 	}
@@ -45,9 +72,9 @@ function _ceAdapterCandidates(world, ingr) {
 function _ceAdapterPickedPattern(world, uid) {
 	var patterns = world.crafts[uid];
 	if (!patterns || !patterns.length) return null;
-	var parts = uid.split("_");
-	var wantId = parseInt(parts[0], 10);
-	var wantData = parseInt(parts[1], 10);
+	var parsed = _ceParseUid(uid);
+	var wantId = parsed.id;
+	var wantData = parsed.data;
 	for (var pi = 0; pi < patterns.length; pi++) {
 		var res = patterns[pi].result || [];
 		for (var ri = 0; ri < res.length; ri++) {
@@ -66,6 +93,9 @@ function _ceAdapterRecipe(world, uid) {
 	for (var i = 0; i < ingrs.length; i++) {
 		var ingr = ingrs[i];
 		if (!ingr || !ingr.id) continue;
+		/* Reusable workbench tools are resolved by the executor on any damage; they
+		 * are not planned/reserved per craft (a single tool covers many crafts). */
+		if (pattern.toolIds && pattern.toolIds[ingr.id]) continue;
 		inputs.push({ candidates: _ceAdapterCandidates(world, ingr) });
 	}
 	return {
@@ -78,14 +108,14 @@ function _ceAdapterRecipe(world, uid) {
 }
 
 function _ceAdapterAltUidsFor(world, uid) {
-	var parts = uid.split("_");
-	var id = parseInt(parts[0], 10);
-	var data = parseInt(parts[1], 10);
+	var parsed = _ceParseUid(uid);
+	var id = parsed.id;
+	var data = parsed.data;
 	var out = [];
 	var datas = world.altDatas && world.altDatas[id];
 	if (!datas) return out;
 	for (var i = 0; i < datas.length; i++) {
-		if (datas[i] !== data) out.push(id + "_" + datas[i]);
+		if (datas[i] !== data) out.push(_ceKey(id, datas[i]));
 	}
 	return out;
 }
@@ -113,6 +143,19 @@ function _ceAdapterCopyItem(item) {
 	return { id: item.id, data: item.data, count: item.count || 1, extra: null };
 }
 
+/* Encoded damage of a tool in the pattern (fallback for the missing-tool row). */
+function _ceAdapterToolEncodedData(crafts, id) {
+	for (var i = 0; i < crafts.length; i++) {
+		var p = crafts[i].craft;
+		if (!p || !p.ingridients) continue;
+		for (var k = 0; k < p.ingridients.length; k++) {
+			var ing = p.ingridients[k];
+			if (ing && String(ing.id) === String(id)) return ing.data > -1 ? ing.data : 0;
+		}
+	}
+	return 0;
+}
+
 // PlanResult -> RS fullCrafts (the shape consumed by CraftingTask / CraftTreeExecutor.createTask).
 function buildCraftTreePlannerResult(world, item, quantity, pr) {
 	var plan = {
@@ -130,11 +173,11 @@ function buildCraftTreePlannerResult(world, item, quantity, pr) {
 
 	var allIngridients = [];
 	for (var tu in plan.toTake) {
-		var tp = tu.split("_");
-		allIngridients.push({ id: parseInt(tp[0], 10), data: parseInt(tp[1], 10), count: plan.toTake[tu] });
+		var tp = _ceParseUid(tu);
+		allIngridients.push({ id: tp.id, data: tp.data, count: plan.toTake[tu] });
 	}
 
-	var rootUid = item.id + "_" + item.data;
+	var rootUid = _ceKey(item.id, item.data);
 	var rootPattern = _ceAdapterPickedPattern(world, rootUid);
 	var results = [];
 	if (rootPattern) {
@@ -185,7 +228,7 @@ function buildCraftTreePlannerResult(world, item, quantity, pr) {
 			var ingr = ingrs[ii];
 			if (!ingr || !ingr.id) continue;
 			oneCount.push(_ceAdapterCopyItem(ingr));
-			var iu = ingr.id + "_" + ingr.data;
+			var iu = ingr.uid || _ceKey(ingr.id, ingr.data);
 			if (combined[iu]) combined[iu].count += ingr.count;
 			else combined[iu] = _ceAdapterCopyItem(ingr);
 		}
@@ -238,6 +281,27 @@ function buildCraftTreePlannerResult(world, item, quantity, pr) {
 		valid = false; invalidReason = "INVALID_PLAN";
 	}
 	if (valid && !nodesValid) { valid = false; invalidReason = "INVALID_PLAN"; }
+	/* Workbench tools are reusable: show them in the preview/plan once per tool id
+	 * (not per craft) and require a single any-damage variant. The executor resolves
+	 * the concrete damage, wears it and returns it (it may break at max damage). */
+	var toolDemand = {};
+	for (var cv = 0; cv < crafts.length; cv++) {
+		var cpat = crafts[cv].craft;
+		if (!cpat || !cpat.toolIds) continue;
+		for (var tid2 in cpat.toolIds) toolDemand[tid2] = true;
+	}
+	for (var tid3 in toolDemand) {
+		var tds = world.altDatas ? world.altDatas[tid3] : null;
+		if (tds && tds.length) {
+			var toolUid = _ceKey(parseInt(tid3, 10), tds[0]);
+			plan.toTake[toolUid] = (plan.toTake[toolUid] || 0) + 1;
+			plan.toReserve[toolUid] = (plan.toReserve[toolUid] || 0) + 1;
+		} else {
+			var missingUid = _ceKey(parseInt(tid3, 10), _ceAdapterToolEncodedData(crafts, tid3));
+			plan.missing[missingUid] = (plan.missing[missingUid] || 0) + 1;
+			valid = false; invalidReason = "MISSING";
+		}
+	}
 	if (valid) {
 		for (var rv in plan.toReserve) {
 			if (Object.prototype.hasOwnProperty.call(plan.toReserve, rv) && !(plan.toReserve[rv] > 0)) {

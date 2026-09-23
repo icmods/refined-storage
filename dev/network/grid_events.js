@@ -22,12 +22,13 @@ var GridEvents = {
 	},
 
 	maxConstructCount: function() {
+		/* Abuse guard only (MPC-002): generous default, override via config. */
 		if (typeof Config !== 'undefined' && Config.craftingMaxRequestCount > 0) return Math.floor(Config.craftingMaxRequestCount);
-		return 64;
+		return 1000000;
 	},
 
 	validatedCraftCount: function(eventData) {
-		if(!eventData || !eventData.item || typeof eventData.item.id !== 'number' || eventData.item.id < 0) return 0;
+		if(!eventData || !eventData.item || typeof eventData.item.id !== 'number' || eventData.item.id == 0) return 0;
 		var count = Math.floor(Number(eventData.count));
 		if(!isFinite(count) || count <= 0) return 0;
 		var maxCount = GridEvents.maxConstructCount();
@@ -89,10 +90,20 @@ var GridEvents = {
 	},
 
 	processPushDeleteEvents: function(tile, onEventHandled) {
-		ContainerSync.processEvents(tile.data.pushDeleteEvents, {
+		var ackChanged = false;
+		var ackFull = false;
+		var result = ContainerSync.processEvents(tile.data.pushDeleteEvents, {
 			push: function(item, count) { return tile.pushItem(item, count, true); },
 			remove: function(item, count) { return tile.deleteItem(item, count, true); },
 			getSlot: function(slotKey) { return tile.container.getSlot(slotKey); },
+			itemUid: function(item) { return getItemUid(item); },
+			findByUid: function(uid) {
+				var net = RSNetworks[tile.data.NETWORK_ID];
+				var info = net ? net.info : null;
+				if (!info || !info.items || !info.itemsIndex) return null;
+				var ix = info.itemsIndex[uid];
+				return (ix != undefined && info.items[ix]) ? info.items[ix] : null;
+			},
 			onPushed: function(item, pushed) {
 				var _index;
 				if((_index = tile.originalItemsMap().indexOf(getItemUid(item))) != -1)tile.container.markSlotDirty(_index+'slot');
@@ -113,6 +124,8 @@ var GridEvents = {
 				if(onEventHandled)onEventHandled(playerUid, kind);
 			},
 			onChanged: function(playerUid, fullUpdate) {
+				ackChanged = true;
+				if (fullUpdate) ackFull = true;
 				tile.items();
 				tile.refreshGui(false, false, fullUpdate);
 			},
@@ -120,6 +133,18 @@ var GridEvents = {
 				if (Config.dev) Logger.Log('[CS] rejected ' + record.reason + ' type=' + record.type + ' slot=' + record.slotKey + ' count=' + record.count, 'RefinedStorageDebug');
 			}
 		});
-
+		if (result && result.changed) ackChanged = true;
+		if (result && result.fullUpdate) ackFull = true;
+		var requests = tile.data.transferRequests || {};
+		var ackNumber = 0;
+		for (var rp in requests) {
+			if (requests[rp] > ackNumber) ackNumber = requests[rp];
+		}
+		if (ackNumber > 0) {
+			tile.networkData.putInt('acknowledgedRequest', ackNumber);
+			tile.networkData.putString('requestResult', JSON.stringify({ changed: ackChanged, fullUpdate: ackFull }));
+			tile.networkData.sendChanges();
+			tile.data.transferRequests = {};
+		}
 	}
 };

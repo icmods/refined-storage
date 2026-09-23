@@ -245,7 +245,7 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 			var slotItem = this.container.getSlot('slot_output' + k);
 			var item = {id: importItem.id, count: importItem.count - slotItem.count, data: this.data.useDamage ? importItem.data : -1, extra: this.data.useNbt ? importItem.extra : -1};
 			if(item.count <= 0) continue;
-			if(slotItem.id != 0 && ((slotItem.id != importItem.id) || (slotItem.data != importItem.data && this.data.useDamage) || (this.data.useNbt && fullExtraToString(slotItem.extra) != fullExtraToString(importItem.extra)))) continue;
+			if(slotItem.id != 0 && ((slotItem.id != importItem.id) || (slotItem.data != importItem.data && this.data.useDamage) || (this.data.useNbt && rsExtraDiffers(slotItem.extra, importItem.extra)))) continue;
 			var deleted = this.deleteItem(item);
 			if(deleted < item.count){
 				var count = item.count - deleted;
@@ -262,27 +262,18 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 			} else {
 				slot = slot.asScriptable();
 				var count = Math.min(slot.count, this.data.count);
-				var pushed = this.itemCanBePushed(slot, count, true);
-				if(pushed == 0){
-					this.container.setSlot('slot_input' + this.data.currentSlot, slot.id, slot.count - count, slot.data, slot.extra);
-					this.data.guiDirty = true;
-				} else if(pushed < count){
-					this.container.setSlot('slot_input' + this.data.currentSlot, slot.id, slot.count - (count - pushed), slot.data, slot.extra);
-					this.data.guiDirty = true;
-				} else {
-					this.data.currentSlot++;
-					if(this.data.currentSlot > 8) this.data.currentSlot = 0;
-					if(this.data.guiDirty){
-						if(this.container.getNetworkEntity().getClients().iterator().hasNext())this.container.sendChanges();
-						this.data.guiDirty = false;
-					}
-					return;
-				}
-				if(slot.count <= (count - pushed)){
-					this.container.clearSlot('slot_input' + this.data.currentSlot);
+				/* Push first and keep whatever the network did not accept: no storage mutation
+				 * happens before the accepted amount is known. */
+				var remainder = this.pushItem(slot, count);
+				var pushed = count - (typeof remainder == 'number' && isFinite(remainder) ? remainder : count);
+				if (pushed > 0) {
+					var left = slot.count - pushed;
+					if (left <= 0) this.container.clearSlot('slot_input' + this.data.currentSlot);
+					else this.container.setSlot('slot_input' + this.data.currentSlot, slot.id, left, slot.data, slot.extra);
 					this.data.guiDirty = true;
 				}
-				this.pushItem(slot, count);
+				this.data.currentSlot++;
+				if(this.data.currentSlot > 8) this.data.currentSlot = 0;
 			}
 		}
 		if(this.data.guiDirty){
@@ -294,20 +285,20 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 		this.data.importItems = [{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null}];
 	},
 	itemCanBePushed: function(item, count, _inverted){
-		count = count || item.count;
+		count = rsTakeCount(count, item.count);
 		if (!this.isWorkAllowed()) return _inverted ? count : 0;
 		var res = RSNetworks[this.data.NETWORK_ID].info.itemCanBePushed(item, count);
 		return _inverted ? count - res : res;
 	},
 	pushItem: function (item, count) {
-		count = count || item.count;
+		count = rsTakeCount(count, item.count);
 		if (!this.isWorkAllowed()) return count;
 		var res = RSNetworks[this.data.NETWORK_ID].info.pushItem(item, count);
 		if(this.post_pushItem)this.post_pushItem(item, count, res);
 		return res;
 	},
 	deleteItem: function (item, count) {
-		count = count || item.count;
+		count = rsTakeCount(count, item.count);
 		if (!this.isWorkAllowed()) return count;
 		var res = RSNetworks[this.data.NETWORK_ID].info.deleteItem(item, count);
 		if(this.post_deleteItem)this.post_deleteItem(item, count, res);

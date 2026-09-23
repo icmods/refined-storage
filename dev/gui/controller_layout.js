@@ -13,7 +13,6 @@ function buildControllerElements(elements, otherData, controllerFuncs, switchPag
 	var moving = false;
 	var swipe_y;
 	var swipe_sum = 0;
-	var swipe_dir = 0;
 	var max_y = 0;
 
 	elements["click_frame"] = {

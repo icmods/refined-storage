@@ -16,6 +16,33 @@ var Config = {
 }
 Config.reload();
 
+/* Disk persistence mode (set once at load): false = default, the content list lives in the
+ * world-scope array (RSDiskData) and crafting tasks are saved as before; true = opt-in for
+ * packs that cannot save outside containers and item extras: the list lives in the disk item's
+ * extra ($rs.diskData) and crafting tasks are NOT saved (buffers return to the network). */
+var RS_DISK_DATA_IN_EXTRA = false;
+
+/* User + log notification for item/tile messages (Game.message needs a loaded level). */
+var rsLevelLoaded = false;
+Callback.addCallback("LevelLoaded", function () { rsLevelLoaded = true; });
+Callback.addCallback("LevelLeft", function () { rsLevelLoaded = false; });
+
+function rsNotify(text) {
+	if (rsLevelLoaded) { try { Game.message(text); } catch (e) {} }
+	try { Logger.Log(text, "RS"); } catch (e2) {}
+}
+
+/* Count coercion: only a finite number is an explicit value; anything else uses the fallback. */
+function rsTakeCount(count, itemCount) {
+	if (typeof count == 'number' && isFinite(count)) return count;
+	return (typeof itemCount == 'number' && isFinite(itemCount)) ? itemCount : 0;
+}
+
+/* Config number: 0 is a valid value, unlike the `||` pattern. */
+function rsConfigNumber(value, fallback) {
+	return (typeof value == 'number' && isFinite(value)) ? value : fallback;
+}
+
 const FE = EnergyTypeRegistry.assureEnergyType("FE", 0.25);
 const EU = EnergyTypeRegistry.assureEnergyType("Eu", 1);
 const RF = EnergyTypeRegistry.assureEnergyType("RF", 0.25);
@@ -24,7 +51,19 @@ const RSgroup = ICRender.getGroup("RefinedStoragePECable");
 
 const GUIs = [];
 
+
+
 function rsGetLiveElement(container, name){
+	if (typeof UiCore != 'undefined' && UiCore && typeof UiCore.liveElement == 'function') {
+		/* UiCore.liveElement owns the lookup (window map -> adapter -> getElement)
+		 * plus the release guard; the cache is disabled to keep the old
+		 * "resolve every call" semantics across window rebuilds. */
+		var win = null;
+		try { win = getClientGuiWindow(container, 'main'); } catch(e) { win = null; }
+		var live = win ? UiCore.liveElement(win, name, { cache: false }) : null;
+		if (!live) live = UiCore.liveElement(container, name, { cache: false });
+		return live || null;
+	}
 	var el = null;
 	try {
 		var window_ = getClientGuiWindow(container, 'main');
@@ -233,7 +272,6 @@ const RefinedStorage = {
 		}
 		if (!params.setActive) {
 			params.setActive = function (state, forced, preventRefreshModel) {
-				if(!this.networkEntity) return false;
 				state = this.data.NETWORK_ID != "f" ? !!state : false;
 				if(this.data.isActive == state) return false;
 				if (this.pre_setActive) if(this.pre_setActive(state)) return false;

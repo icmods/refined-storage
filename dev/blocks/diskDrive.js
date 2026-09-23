@@ -294,6 +294,19 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 				return count;
 			}
 		});
+		for (var ds = 0; ds < 8; ds++) {
+			this.container.setSlotGetTransferPolicy('slot' + ds, {
+				transfer: function(itemContainer, slot, id, count, data, extra, player){
+					if (!RS_DISK_DATA_IN_EXTRA || !Disk.items[id]) return count;
+					var diskItem = null;
+					try { diskItem = itemContainer.getSlot(slot); } catch (e) { diskItem = null; }
+					if (!diskItem || diskItem.id != id) return count;
+					/* Never let a disk leave the drive while its payload write fails. */
+					if (!Disk.flushItem(diskItem, slot, itemContainer)) return 0;
+					return count;
+				}
+			});
+		}
 	},
 	post_setActive: function(state){
 		if(this.data.NETWORK_ID != "f")requestNetworkUpdateItems(RSNetworks[this.data.NETWORK_ID].info);
@@ -363,8 +376,15 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 				diskDatas.push({id: 0, data: 0, storage: 0, items_stored: 0});
 				continue;
 			}
+			if (typeof DiskRegistry != 'undefined' && item.extra) {
+				DiskRegistry.repairAnchors(item);
+				if (this.container.getSlot('slot' + i).data != item.data) {
+					this.container.setSlot('slot' + i, item.id, item.count, item.data, item.extra);
+				}
+			}
+			if (typeof Disk.syncMode == 'function') Disk.syncMode(item, 'slot' + i, this.container);
 			if (item.data == 0) {
-				item.data = DiskData.length;
+				item.data = (typeof DiskRegistry != 'undefined' && DiskRegistry.allocateNumericId) ? DiskRegistry.allocateNumericId() : DiskData.length;
 				this.container.setSlot('slot' + i, item.id, item.count, item.data, item.extra);
 			}
 			var disk_data = Disk.getDiskData(item);
@@ -418,6 +438,14 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 			access_type: this.data.access_type
 		};
 		this.container.sendEvent("refreshGui", _data);
+	},
+	pre_destroy: function(){
+		if (!RS_DISK_DATA_IN_EXTRA || !this.container) return;
+		for (var s = 0; s < 8; s++) {
+			var item = null;
+			try { item = this.container.getSlot('slot' + s); } catch (e) { item = null; }
+			if (item && Disk.items[item.id]) Disk.flushItem(item, 'slot' + s, this.container);
+		}
 	},
 	post_destroy: function(){
 		if(RSNetworks && RSNetworks[this.data.LAST_NETWORK_ID] && RSNetworks[this.data.LAST_NETWORK_ID].info)RSNetworks[this.data.LAST_NETWORK_ID].info.updateItems();

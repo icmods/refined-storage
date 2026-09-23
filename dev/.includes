@@ -16,6 +16,7 @@ network/scheduler_adapter.js
 network/grid_events.js
 
 storage/disks.js
+storage/disk_registry.js
 
 upgrade/registry.js
 

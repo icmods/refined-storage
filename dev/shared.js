@@ -1,5 +1,5 @@
 ModAPI.registerAPI("RefinedStorageAPI", {
-    apiVersion: '1.9',
+    apiVersion: '2.0',
     requireGlobal: function (command) {
         return eval(command);
     },

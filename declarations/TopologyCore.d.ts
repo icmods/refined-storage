@@ -103,18 +103,18 @@ declare namespace TopologyCore {
         on(event: string, fn: (data?: any) => void): number;
         /**
          * DFS for a controller from coords (with hint cache + incomplete
-         * marking). opts.includeSelf (default true) — when false the start
+         * marking). options.includeSelf (default true) — when false the start
          * coords are never returned even if they are a controller, so a
          * controller can find its BOUNDARY controller (bridge detection).
          */
-        searchController(coords: Coords, dim: number, out?: { incomplete: boolean }, opts?: { includeSelf?: boolean }): Coords | null;
+        searchController(coords: Coords, dim: number, out?: { incomplete: boolean }, options?: { includeSelf?: boolean }): Coords | null;
         /**
          * Re-derive the component rooted at controllerCoords. Returns the component
          * key, or null when there is no blockSource / the call was made re-entrantly
          * from a host callback (it is then deferred to the next tick, safely).
          * `out.operationId` identifies the operation that performed the flood.
          */
-        floodAssign(controllerCoords: Coords, dim: number, out?: { added: { x: number; y: number; z: number }[]; removed: { x: number; y: number; z: number }[]; incomplete: boolean; incompleteReasons?: IncompleteReason[]; operationId?: number; cause?: string }, opts?: FloodOpts): string | null;
+        floodAssign(controllerCoords: Coords, dim: number, out?: { added: { x: number; y: number; z: number }[]; removed: { x: number; y: number; z: number }[]; incomplete: boolean; incompleteReasons?: IncompleteReason[]; operationId?: number; cause?: string }, options?: FloodOpts): string | null;
         /** Fresh snapshot of a component by controller coords (never live). */
         component(controllerCoords: Coords, dim: number): ComponentSnapshot | null;
         /** Component key owning a node, or null. */
@@ -130,7 +130,7 @@ declare namespace TopologyCore {
          * For stale nodes not covered by a BlockChanged (e.g. a tile entity was
          * removed while the block stayed). Returns true when a component existed.
          */
-        refloodComponentOf(coords: Coords, dim: number, blockSource?: BlockSource, opts?: FloodOpts): boolean;
+        refloodComponentOf(coords: Coords, dim: number, blockSource?: BlockSource, options?: FloodOpts): boolean;
         /**
         * Block change with per-tick dedup. oldData/newData are optional: when
         * omitted the old block's data defaults to 0 and the new block's data

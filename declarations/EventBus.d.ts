@@ -32,9 +32,9 @@ declare namespace EventBus {
 
     interface Bus {
         /** Register a listener; returns a stable subscription id (or -1 when fn is not a function). */
-        on(event: string, fn: (data?: any) => void, scope?: any, opts?: SubscriptionOpts): number;
+        on(event: string, fn: (data?: any) => void, scope?: any, options?: SubscriptionOpts): number;
         /** Run once, then unregister. */
-        once(event: string, fn: (data?: any) => void, scope?: any, opts?: SubscriptionOpts): (data?: any) => void;
+        once(event: string, fn: (data?: any) => void, scope?: any, options?: SubscriptionOpts): (data?: any) => void;
         /** Unregister by callback (accepts the once wrapper); removes every match. */
         off(event: string, fn: (data?: any) => void): void;
         /** Unregister one subscription by id. */
@@ -67,8 +67,8 @@ declare namespace EventBus {
 
     interface NamespaceHandle {
         name: string;
-        on(event: string, fn: (data?: any) => void, opts?: SubscriptionOpts): number;
-        once(event: string, fn: (data?: any) => void, opts?: SubscriptionOpts): (data?: any) => void;
+        on(event: string, fn: (data?: any) => void, options?: SubscriptionOpts): number;
+        once(event: string, fn: (data?: any) => void, options?: SubscriptionOpts): (data?: any) => void;
         off(event: string, fn: (data?: any) => void): void;
         offId(event: string, id: number): boolean;
         /** Optional dev-only payload contract: emit drops + logs when it returns falsy. */

@@ -33,6 +33,24 @@ function _rsTopoMarkChunk(unloaded, dim, chunkX, chunkZ) {
 }
 
 Callback.addCallback("ChunkDiscarded", function (dimensionId, chunkX, chunkZ) {
+	/* Disk payloads of this chunk: write back + drop the cache (Idea A), then rebuild
+	 * the index — all deferred one tick so no container/native handle is touched inside
+	 * the discard callstack (b128 teardown is fragile). */
+	try {
+		TickScheduler.global.ensureDefer("rsChunkDiscard:" + dimensionId + ":" + chunkX + ":" + chunkZ, function () {
+			var flushOk = true;
+			if (typeof rsFlushChunkDisks == 'function') flushOk = rsFlushChunkDisks(dimensionId, chunkX, chunkZ) !== false;
+			/* Keep the cache when the payload write failed: the next sweep retries. */
+			if (flushOk && typeof rsDropChunkDiskCache == 'function') rsDropChunkDiskCache(dimensionId, chunkX, chunkZ);
+			var nets = RSNetworksIntersectChunk(chunkX, chunkZ, dimensionId);
+			for (var ni = 0; ni < nets.length; ni++) {
+				var info = RSNetworks[nets[ni]] && RSNetworks[nets[ni]].info;
+				if (!info) continue;
+				if (typeof RS_DISK_DATA_IN_EXTRA != 'undefined' && RS_DISK_DATA_IN_EXTRA) info.updateItems();
+				else requestNetworkUpdateItems(info);
+			}
+		});
+	} catch (e) {}
 	for (var cid in RSpendingReconnect) {
 		var entry = RSpendingReconnect[cid];
 		if (entry && RSChunkCoordsInChunk(entry.x, entry.z, chunkX, chunkZ)) delete RSpendingReconnect[cid];

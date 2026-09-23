@@ -67,6 +67,10 @@ declare namespace UiCore {
          * { move: 30, accumulate: 70 }.
          */
         thresholds?: { move: number; accumulate: number };
+        /** Optional host hook: when it returns false the whole gesture is ignored. */
+        isActive?(): boolean;
+        /** Optional host hook: element liveness (stale refs after rebuild/close). */
+        isAlive?(element: any): boolean;
     }
     interface SliderOpts {
         itemCount(): number;
@@ -85,6 +89,10 @@ declare namespace UiCore {
         sliderX?: number;
         sliderElementName?: string;
         getElement?(name: string): { setPosition(x: number, y: number): void } | null;
+        /** Optional host hook: when it returns false the whole gesture is ignored. */
+        isActive?(): boolean;
+        /** Optional host hook: element liveness (stale refs after rebuild/close). */
+        isAlive?(element: any): boolean;
     }
     interface SearchOpts {
         /** keyword (string) or false (cleared). */
@@ -102,6 +110,7 @@ declare namespace UiCore {
         positiveLabel?: string;
     }
     interface SlotPool {
+        /** Lazy descriptor (parked off-screen); null for reserved names or when maxCount is reached. */
         get(name: string): any;
         has(name: string): boolean;
         count(): number;
@@ -115,6 +124,8 @@ declare namespace UiCore {
         setScale(name: string, value: number): void;
         setText(name: string, value: string): void;
         setBinding(name: string, key: string, value: any): void;
+        /** False for client containers (`isServer === false`); unknown containers return true. */
+        canSend(): boolean;
         /** container.sendChanges() only when something changed. */
         flush(): boolean;
         /** GUI opened: forget caches so the next flush resends everything. */
@@ -124,31 +135,34 @@ declare namespace UiCore {
     /** Pure pagination math. */
     function pagination(elements: any, config: PaginationConfig): PaginationHelpers;
     /** Swipe page-flip touch handler (7px/15px thresholds; variant layout|anchor). */
-    function attachSwipe(opts: SwipeOpts): (element: any, event: any) => void;
+    function attachSwipe(options: SwipeOpts): (element: any, event: any) => void;
     /** Slider-frame touch handler (DOWN → moving; CLICK → jump/snap). */
-    function attachSlider(opts: SliderOpts): (element: any, event: any) => void;
-    /** Search box descriptors { frame, text }, with an optional clear button. */
-    function searchBox(x: number, y: number, width: number, opts: SearchOpts): { frame: any; text: any };
-    /** Virtual slot pool, parked at (-1000,-1000). */
-    function createSlotPool(opts: { base: any; maxCount?: number }): SlotPool;
-    /** Descriptor darken per predicate. */
-    function applyDarken(elements: any, names: string[], predicate: (name: string) => boolean): number;
-    const DeltaBinder: { wrap(container: any): DeltaBinder };
+    function attachSlider(options: SliderOpts): (element: any, event: any) => void;
+    /** Search box descriptors { frame, text, close() }, with an optional clear button. */
+    function searchBox(x: number, y: number, width: number, options: SearchOpts): { frame: any; text: any; close(): void };
+    /** Virtual slot pool, parked at (-1000,-1000); descriptors clone `base`; maxCount caps creation. */
+    function createSlotPool(options: { base: any; maxCount?: number }): SlotPool;
+    /** Descriptor darken per predicate; `options.window.forceRefresh()` runs when something changed. */
+    function applyDarken(elements: any, names: string[], predicate: (name: string) => boolean, options?: { window?: { forceRefresh(): void } }): number;
+    const DeltaBinder: {
+        /** options.onError(error, id) is called for every failing container write (id = kind:name). */
+        wrap(container: any, options?: { onError?(error: any, id: string): void }): DeltaBinder;
+    };
     /** Strip §-codes + truncate. */
     function cutItemName(name: string | null, maxLen?: number): string;
     /** Text width for a font size (cached; engine Font; estimate fallback). */
     function textWidth(text: string, size?: number): number;
-    /** Bounds of elements + drawing (cached by structural signature): scrollX/scrollY/minX/minY/width/height. */
+    /** Bounds of elements + drawing (cached by structural signature; each call returns a fresh copy): scrollX/scrollY/minX/minY/width/height. */
     function measureContent(content: any): { scrollX: number; scrollY: number; minX: number; minY: number; width: number; height: number };
-    /** Scale descriptors in place (text font, frames, sizes, x/y). Returns content. */
+    /** Scale descriptors in place (text font, frames, sizes, x/y). scale must be a finite number > 0. Returns content. */
     function scaleContent(content: any, scale: number): any;
     /** Offset descriptors in place. Returns content. */
     function offsetContent(content: any, x: number, y: number): any;
     /**
      * Fit into maxWidth/maxHeight (minus padding): measure, shrink by at most
-     * maxScale (default 1), then center the bbox on opts.center {x,y}.
+     * maxScale (default 1), then center the bbox on options.center {x,y}.
      */
-    function fitContent(content: any, opts?: {
+    function fitContent(content: any, options?: {
         maxScale?: number;
         minScale?: number;
         maxWidth?: number;
@@ -160,7 +174,7 @@ declare namespace UiCore {
      * Vertical tab strip descriptors: frame + visual slot icon per tab.
      * maxVisible/offset clip long strips (overflow is host-scrolled).
      */
-    function tabs(opts: {
+    function tabs(options: {
         tabs: any[];
         x?: number;
         y?: number;
@@ -173,11 +187,30 @@ declare namespace UiCore {
         offset?: number;
     }): { elements: { [name: string]: any }; count: number; visible: number; offset: number; hasOverflow: boolean };
     /**
-     * Tap outside `bounds` → onClose(); returns a touch handler (DOWN/CLICK
-     * inside → false; outside → onClose() + true).
+     * Tap outside `bounds` → onClose() ONCE; returns a touch handler
+     * (DOWN/CLICK inside → false; outside → onClose() + true). `options.isOpen()`
+     * false skips the close; isActive/isAlive hook as on the gesture handlers.
      */
-    function outsideClose(bounds: { xStart: number; xEnd: number; yStart: number; yEnd: number }, onClose: () => void): (element: any, event: any) => boolean;
-    /** Current display: width (max metric), height (min metric), density. Cached; force=true recomputes. */
+    function outsideClose(bounds: { xStart: number; xEnd: number; yStart: number; yEnd: number }, onClose: () => void, options?: {
+        isOpen?(): boolean;
+        isActive?(): boolean;
+        isAlive?(element: any): boolean;
+    }): (element: any, event: any) => boolean;
+    /**
+     * Live (anti stale-reference) element lookup — resolve `container`/`name`
+     * at call time; never keep the returned element across a refresh.
+     * Resolution order: getElements() map → getUiAdapter().getElement(name) →
+     * getElement(name). An element with `isReleased() === true` / `released ===
+     * true` is treated as missing (best effort; current engines filter it
+     * inside getElement and do not expose the flag in JS).
+     * Cached for ONE tick (`options.tick` number/provider; default Date.now()/50);
+     * `options.cache === false` bypasses it; cleared by `dispose()`.
+     */
+    function liveElement(container: any, name: string, options?: {
+        cache?: boolean;
+        tick?: number | (() => number);
+    }): any | null;
+    /** Current display: width (max metric), height (min metric), density. Cached when valid; invalid (0×0) results are not cached; force=true recomputes. */
     function display(force?: boolean): { width: number; height: number; density: number };
     /** Force the display cache to be recomputed (orientation/resolution change). */
     function displayRefresh(): { width: number; height: number; density: number };
@@ -189,11 +222,12 @@ declare namespace UiCore {
     function sp(value: number): number;
     /**
      * Native confirm dialog; returns true when scheduled, false without engine
-     * APIs. opts: { title, positiveLabel, negativeLabel, onResult(ok) }.
+     * APIs or when `options.isOpen()` is false.
+     * options: { title, positiveLabel, negativeLabel, onResult(ok), isOpen() }.
      */
-    function confirm(message: string, opts?: { title?: string; positiveLabel?: string; negativeLabel?: string; onResult?(ok: boolean): void }): boolean;
-    /** Native alert dialog (single button); returns true when scheduled. */
-    function alert(message: string, opts?: { title?: string; positiveLabel?: string; onClose?(): void }): boolean;
+    function confirm(message: string, options?: { title?: string; positiveLabel?: string; negativeLabel?: string; onResult?(ok: boolean): void; isOpen?(): boolean }): boolean;
+    /** Native alert dialog (single button); returns true when scheduled (false when `options.isOpen()` is false). */
+    function alert(message: string, options?: { title?: string; positiveLabel?: string; onClose?(): void; isOpen?(): boolean }): boolean;
     interface Skin {
         base?: string | string[];
         post_base?: any;
@@ -231,11 +265,58 @@ declare namespace UiCore {
      * at load; usable directly as descriptor `bitmap:` names. See README.
      */
     const embedded: { [name: string]: string };
+    interface ExclusiveStats {
+        runs: number;
+        deferred: number;
+        pending: number;
+        owner: string | null;
+        depth: number;
+        lastOwner: string | null;
+        lastDeferrer: string | null;
+    }
+    /**
+     * Thread-id provider used by `exclusive`. Host example:
+     * `UiCore.setThreadIdProvider(function () { return java.lang.Thread.currentThread().getName(); })`.
+     * Default provider returns "single" (all calls treated as the same thread).
+     */
+    function setThreadIdProvider(fn: (() => string | null) | null): void;
+    /**
+     * Cooperative, NON-blocking mutual exclusion per `key` (no UI-thread
+     * marshaling — see safeRun). Same thread as the owner re-enters; another
+     * thread while busy is QUEUED (one pending entry per wrapped function,
+     * latest args win, the call returns false) and replayed by
+     * replayPending(key), typically from the next tick.
+     * Optional `tag` names the logical function across re-wraps: re-wrapping
+     * drops only pending calls with the same tag (without a tag the legacy
+     * behavior clears all pending calls for the key).
+     */
+    function exclusive<T extends (...args: any[]) => any>(key: string, fn: T, tag?: string): T;
+    /**
+     * Enqueue a wrapped call for `key` WITHOUT executing it (host "single
+     * executor" policy: calls from other threads are queued and replayed on
+     * the executor thread). The wrapper must come from `exclusive(key, fn)`
+     * (tag check) — foreign wrappers are rejected. Returns true when queued.
+     */
+    function queueCall(key: string, wrapper: (...args: any[]) => any, self: any, args: any): boolean;
+    /** True when at least one queued call waits for `key` (never creates state). */
+    function hasPending(key: string): boolean;
+    /**
+     * Run queued calls for `key` on the CURRENT thread; returns how many ran.
+     * options.expectedOwner keeps entries deferred by other threads queued;
+     * options.onError(error, entry) is called for a throwing entry (dropped).
+     */
+    function replayPending(key: string, options?: { expectedOwner?: string; onError?(error: any, entry: any): void }): number;
+    /** Forget all queued calls for `key` without replay (window closed); returns how many were dropped. Never creates state. */
+    function dropPending(key: string): number;
+    /** Remove the lock + counters for `key` (diagnostics); queued calls are dropped. Returns true when it existed. */
+    function forget(key: string): boolean;
+    /** Counters snapshot for `key` (diagnostics/tests; never creates state). */
+    function exclusiveStats(key: string): ExclusiveStats | null;
     /**
      * Run `fn` on the UI thread (main) via UI.getContext().runOnUiThread;
-     * falls back to a direct call when unavailable. Exceptions are isolated
-     * and logged under logTag (default "UiCore"). Returns true when posted to
-     * the UI thread, false when executed directly / invalid input.
+     * falls back to a direct call when unavailable (the fallback is logged).
+     * Exceptions are isolated + logged under logTag (default "UiCore").
+     * Returns true when posted, false when executed directly / invalid.
      *
      * WARNING: every posted callback competes with rendering and touch on the
      * main thread. Heavy work (full GUI rebuilds, sorting, native text
@@ -245,4 +326,10 @@ declare namespace UiCore {
      * Use safeRun only for light, targeted UI mutations.
      */
     function safeRun(fn: () => void, logTag?: string): boolean;
+    /**
+     * LevelLeft cleanup: drops queued exclusive calls, clears memo caches
+     * (textWidth/measureContent/display) and resets the thread-id provider
+     * (re-set it on the next LevelLoaded). Idempotent; returns dropped calls.
+     */
+    function dispose(): number;
 }

@@ -171,7 +171,9 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 	created: function () {
         if(!this.blockSource)this.blockSource = BlockSource.getDefaultForDimension(this.dimension);
 		delete this.data.controller_coords;
-		while (searchController(this, false, this.blockSource)) {
+		var _cleanupPasses = 0;
+		for (var _cc = 0; _cc < 64 && searchController(this, false, this.blockSource); _cc++) {
+			_cleanupPasses++;
 			for (var i in sides) {
 				var coordss = {};
 				coordss.x = this.x + sides[i][0];
@@ -202,6 +204,9 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 				}
 			}
 			delete this.data.controller_coords;
+		}
+		if (_cleanupPasses >= 64) {
+			Logger.Log('controller conflict cleanup stopped after 64 passes', 'RefinedStorageError');
 		}
 	},
 	setActive: function(state, forced, preventRefreshModel){
@@ -257,7 +262,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			_data['info'] = NetworkInfo.create(_data, controllerTile, netId);
 			RSNetworks[netId] = _data;
 			_RS._emit("networkCreated", {netId: netId, tile: this});
-			// Restore immediately so early processing outputs can be credited.
+			// Restore immediately so early processing outputs can be credited (savecore mode).
 			restoreCraftingTasks(this);
 			this.data.ticks = 0;
 			this.data.timer = 20;
@@ -300,7 +305,8 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 	},
 	updateItems: function(){
 		if(this.data.NETWORK_ID != 'f'){
-			RSNetworks[this.data.NETWORK_ID].info.updateItems();
+			var _net = RSNetworks[this.data.NETWORK_ID];
+			if (_net && _net.info) _net.info.updateItems();
 		}
 	},
 	updateControllerNetwork: function(_first){
@@ -399,7 +405,10 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			if (_orphanNet && _orphanNet.info) {
 				for (var _k in _orphanNet) {
 					if (_k != 'info' && _orphanNet[_k] && _orphanNet[_k].id == BlockID.RS_controller) {
-						if (typeof _savedCraftingTasks !== 'undefined') delete _savedCraftingTasks[_k];
+						if (typeof _savedCraftingTasks !== 'undefined') {
+							delete _savedCraftingTasks[_k];
+							delete _savedCraftingTasks[CoreKit.coords.key(this.dimension, _k)];
+						}
 						delete _orphanNet[_k];
 					}
 				}
@@ -483,7 +492,10 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 					var task = info.craftingTasks[ti];
 					if (!task) continue;
 					_RS._emit("taskCancelled", {netId: this.data.NETWORK_ID, taskId: task.id});
-					if (task.flushBuffer) task.flushBuffer(info);
+					if (task.flushBuffer) {
+						try { task.flushBuffer(info); }
+						catch (e) { Logger.Log('task buffer flush failed on destroy: ' + e, 'RefinedStorageError'); }
+					}
 				}
 			}
 			_RS._emit("networkDestroyed", {netId: this.data.NETWORK_ID, tile: this});
@@ -492,7 +504,10 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			NetworkTimer.destroyNetwork(this.data.NETWORK_ID);
 		}
 		if(!isDropAllowed && isDropAllowed !== undefined){
-			if (typeof _savedCraftingTasks !== 'undefined') delete _savedCraftingTasks[cts(this)];
+			if (typeof _savedCraftingTasks !== 'undefined') {
+				delete _savedCraftingTasks[cts(this)];
+				delete _savedCraftingTasks[CoreKit.coords.key(this.dimension, cts(this))];
+			}
 			return;
 		}
 		this.data.LAST_NETWORK_ID = this.data.NETWORK_ID;

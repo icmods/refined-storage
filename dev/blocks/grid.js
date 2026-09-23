@@ -38,6 +38,7 @@ var gridData = {
 	lastPage: -1,
 	textSearch: false,
 	slotsKeys: [],
+	_renderedUid: {},
 	updateGui: function(){}
 }
 
@@ -90,15 +91,29 @@ function gridSwitchPageInner(page, container, ignore, dontMoveSlider){
 	for (var i = page * x_count; i < page * x_count + slots_count; i++) {
 		var a = i - (page * x_count);
 		var item = slots[slotsKeys[i]] || { id: 0, data: 0, count: 0, extra: null };
+		if(slotsKeys[i]) gridData._renderedUid[slotsKeys[i]] = item.id ? getItemUid(item) : '';
 		if(elements_.get) elements_.get("slot" + a).setBinding('text', (!item.count ? 'Craft' : cutNumber(item.count, true) + ""));
 		else if(elements_["slot" + a] && elements_["slot" + a].setBinding) elements_["slot" + a].setBinding('text', (!item.count ? 'Craft' : cutNumber(item.count, true) + ""));
 		container.setSlot("slot" + a, item.id, item.count, item.data, item.extra || null);
 	}
 	return true;
 }
+gridSwitchPage = rsExclusive("grid.ui", gridSwitchPage, "switchPage");
 var _gridSwitchPage__ = gridSwitchPage;
 
 var _elementsGUI_grid = {};
+
+/* Claims at most one pending craft entry for an item, in the same check order as
+ * the former craftsPush.indexOf+splice sequence. */
+function rsClaimCraftPush(crafts, craftsPending, itemUid, id, data){
+	var pushKey = null;
+	if (crafts[itemUid]) pushKey = itemUid;
+	else if (crafts[id + '_' + data]) pushKey = id + '_' + data;
+	else if (crafts[id + '_-1']) pushKey = id + '_-1';
+	else if (crafts[id + ':-1:']) pushKey = id + ':-1:';
+	if (pushKey !== null && craftsPending[pushKey]) { delete craftsPending[pushKey]; return true; }
+	return false;
+}
 
 var gridGUI = new UI.StandartWindow({
 	standart: {
@@ -129,7 +144,7 @@ gridGUI.getWindow('main').forceRefresh();
 
 testButtons(gridGUI.getWindow('header').getContent().elements, function(){
 	grid_set_elements(315, 70, gridConsPercents*(UI.getScreenHeight() - 60), 0, _elementsGUI_grid, gridData, null, null, gridFuncs);
-});
+	});
 
 var inv_elements = gridGUI.getWindow('inventory').getContent();
 inv_elements.elements["_CLICKFRAME_"] = {
@@ -149,8 +164,9 @@ function gridOpenGui(container, window, content, eventData){
 	if(!content || !window || !window.isOpened()) return;
 	eventData.disksStorage = Number(eventData.disksStorage);
 	Object.assign(gridData, eventData);
+	gridData.container = container;
 	if(!eventData.refresh) gridData._lastInfoSignature = null;
-	gridData.updateGui = function(refresh, updateFilters, nonlocal){
+	gridData.updateGui = rsExclusive("grid.ui", function(refresh, updateFilters, nonlocal){
 		delete container.slots.bindings;
 		delete container.slots.slots;
 		var synced = SyncedNetworkData.getClientSyncedData(eventData.name);
@@ -188,7 +204,14 @@ function gridOpenGui(container, window, content, eventData){
 			}
 		}
 		gridSwitchPage(refresh ? gridData.lastPage : 1, container, true);
-	}
+	}, "updateGui");
+	/* Apply the state published by the server into the eventData closure so the local refresh renders identically. */
+	gridData.applyServerState = function(nd, id){
+		rsApplyUiState(nd, id, eventData, gridData);
+	};
+	gridData.isUiLive = function(){
+		try { return !!(window && typeof window.isOpened == 'function' && window.isOpened()); } catch(e) { return false; }
+	};
 	gridData.updateGui(eventData.refresh, eventData.updateFilters, true);
 }
 
@@ -238,15 +261,20 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 	onWindowClose: function(){
 		rsResetStorageTouch();
 		rsRemoveOpenedGrid(this);
+		rsDropPending("grid.ui");
+		this._hashRetry = 0;
+		if(this._nsState) this._nsState.retry = 0;
 	},
 	onDisconnectionPlayer: function(client){
 		if(client && this.data.pushDeleteEvents) delete this.data.pushDeleteEvents[client.getPlayerUid()];
+		if(client && this.data.transferRequests) delete this.data.transferRequests[client.getPlayerUid()];
 	},
 	onWindowOpen: function(container, client){
 		if(InnerCore_pack.packVersionCode >= 119)this.refreshGui(true, client); 
 		if(this.data.NETWORK_ID == 'f') return;
 		var net = RSNetworks[this.data.NETWORK_ID];
 		if(!net) return;
+		if(!net.info) return;
 		var coords_id = this.coords_id();
 		if(net[coords_id]) net[coords_id].isOpenedGrid = true;
 		if(net.info.openedGrids.findIndex(function(element){return cts(element) == coords_id}) == -1) net.info.openedGrids.push({x: this.x, y: this.y, z: this.z});
@@ -266,6 +294,7 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 	},
 	post_init: function(){
 		this.data.pushDeleteEvents = {};
+		this.data.transferRequests = {};
 	},
 	tick: function () {
 		if (this.container.getNetworkEntity().getClients().iterator().hasNext()) {
@@ -291,45 +320,57 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		var info = RSNetworks[this.data.NETWORK_ID].info;
 		var items = this.originalItems();
 		var itemMap = {};
-		for(var i = 0; i < items.length; i++) itemMap[items[i].id + '_' + items[i].data] = true;
+		for(var i = 0; i < items.length; i++) {
+			itemMap[getItemUid(items[i])] = true;
+			itemMap[items[i].id + '_' + items[i].data] = true;
+		}
 		var crafts = {};
 		for(var uid in info.crafts){
 			if(!itemMap[uid]){
-				var parts = uid.split('_');
-				crafts[uid] = {id: parseInt(parts[0]), data: parseInt(parts[1]), count: 0};
+				var parsedCraft = CoreKit.Items.parseUid(uid);
+				crafts[uid] = {id: parsedCraft.id, data: parsedCraft.data, count: 0};
 			}
 		}
 		return crafts;
+	},
+	publishUiState: function () {
+		rsPublishUiState(this);
 	},
 	items: function (forced) {
 		if (!this.isWorkAllowed()) {
 			return [];
 		}
 		var items = this.originalItems().slice();
-		var allSlots = Object.keys(this.container.slots);
-		for (var ci = 0; ci < allSlots.length; ci++) {
-			if (allSlots[ci][0] >= '0' && allSlots[ci][0] <= '9') this.container.setSlot(allSlots[ci], 0, 0, 0);
-		}
 		var crafts = this.originalCrafts();
-		var craftsPush = Object.keys(crafts);
+		var craftsList = Object.keys(crafts);
+		var craftsPending = {};
+		for(var cp = 0; cp < craftsList.length; cp++) craftsPending[craftsList[cp]] = true;
 		var craftSlots = [];
+		var desired = {};
 		for(var i = 0; i < items.length; i++){
-			this.container.setSlot(i+'slot', items[i].id, items[i].count, items[i].data, items[i].extra || null);
-			var uid1 = items[i].id + '_' + items[i].data;
-			if(crafts[uid1]) craftsPush.splice(craftsPush.indexOf(uid1), 1);
-			else if(crafts[items[i].id + '_-1']) craftsPush.splice(craftsPush.indexOf(items[i].id + '_-1'), 1);
+			desired[i+'slot'] = { id: items[i].id, count: items[i].count, data: items[i].data, extra: items[i].extra || null };
+			var uid1 = getItemUid(items[i]);
+			/* Each item uid is unique, so at most one pending entry is claimed per item;
+			 * the claim order matches the old indexOf/splice checks. */
+			rsClaimCraftPush(crafts, craftsPending, uid1, items[i].id, items[i].data);
 			craftSlots.push(i+'slot');
+		}
+		var craftsPush = [];
+		for (var cp2 = 0; cp2 < craftsList.length; cp2++) {
+			if (craftsPending[craftsList[cp2]]) craftsPush.push(craftsList[cp2]);
 		}
 		for(var k in craftsPush){
 			var slotId = items.length + Number(k);
-			var splitedItem = craftsPush[k].split('_');
-			var item = {id: Number(splitedItem[0]), data: Number(splitedItem[1]), count: 0};
-			this.container.setSlot(slotId + 'slot', item.id, 0, item.data);
+			var parsedPush = CoreKit.Items.parseUid(craftsPush[k]);
+			var item = {id: parsedPush.id, data: parsedPush.data, count: 0};
+			desired[slotId + 'slot'] = { id: item.id, count: 0, data: item.data, extra: null };
 			items.push(item);
 			craftSlots.push(slotId + 'slot');
 		}
+		rsApplySlotDiff(this.container, desired);
 		this.data.craftSlots = craftSlots;
 		this.container.sendChanges();
+		this.publishUiState();
 		return items;
 	},
 	originalItems: function(){
@@ -369,14 +410,14 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		return RSNetworks[this.data.NETWORK_ID].info.stored;
 	},
 	pushItem: function (item, count, nonUpdate) {
-		count = count || item.count;
+		count = rsTakeCount(count, item.count);
 		if (!this.isWorkAllowed()) return count;
 		var res = RSNetworks[this.data.NETWORK_ID].info.pushItem(item, count, nonUpdate);
 		if(this.post_pushItem)this.post_pushItem(item, count, res);
 		return res;
 	},
 	deleteItem: function (item, count, nonUpdate) {
-		count = count || item.count;
+		count = rsTakeCount(count, item.count);
 		if (!this.isWorkAllowed()) return count;
 		var res = RSNetworks[this.data.NETWORK_ID].info.deleteItem(item, count, nonUpdate);
 		if(this.post_deleteItem)this.post_deleteItem(item, count, res);
@@ -400,6 +441,9 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		this.sendPacket("refreshModel", {block_data: this.data.block_data, isActive: this.data.isActive, coords: {x: this.x, y: this.y, z: this.z, dimension: this.dimension}});
 	},
 	refreshGui: function(first, client, updateFilters){
+		this.publishUiState();
+		/* The openGui payload is sent only on open; refreshes are applied locally from itemsVersion. */
+		if(!first) return;
 		var _data = buildGridPayload(this, first, updateFilters);
 		if(client){
 			this.container.sendEvent(client, "openGui", _data);
@@ -420,12 +464,21 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 			render.addEntry(model);
 			BlockRenderer.mapAtCoords(this.x, this.y, this.z, render);
 		},
+		flushPendingTransfer: function(){
+			if(!this.networkData.getBoolean('update', false)) return;
+			this.networkData.putBoolean('update', false);
+			var transferSpace = buildPushDeleteEvents(this.networkData);
+			this.sendPacket("pushDeleteEvents", {pushDeleteEvents: transferSpace.events, transferRequestNumber: transferSpace.requestNumber});
+		},
 		tick: function(){
-			if(this.networkData.getBoolean('update', false)){
-				this.networkData.putBoolean('update', false);
-				var pushDeleteEvents = buildPushDeleteEvents(this.networkData);
-				this.sendPacket("pushDeleteEvents", {pushDeleteEvents: pushDeleteEvents})
-			}
+			if(typeof gridData != 'undefined' && gridData) gridData.clientTile = this;
+			this.flushPendingTransfer();
+			/* The ack is consumed but never triggers updateGui: rendering has a single
+			 * trigger (itemsVersion), otherwise one transfer renders twice. */
+			ContainerSync.readRequestResult(this.networkData);
+			/* Local refresh on a new server version; only with an open window and no
+			 * active gesture (the version is marked inside the consumer). */
+			rsConsumeUiVersion(this, gridData, function () { gridData.updateGui(true, false, true); });
 		},
 		events: {
 			refreshModel: function(eventData, packetExtra) {
@@ -462,8 +515,13 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		pushDeleteEvents: function(packetData, packetExtra, connectedClient) {
 			if(!packetData || !packetData.pushDeleteEvents) return;
 			if(!MpCore.isWatching(this, connectedClient)) return;
-			var playerUid = connectedClient.getPlayerUid();
-			this.data.pushDeleteEvents[playerUid] = GridEvents.mergePushDeleteEvents(this.data.pushDeleteEvents[playerUid], packetData.pushDeleteEvents);
+			try {
+				var playerUid = connectedClient.getPlayerUid();
+				this.data.pushDeleteEvents[playerUid] = GridEvents.mergePushDeleteEvents(this.data.pushDeleteEvents[playerUid], packetData.pushDeleteEvents);
+				if(!this.data.transferRequests) this.data.transferRequests = {};
+				if(packetData.transferRequestNumber) this.data.transferRequests[playerUid] = packetData.transferRequestNumber;
+				GridEvents.processPushDeleteEvents(this);
+			} catch (e) { Logger.Log('pushDeleteEvents failed: ' + e, 'RefinedStorageError'); }
 		}
 	}
 })

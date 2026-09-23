@@ -60,7 +60,6 @@ function _topoAuthRebuildNeeded(component, cKey) {
 	var net = tile.data.NETWORK_ID;
 	if (net && net != 'f' && RSNetworks[net] && RSNetworks[net].info) RSNetworks[net].info.incomplete = true;
 	tile.data.updateControllerNetwork = true;
-	if (Config.dev) Logger.Log('[tcShadow] rebuildNeeded ' + cKey, 'RefinedStorageDebug');
 }
 
 // After TC stabilizes the graph, finalize RS tiles affected by a change so the host
@@ -217,7 +216,7 @@ function _topoAuthScheduleReflood(cKey, dim) {
 }
 
 // TC-driven replica of `set_net_for_blocks`: attach (real net_id) / detach (net_id 'f').
-function _topoAuthSetNet(coords, net_id, self, first, active, forced, opts) {
+function _topoAuthSetNet(coords, net_id, self, first, active, forced, options) {
 	var dim = coords.dimension != undefined ? coords.dimension : 0;
 	var bs = coords.blockSource || _topoAuthSource(dim);
 	if (!bs) return false;
@@ -236,7 +235,7 @@ function _topoAuthSetNet(coords, net_id, self, first, active, forced, opts) {
 	var incomplete = false;
 	try {
 		_topoAuth.floodAssign({ x: coords.x, y: coords.y, z: coords.z, blockSource: bs }, dim, null,
-		{ cause: "assign", destructive: !(opts && opts.destructive === false) });
+		{ cause: "assign", destructive: !(options && options.destructive === false) });
 		var comp = _topoAuth.component({ x: coords.x, y: coords.y, z: coords.z }, dim);
 		incomplete = comp ? comp.incomplete : false;
 	} catch (e) {}
@@ -247,10 +246,23 @@ function _topoAuthSetNet(coords, net_id, self, first, active, forced, opts) {
 
 // Re-flood the component of the controller reachable from `coords` (RS parity:
 // updateControllerNetwork / checkAndSetNetOnCoords). Safe no-op without a controller.
+// Deduplicated per controller and tick: the neighbours of a removed block usually resolve
+// to the same component, and one flood is enough.
+var _topoAuthRefloodStamp = -1;
+var _topoAuthRefloodDone = {};
 function _topoAuthRefloodFrom(coords, bs, destructive) {
 	try {
 		var ctrl = searchController({ x: coords.x, y: coords.y, z: coords.z, blockSource: bs }, true);
 		if (ctrl) {
+			var stamp = World.getThreadTime();
+			if (_topoAuthRefloodStamp != stamp) {
+				_topoAuthRefloodStamp = stamp;
+				_topoAuthRefloodDone = {};
+			}
+			var dim = (bs && typeof bs.getDimension == "function") ? bs.getDimension() : 0;
+			var floodKey = (destructive === true ? 'D:' : 'N:') + dim + ':' + cts(ctrl);
+			if (_topoAuthRefloodDone[floodKey]) return;
+			_topoAuthRefloodDone[floodKey] = true;
 			var cTile = World.getTileEntity(ctrl.x, ctrl.y, ctrl.z, bs);
 			if (cTile && cTile.data && cTile.data.NETWORK_ID != 'f') {
 				_topoAuthSetNet(cTile, cTile.data.NETWORK_ID, false, false, cTile.data.isActive, false,

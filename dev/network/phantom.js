@@ -160,6 +160,7 @@ var _rsPhantomProto = {
 			}
 		});
 		this.container.setGlobalSlotSavingEnabled(false);
+		rsDetachMonitorListener(this);
 		this._monitorListener = makeMonitorListener(this, 'refreshMonitorPage', '_monitorChangedTaskId');
 		this.__initialized = true;
 	},
@@ -176,12 +177,15 @@ var _rsPhantomProto = {
 		var info = RSNetworks[this.data.NETWORK_ID].info;
 		var items = this.originalItems();
 		var itemMap = {};
-		for (var i = 0; i < items.length; i++) itemMap[items[i].id + '_' + items[i].data] = true;
+		for (var i = 0; i < items.length; i++) {
+			itemMap[getItemUid(items[i])] = true;
+			itemMap[items[i].id + '_' + items[i].data] = true;
+		}
 		var crafts = {};
 		for (var uid in info.crafts) {
 			if (!itemMap[uid]) {
-				var parts = uid.split('_');
-				crafts[uid] = {id: parseInt(parts[0]), data: parseInt(parts[1]), count: 0};
+				var parsedCraft = CoreKit.Items.parseUid(uid);
+				crafts[uid] = {id: parsedCraft.id, data: parsedCraft.data, count: 0};
 			}
 		}
 		return crafts;
@@ -198,15 +202,17 @@ var _rsPhantomProto = {
 		var craftSlots = [];
 		for (var i = 0; i < items.length; i++) {
 			this.container.setSlot(i + 'slot', items[i].id, items[i].count, items[i].data, items[i].extra || null);
-			var uid1 = items[i].id + '_' + items[i].data;
+			var uid1 = getItemUid(items[i]);
 			if (crafts[uid1]) craftsPush.splice(craftsPush.indexOf(uid1), 1);
+			else if (crafts[items[i].id + '_' + items[i].data]) craftsPush.splice(craftsPush.indexOf(items[i].id + '_' + items[i].data), 1);
 			else if (crafts[items[i].id + '_-1']) craftsPush.splice(craftsPush.indexOf(items[i].id + '_-1'), 1);
+			else if (crafts[items[i].id + ':-1:']) craftsPush.splice(craftsPush.indexOf(items[i].id + ':-1:'), 1);
 			craftSlots.push(i + 'slot');
 		}
 		for (var k in craftsPush) {
 			var slotId = items.length + Number(k);
-			var splitedItem = craftsPush[k].split('_');
-			var item = {id: Number(splitedItem[0]), data: Number(splitedItem[1]), count: 0};
+			var parsedPush = CoreKit.Items.parseUid(craftsPush[k]);
+			var item = {id: parsedPush.id, data: parsedPush.data, count: 0};
 			this.container.setSlot(slotId + 'slot', item.id, 0, item.data);
 			items.push(item);
 			craftSlots.push(slotId + 'slot');
@@ -240,12 +246,12 @@ var _rsPhantomProto = {
 		return RSNetworks[this.data.NETWORK_ID].info.stored;
 	},
 	pushItem: function(item, count, nonUpdate) {
-		count = count || item.count;
+		count = rsTakeCount(count, item.count);
 		if (!this.isWorkAllowed()) return count;
 		return RSNetworks[this.data.NETWORK_ID].info.pushItem(item, count, nonUpdate);
 	},
 	deleteItem: function(item, count, nonUpdate) {
-		count = count || item.count;
+		count = rsTakeCount(count, item.count);
 		if (!this.isWorkAllowed()) return count;
 		return RSNetworks[this.data.NETWORK_ID].info.deleteItem(item, count, nonUpdate);
 	},
@@ -384,26 +390,32 @@ var _rsPhantomProto = {
 		var config = this.data.wirelessConfig || Config.wirelessGrid;
 		var itemId = this.data.wirelessItemId || ItemID.RSwirelessGrid;
 		GridEvents.processPushDeleteEvents(this, function(playerUid, eventType) {
+			tile.data.pollDirty = true;
 			if (tile.data[sessionMap] && tile.data[sessionMap][playerUid]) {
-				rsDrainWirelessItem(tile, Number(playerUid), eventType == 'push' ? config.insertUsage : config.extractUsage, itemId, config.capacity, sessionMap, 'Wireless terminal is out of energy.');
+				rsDrainWirelessItem(tile, Number(playerUid), eventType == 'push' ? (config.insertUsage || 0) : (config.extractUsage || 0), itemId, config.capacity, sessionMap, 'Wireless terminal is out of energy.');
 				_RS._emit("phantomItemMoved", {netId: tile.data.NETWORK_ID, playerUid: Number(playerUid), kind: eventType});
 			}
 		});
-		this.data.pollDirty = true;
 	},
 	events: {
 		pushDeleteEvents: function(packetData, packetExtra, connectedClient) {
 			if(!packetData || !packetData.pushDeleteEvents) return;
 			if(!MpCore.isWatching(this, connectedClient)) return;
-			var playerUid = connectedClient.getPlayerUid();
-			this.data.pushDeleteEvents[playerUid] = GridEvents.mergePushDeleteEvents(this.data.pushDeleteEvents[playerUid], packetData.pushDeleteEvents);
+			try {
+				var playerUid = connectedClient.getPlayerUid();
+				this.data.pushDeleteEvents[playerUid] = GridEvents.mergePushDeleteEvents(this.data.pushDeleteEvents[playerUid], packetData.pushDeleteEvents);
+				if(!this.data.transferRequests) this.data.transferRequests = {};
+				if(packetData.transferRequestNumber) this.data.transferRequests[playerUid] = packetData.transferRequestNumber;
+			} catch (e) { Logger.Log('pushDeleteEvents failed: ' + e, 'RefinedStorageError'); }
 		}
 	},
 	containerEvents: {
 		updateFilter: function(eventData, connectedClient) {
+			if(!MpCore.isWatching(this, connectedClient)) return;
 			GridEvents.updateFilter(this);
 		},
 		updateReverseFilter: function(eventData, connectedClient) {
+			if(!MpCore.isWatching(this, connectedClient)) return;
 			GridEvents.updateReverseFilter(this);
 		},
 		craftPreview: function(eventData, connectedClient) {
@@ -492,12 +504,15 @@ var _rsPhantomProto = {
 	},
 	onDisconnectionPlayer: function(client) {
 		if (client && this.data.pushDeleteEvents) delete this.data.pushDeleteEvents[client.getPlayerUid()];
+		if (client && this.data.transferRequests) delete this.data.transferRequests[client.getPlayerUid()];
 		if (client && client.getPlayerUid() == this.data.playerUid) rsDeferPhantomDestroy(this, 'player disconnected');
 	},
 	client: {
 		ticks: 0,
 		tick: function() {
 			this.ticks++;
+			var ack = ContainerSync.readRequestResult(this.networkData);
+			if (ack && ack.changed) this.updateCrafts = true;
 			var pendingKey = this.networkData.getName();
 			var pending = phantomClientPending[pendingKey];
 			if (pending) {
@@ -512,8 +527,8 @@ var _rsPhantomProto = {
 			if (this.networkData.getBoolean('update', false)) {
 				this.updateCrafts = true;
 				this.networkData.putBoolean('update', false);
-				var pushDeleteEvents = buildPushDeleteEvents(this.networkData);
-				this.sendPacket("pushDeleteEvents", {pushDeleteEvents: pushDeleteEvents});
+				var transferSpace = buildPushDeleteEvents(this.networkData);
+				this.sendPacket("pushDeleteEvents", {pushDeleteEvents: transferSpace.events, transferRequestNumber: transferSpace.requestNumber});
 			}
 			if (this.updateCrafts && this.ticks % 20 == 0) {
 				this.updateCrafts = false;
@@ -560,6 +575,16 @@ Callback.addCallback("PlayerChangedDimension", function(playerUid, currentId, la
 	if (session && session.tile && !session.tile.data.removed) rsDeferPhantomDestroy(session.tile, 'dimension changed');
 });
 
+var _rsTickingAreaMode = (typeof RS_DISK_DATA_IN_EXTRA != 'undefined') && RS_DISK_DATA_IN_EXTRA;
+
+function rsRemoveNetworkTickingArea(netId) {
+	var name = AutocraftingTickManager.names[netId];
+	var candidates = name ? [name] : ['rsnet_' + netId, 'rsnet_' + netId + '_b'];
+	for (var i = 0; i < candidates.length; i++) {
+		try { Commands.exec('/tickingarea remove ' + candidates[i]); } catch (e) {}
+	}
+}
+
 var AutocraftingTickManager = {
 	areas: {},
 	bboxes: {},
@@ -576,6 +601,16 @@ var AutocraftingTickManager = {
 		}
 	},
 	recomputeArea: function(netId) {
+		if (_rsTickingAreaMode) {
+			/* Extra mode: no ticking areas at all; remove any leftovers for this network. */
+			if (this.areas[netId] || this.names[netId]) {
+				rsRemoveNetworkTickingArea(netId);
+				this.areas[netId] = false;
+				delete this.bboxes[netId];
+				delete this.names[netId];
+			}
+			return;
+		}
 		var info = RSNetworks[netId] && RSNetworks[netId].info;
 		if (!info) return;
 		var hasTasks = info.craftingTasks && info.craftingTasks.length > 0;
@@ -667,6 +702,9 @@ var AutocraftingTickManager = {
 	_RS.on("taskCompleted", function(data) { AutocraftingTickManager.markDirty(data.netId); });
 	_RS.on("taskCancelled", function(data) { AutocraftingTickManager.markDirty(data.netId); });
 	_RS.on("taskRemoved", function(data) { AutocraftingTickManager.markDirty(data.netId); });
+	_RS.on("networkCreated", function(data) {
+		if (_rsTickingAreaMode && data && data.netId != null) rsRemoveNetworkTickingArea(data.netId);
+	});
 	_RS.on("networkDestroyed", function(data) {
 		if (!data || data.netId == null) return;
 		if (AutocraftingTickManager.areas[data.netId]) {
@@ -690,9 +728,16 @@ Callback.addCallback("ServerLevelLoaded", function() {
 	AutocraftingTickManager.bboxes = {};
 	AutocraftingTickManager.names = {};
 	AutocraftingTickManager.dirty = {};
-	for (var i = 0; i < RSNetworks.length; i++) {
-		if (RSNetworks[i] && RSNetworks[i].info && RSNetworks[i].info.craftingTasks && RSNetworks[i].info.craftingTasks.length > 0) {
-			AutocraftingTickManager.recomputeArea(i);
+	if (_rsTickingAreaMode) {
+		/* Extra mode: never create; clean up leftovers from previous sessions. */
+		for (var i = 0; i < RSNetworks.length; i++) {
+			if (RSNetworks[i]) rsRemoveNetworkTickingArea(i);
+		}
+		return;
+	}
+	for (var n = 0; n < RSNetworks.length; n++) {
+		if (RSNetworks[n] && RSNetworks[n].info && RSNetworks[n].info.craftingTasks && RSNetworks[n].info.craftingTasks.length > 0) {
+			AutocraftingTickManager.recomputeArea(n);
 		}
 	}
 });

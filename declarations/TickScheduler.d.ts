@@ -11,7 +11,7 @@
  *   - deadline nextRun model: no modulo drift, no catch-up storms;
  *   - a dirty task runs immediately and resets its cadence (nextRun = now + interval);
  *   - every task is isolated: a failure never stops the heartbeat (try/catch + failures counter);
- *   - reserved names: registration with a reserved name requires opts.internal.
+ *   - reserved names: registration with a reserved name requires options.internal.
  */
 declare namespace TickScheduler {
     interface TaskHandle {
@@ -46,7 +46,7 @@ declare namespace TickScheduler {
         /** When true (function returning bool), the task runs immediately and resets its cadence. */
         isDirty?: () => boolean;
         /** Called on task failure instead of (in addition to) the default log. */
-        onError?: (error: any, taskName: string) => void;
+        onError?: (error: any, taskName: string, scopeId: string | number) => void;
     }
     interface DebounceOpts {
         /** Quiet ticks before the run (default 10). */
@@ -63,6 +63,10 @@ declare namespace TickScheduler {
         ticks?: number;
         /** Maximum TOTAL attempts (default 3). */
         retries?: number;
+        /** Alias for `retries` (total attempts); takes precedence when both are set. */
+        attempts?: number;
+        /** Pending key; set automatically by ensureDefer (a manual key behaves the same). */
+        key?: string;
         /** Label used in failure logs. */
         reason?: string;
         /** Retry delay growth (default "fixed"). */
@@ -83,7 +87,7 @@ declare namespace TickScheduler {
          * Returns false when validation fails, otherwise a handle with cancel().
          */
         register(scopeId: string | number, name: string, interval: number, offset: number,
-            fn: (scopeId: string | number, ...args: any[]) => void, opts?: TaskOpts): TaskHandle | boolean;
+            fn: (scopeId: string | number, ...args: any[]) => void, options?: TaskOpts): TaskHandle | boolean;
         /** Unregister a task. The reserved "__auto" scope is refused (internal). */
         unregister(scopeId: string | number, name: string): boolean;
         /** Task introspection (nextRun/lastRun/runs/failures). */
@@ -107,25 +111,25 @@ declare namespace TickScheduler {
          * created without a driver (create(null)) only advances through manual
          * heartbeat() calls, so these primitives never fire on it.
          */
-        interval(name: string, ticks: number, fn: () => void, opts?: TaskOpts & { offset?: number }): TaskHandle | boolean;
+        interval(name: string, ticks: number, fn: (scopeId: string | number) => void, options?: TaskOpts & { offset?: number }): TaskHandle | boolean;
         /**
          * Idempotent interval: while a live task with the same name+callback exists,
          * returns its handle (cadence NOT reset). Different callback → replace + warning.
          * Safe to call on every LevelLoaded (survives admin().resetAll()).
          */
-        ensureInterval(name: string, ticks: number, fn: () => void, opts?: TaskOpts & { offset?: number }): TaskHandle | boolean;
+        ensureInterval(name: string, ticks: number, fn: (scopeId: string | number) => void, options?: TaskOpts & { offset?: number }): TaskHandle | boolean;
         /** Debounce with coalescing; returns a handle with cancel(). */
-        debounce(key: string, fn: () => void, opts?: DebounceOpts): { cancel(): void };
+        debounce(key: string, fn: () => void, options?: DebounceOpts): { cancel(): void };
         /**
          * Per-key throttle. Returns a wrapper that drops calls inside the window:
          * wrapper(...) → true when executed, false when dropped.
          */
-        throttle(key: string, fn: (...args: any[]) => void, opts?: ThrottleOpts): (...args: any[]) => boolean;
+        throttle(key: string, fn: (...args: any[]) => void, options?: ThrottleOpts): (...args: any[]) => boolean;
         isThrottled(key: string, ticks?: number): boolean;
         /** Deferred execution with retries (safe teardown); returns a handle with cancel(). */
-        defer(fn: () => void, opts?: DeferOpts): { cancel(): void };
+        defer(fn: () => void, options?: DeferOpts): { cancel(): void };
         /** Idempotent defer keyed by string: pending key → existing handle (same fn) or replace + warning. */
-        ensureDefer(key: string, fn: () => void, opts?: DeferOpts): { cancel(): void } | boolean;
+        ensureDefer(key: string, fn: () => void, options?: DeferOpts): { cancel(): void } | boolean;
         /**
          * Per-tick batch (dedupe): fn runs at most once per tick; the FIRST fn wins.
          * Returns true when queued, false when an entry for the key already exists.
@@ -149,7 +153,7 @@ declare namespace TickScheduler {
         /** LevelLeft cleanup: forgets tasks/queues, keeps the tick driver. */
         resetAll(): void;
         /** Configure the per-tick budget (OFF by default). Returns the effective config. */
-        setBudget(opts: BudgetOpts): BudgetInfo;
+        setBudget(options: BudgetOpts): BudgetInfo;
         getBudget(): BudgetInfo;
         /** Dispose permanently: detaches the driver (no-op callback) + clears all state. Idempotent. */
         destroyGlobal(): boolean;

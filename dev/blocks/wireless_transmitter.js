@@ -14,7 +14,7 @@ Block.createBlockWithRotation("RS_wireless_transmitter", [
 	}
 ], { renderlayer: 1 });
 RS_blocks.push(BlockID.RS_wireless_transmitter);
-EnergyUse[BlockID.RS_wireless_transmitter] = Config.energy_uses.wirelessTransmitter || 8;
+EnergyUse[BlockID.RS_wireless_transmitter] = rsConfigNumber(Config.energy_uses.wirelessTransmitter, 8);
 Block.setupAsRedstoneReceiver("RS_wireless_transmitter", true);
 
 function getTransmitterModel(active) {
@@ -324,6 +324,10 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_wireless_transmitter, {
 		if (this.data.NETWORK_ID == 'f') return;
 		var netClose = RSNetworks[this.data.NETWORK_ID];
 		if (!netClose) return;
+		/* Keep the grid registered while other players still watch this transmitter. */
+		if (this.__mpClients) {
+			for (var wc in this.__mpClients) { if (this.__mpClients[wc]) return; }
+		}
 		var coords_id = this.coords_id();
 		if (netClose[coords_id]) netClose[coords_id].isOpenedGrid = false;
 		var iIndex;
@@ -332,6 +336,7 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_wireless_transmitter, {
 	onDisconnectionPlayer: function (client) {
 		var uid = client.getPlayerUid();
 		if (this.data.pushDeleteEvents) delete this.data.pushDeleteEvents[uid];
+		if (this.data.transferRequests) delete this.data.transferRequests[uid];
 		if (this.data.wirelessPlayers) delete this.data.wirelessPlayers[uid];
 		if (this.data.wirelessMonitorPlayers) delete this.data.wirelessMonitorPlayers[uid];
 		if (this.data.wirelessCraftingGridPlayers) delete this.data.wirelessCraftingGridPlayers[uid];
@@ -347,10 +352,12 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_wireless_transmitter, {
 	},
 	post_init: function () {
 		this.data.pushDeleteEvents = {};
+		this.data.transferRequests = {};
 		this.data.openedScreens = {};
 		this.data.wirelessPlayers = {};
 		this.data.wirelessMonitorPlayers = {};
 		this.data.wirelessCraftingGridPlayers = {};
+		rsDetachMonitorListener(this);
 		this._monitorListener = makeMonitorListener(this, 'refreshMonitorPage', '_monitorChangedTaskId');
 		this.container.setWorkbenchFieldPrefix('WB_craft_slot');
 		recountUpgrades(this);
@@ -389,7 +396,7 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_wireless_transmitter, {
 				info.removeMonitorListener(this._monitorListener);
 			}
 			var iIndex;
-			if (info.openedGrids && (iIndex = info.openedGrids.findIndex(function (element) { return cts(element) == coords_id })) != -1) info.openedGrids.splice(iIndex, 1);
+			if (info && info.openedGrids && (iIndex = info.openedGrids.findIndex(function (element) { return cts(element) == coords_id })) != -1) info.openedGrids.splice(iIndex, 1);
 		}
 	},
 	client: Object.assign({}, gridClient, {
@@ -399,9 +406,11 @@ RefinedStorage.copy(BlockID.RS_grid, BlockID.RS_wireless_transmitter, {
 			if (this.networkData.getBoolean('update', false)) {
 				this.updateCrafts = true;
 				this.networkData.putBoolean('update', false);
-				var pushDeleteEvents = buildPushDeleteEvents(this.networkData);
-				this.sendPacket("pushDeleteEvents", {pushDeleteEvents: pushDeleteEvents});
+				var transferSpace = buildPushDeleteEvents(this.networkData);
+				this.sendPacket("pushDeleteEvents", {pushDeleteEvents: transferSpace.events, transferRequestNumber: transferSpace.requestNumber});
 			}
+			var ack = ContainerSync.readRequestResult(this.networkData);
+			if (ack && ack.changed) this.updateCrafts = true;
 			if (this.updateCrafts && this.ticks % 20 == 0) {
 				this.updateCrafts = false;
 				if (craftingGridData.name == this.networkData.getName()) craftingGridData.updateGui(true, false, true);

@@ -47,7 +47,7 @@ var _RS = {
 			var result = { have: 0, requested: 0, status: 'noNetwork' };
 			var info = RSNetworks[netId] && RSNetworks[netId].info;
 			if (!info) return result;
-			minimum = minimum || 1;
+			minimum = (typeof minimum == 'number' && isFinite(minimum)) ? Math.max(0, Math.floor(minimum)) : 1;
 			var targetId = item.id;
 			var targetData = item.data || 0;
 			var have = 0;

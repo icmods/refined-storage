@@ -6,9 +6,10 @@
  *
  * Entry contract — LIVE references, mutated in place by insert/extract, must
  * survive rebuilds:
- *   { storage: number, items_stored: number, items: { [uid]: { id, data, count, extra } } }
+ *   { storage, items_stored, items: { [uid]: { id, data, count, extra } } }
+ *   { storage, items_stored, stacks: [ { id, data, count, extra } ] }   // v3 disks
  * Item identity delegates to CoreKit.Items (hard dependency: dependencies
- * ["CoreKit:1"] + IMPORT("CoreKit:1")).
+ * ["CoreKit:2"] + IMPORT("CoreKit:2")).
  *
  * Ownership: the library only mutates the LIVE entries it is given — no
  * events, no timers, no persistence. The HOST owns provider lifecycle:
@@ -18,7 +19,10 @@ declare namespace StorageCore {
     interface StorageEntry {
         storage: number;
         items_stored: number;
-        items: { [uid: string]: ItemInstance };
+        /** Legacy map shape; either `items` or `stacks` is the live shape. */
+        items?: { [uid: string]: ItemInstance };
+        /** Object shape (v3 disks): ordered stacks, keys re-derived on read. */
+        stacks?: ItemInstance[];
     }
     interface StorageProvider {
         /** Must return an array of LIVE entry references (see contract). */
@@ -58,16 +62,16 @@ declare namespace StorageCore {
          * Insert into LIVE entries; returns the remainder that could not be
          * stored. Partial insert across sources is by design; the library has no
          * void/drop policy (overflow handling is host policy).
-         * opts.onOverflow?(remainder, item) is notified when part does not fit;
+         * options.onOverflow?(remainder, item) is notified when part does not fit;
          * callback exceptions are isolated.
          */
-        insert(item: ItemInstance, count: number, opts?: OperationOpts): number;
+        insert(item: ItemInstance, count: number, options?: OperationOpts): number;
         /**
          * Extract from LIVE entries (canonical uid; a foreign/stale entry key
          * is matched by re-derived identity); returns the remainder that could
          * not be extracted.
          */
-        extract(uid: string, count: number, opts?: OperationOpts): number;
+        extract(uid: string, count: number, options?: OperationOpts): number;
         /** Forget one operation id so it can be applied again. */
         forgetOperation(opId: string | number): boolean;
         /** Drop the whole operation log. */
@@ -102,6 +106,16 @@ declare namespace StorageCore {
          * Bounded by ViewOptions.opLogSize (FIFO).
          */
         opId?: string | number;
+        /**
+         * Caller-provided canonical item uid. When present, insert reuses it
+         * instead of deriving the identity again.
+         */
+        uid?: string;
+        /**
+         * Marks `uid` as trusted (the caller derived it canonically): skips the
+         * safety re-derivation on the insert path. Leave unset for foreign keys.
+         */
+        trustedUid?: boolean;
     }
     interface Transaction {
         /** Queue an insert (validated against a shadow; no mutation). Returns the accepted amount. */
@@ -133,6 +147,11 @@ declare namespace StorageCore {
          * cadence belong to the host/DebugCore.
          */
         function validate(view: View): { ok: boolean; mismatches: Mismatch[] };
+        /**
+         * DEV-ONLY. Check one entry's ephemeral stacks index against the stacks;
+         * a stale index is rebuilt unless `repair === false`.
+         */
+        function validateIndex(entry: StorageEntry, repair?: boolean): { ok: boolean; rebuilt?: boolean; mismatches: Mismatch[] };
     }
     namespace Transfer {
         /** drag&drop hold-bar formula. */
@@ -162,15 +181,23 @@ declare namespace StorageCore {
      */
     function resetProviders(): void;
     /**
+     * Mark the ephemeral stacks index of one entry stale. Required for external
+     * writers that mutate `entry.stacks` directly; library insert/extract
+     * invalidate on their own.
+     */
+    function invalidate(entry: StorageEntry): boolean;
+    /** Drop every cached stacks index (e.g. on LevelLeft). */
+    function resetIndex(): void;
+    /**
      * Wrap LIVE entry references. The array is stored BY REFERENCE: keep it
      * stable while a transaction is planning (commit re-validates against it).
      */
     /**
      * Wrap LIVE entry references. The array is stored BY REFERENCE: keep it
      * stable while a transaction is planning (commit re-validates against it).
-     * opts are opt-in (see ViewOptions); without them routing is array order.
+     * options are opt-in (see ViewOptions); without them routing is array order.
      */
-    function createView(sources: StorageEntry[], opts?: ViewOptions): View;
+    function createView(sources: StorageEntry[], options?: ViewOptions): View;
     const Transaction: {
         create(view: View): Transaction;
     };

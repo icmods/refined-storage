@@ -5,7 +5,7 @@ function PG05IsFiniteInteger(value){
 }
 
 function PG05IsValidItemId(id){
-	return PG05IsFiniteInteger(id) && id > 0 && id <= 2147483647;
+	return PG05IsFiniteInteger(id) && id != 0 && id >= -2147483648 && id <= 2147483647;
 }
 
 function PG05IsValidItemData(data){
@@ -105,7 +105,7 @@ Block.createBlockWithRotation("RS_pattern_grid", [
 	}
 ]);
 RS_blocks.push(BlockID['RS_pattern_grid']);
-EnergyUse[BlockID['RS_pattern_grid']] = Config.energy_uses.patternGrid || 4;
+EnergyUse[BlockID['RS_pattern_grid']] = rsConfigNumber(Config.energy_uses.patternGrid, 4);
 var patternGridData = Object.assign({}, craftingGridData);
 patternGridData.lastCraftsPage = -1;
 patternGridData.isCrafting = true;
@@ -723,11 +723,15 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 		return true;
 	},
 	onWindowClose: function(){
+		rsDropPending("pg.updateGui");
 		rsResetStorageTouch();
 		rsResetCraftsTouch();
+		this._hashRetry = 0;
+		if(this._nsState) this._nsState.retry = 0;
 		if(this.data.NETWORK_ID == 'f') return;
 		var net = RSNetworks[this.data.NETWORK_ID];
 		if(!net) return;
+		if(!net.info) return;
 		var coords_id = this.coords_id();
 		if(net[coords_id]) net[coords_id].isOpenedGrid = false;
 		var iIndex;
@@ -953,6 +957,7 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 	post_init: function () {
 		this.container.setWorkbenchFieldPrefix('WB_craft_slot');
 		this.data.pushDeleteEvents = {};
+		this.data.transferRequests = {};
 		this.data.selectedRecipe = null;
 		this.container.setSlotSavingEnabled('pattern_slot_export', true);
 		this.container.setSlotSavingEnabled('pattern_slot_input', true);
@@ -990,7 +995,12 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 		this.container.sendChanges();
 		return true;
 	},
+	publishUiState: function(){
+		rsPublishUiState(this, { patternMode: !!this.data.patternMode, oredictMode: !!this.data.oredictMode });
+	},
 	refreshGui: function(first, client, updateFilters, updateCrafts){
+		this.publishUiState();
+		if(!first) return;
 		var _data = buildCraftingGridPayload(this, first, updateFilters, updateCrafts);
 		_data.patternMode = this.data.patternMode;
 		_data.oredictMode = this.data.oredictMode;
@@ -1120,14 +1130,19 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 			BlockRenderer.mapAtCoords(this.x, this.y, this.z, render);
 			},
 		ticks: 0,
+		flushPendingTransfer: function(){
+			if(!this.networkData.getBoolean('update', false)) return;
+			this.networkData.putBoolean('update', false);
+			var transferSpace = buildPushDeleteEvents(this.networkData);
+			this.sendPacket("pushDeleteEvents", {pushDeleteEvents: transferSpace.events, transferRequestNumber: transferSpace.requestNumber});
+		},
 		tick: function(){
+			if(typeof patternGridData != 'undefined' && patternGridData) patternGridData.clientTile = this;
+			if(this.networkData.getBoolean('update', false)) this.updateCrafts = true;
+			this.flushPendingTransfer();
 			this.ticks++;
-			if(this.networkData.getBoolean('update', false)){
-				this.networkData.putBoolean('update', false);
-				this.updateCrafts = true;
-				var pushDeleteEvents = buildPushDeleteEvents(this.networkData);
-				this.sendPacket("pushDeleteEvents", {pushDeleteEvents: pushDeleteEvents});
-			}
+			ContainerSync.readRequestResult(this.networkData);
+			rsConsumeUiVersion(this, patternGridData, function () { patternGridData.updateGui(true, false, true, true); });
 			if(this.updateCrafts && this.ticks%20 == 0){
 				this.updateCrafts = false;
 				if(patternGridData.name == this.networkData.getName()){
@@ -1170,7 +1185,7 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 				patternGridData._pendingRefresh = false;
 				patternGridData._pendingFilters = false;
 				patternGridData._pendingCrafts = false;
-				patternGridData.updateGui = function(refresh, updateFilters, updateCrafts, nonlocal){
+				patternGridData.updateGui = rsExclusive("pg.updateGui", function(refresh, updateFilters, updateCrafts, nonlocal){
 					if(!content || !window || !window.isOpened()){
 						return;
 					}
@@ -1250,7 +1265,18 @@ RefinedStorage.copy(BlockID.RS_crafting_grid, BlockID.RS_pattern_grid, {
 							patternGridData.updateGui(_r, _f, _c);
 						}
 					}
-				}
+				}, "updateGui");
+				/* Apply the state published by the server into the eventData closure so the local refresh renders identically. */
+				patternGridData.applyServerState = function(nd, id){
+					rsApplyUiState(nd, id, eventData, patternGridData);
+					eventData.patternMode = nd.getBoolean('patternMode@' + id, (typeof eventData.patternMode == 'boolean') ? eventData.patternMode : false);
+					eventData.oredictMode = nd.getBoolean('oredictMode@' + id, (typeof eventData.oredictMode == 'boolean') ? eventData.oredictMode : false);
+					patternGridData.patternMode = eventData.patternMode;
+					patternGridData.oredictMode = eventData.oredictMode;
+				};
+				patternGridData.isUiLive = function(){
+					try { return !!(window && typeof window.isOpened == 'function' && window.isOpened()); } catch(e) { return false; }
+				};
 				patternGridData.updateGui(eventData.refresh, eventData.updateFilters, eventData.updateCrafts, true);
 			}
 		}

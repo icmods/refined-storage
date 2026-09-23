@@ -76,8 +76,6 @@ function buildCraftsSection(ctx) {
 
 	var moving = false;
 	var max_y = 0;
-	var swipe_y;
-	var swipe_sum = 0;
 
 	var __craftsTouch = { swipeY: false, swipeSum: 0, moving: false };
 	__rsCraftsTouch = __craftsTouch;

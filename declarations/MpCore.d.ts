@@ -23,7 +23,7 @@ declare namespace MpCore {
      * Attach the connected-clients map + open/close listeners to a tile
      * (call once in init()). Returns the clients map (uid → NetworkClient).
      */
-    function connectivity(tile: any, opts?: ConnectivityOpts): { [uid: number]: NetworkClient };
+    function connectivity(tile: any, options?: ConnectivityOpts): { [uid: number]: NetworkClient };
     /** Clear all tracked clients for a tile (LevelLeft / teardown; listeners stay attached). */
     function reset(tile: any): void;
     /** Drop one tracked client (onDisconnectionPlayer cleanup). Returns true when removed. */
@@ -55,16 +55,16 @@ declare namespace MpCore {
      * Wrap a containerEvent handler with a uid guard + late registration
      * fallback. tile MUST be the tile instance (not the prototype) —
      * instances are detected via their container; prototypes are never
-     * mutated. opts.requireOpen: the client must be a registered viewer
-     * (no late registration); opts.onReject(uid, tile) on rejection.
+     * mutated. options.requireOpen: the client must be a registered viewer
+     * (no late registration); options.onReject(uid, tile) on rejection.
      */
-    function guardHandler(tile: any, handler: (eventData: any, client: NetworkClient, playerUid: number) => void, opts?: { requireOpen?: boolean; onReject?(playerUid: number, tile: any): void }): (eventData: any, client: NetworkClient) => void;
+    function guardHandler(tile: any, handler: (eventData: any, client: NetworkClient, playerUid: number) => void, options?: { requireOpen?: boolean; onReject?(playerUid: number, tile: any): void }): (eventData: any, client: NetworkClient) => void;
     /** True when the tile instance exists, has data and was not marked removed. */
     function isTileAlive(tile: any): boolean;
     /**
      * Run `fn(tile)` on a live tile instance with error isolation.
-     * opts.requireNetworkEntity skips server-side detached tiles; opts.allowRemoved
+     * options.requireNetworkEntity skips server-side detached tiles; options.allowRemoved
      * allows removed tiles (default false). Returns true when fn ran.
      */
-    function safeTileCall(tile: any, fn: (tile: any) => void, opts?: { requireNetworkEntity?: boolean; allowRemoved?: boolean; label?: string; logTag?: string }): boolean;
+    function safeTileCall(tile: any, fn: (tile: any) => void, options?: { requireNetworkEntity?: boolean; allowRemoved?: boolean; label?: string; logTag?: string }): boolean;
 }

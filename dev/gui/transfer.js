@@ -1,6 +1,8 @@
 
 function buildPushDeleteEvents(networkData) {
-	return ContainerSync.buildEvents(networkData);
+	var out = {};
+	var events = ContainerSync.buildEvents(networkData, out);
+	return { events: events, requestNumber: out.requestNumber || 0 };
 }
 
 function createInventoryPushHandler(data) {
@@ -15,21 +17,18 @@ function createInventoryPushHandler(data) {
 			if(item.id == 0)return;
 			if(data.disksStored >= data.disksStorage) return
 		var count = ContainerSync.clickCount(item, event.type == 'LONG_CLICK', data.disksStorage - data.disksStored);
-			var slotFounded = false;
 			for(var i in data.slotsKeys){
 				var _slotName = data.slotsKeys[i];
 				var _slot = itemContainer.slots[_slotName];
 				if(_slot && (_slot.id == 0 || (_slot.id == item.id && _slot.data == item.data && (item.extra === _slot.extra || (item.extra && _slot.extra && fullExtraToString(item.extra) == fullExtraToString(_slot.extra)))))){
 					item.extra = _slot.extra;
-					slotFounded = true;
-					itemContainer.setSlot(_slotName, item.id, _slot.count + count, item.data, item.extra || null);
 					data.setItemInfoSlot(_slotName, itemContainer);
 					if(data.sort == 0) updateFull = true;
-					data.updateGui(true, updateFull);
 					break
 				}
 			}
-		ContainerSync.queuePush(data.networkData, slot_id, count, updateFull);
+		ContainerSync.queuePush(data.networkData, slot_id, count, updateFull, { id: item.id, data: item.data, uid: getItemUid(item) });
+		if(data.clientTile && data.clientTile.flushPendingTransfer) data.clientTile.flushPendingTransfer();
 		}
 	};
 }

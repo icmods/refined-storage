@@ -4,7 +4,7 @@ var NetworkTimer = {
 
 	RESERVED: { netMap: 1, patternCheck: 1, incompleteRetry: 1, flush: 1 },
 
-	register: function(netId, name, interval, offset, fn, internal, opts) {
+	register: function(netId, name, interval, offset, fn, internal, options) {
 		if (typeof netId !== 'number' || !(netId >= 0) || typeof RSNetworks === 'undefined' || !RSNetworks[netId] || !RSNetworks[netId].info) { return false; }
 		if (typeof name !== 'string' || !name) { return false; }
 		if (this.RESERVED[name] && !internal) { return false; }
@@ -14,10 +14,10 @@ var NetworkTimer = {
 		if (!isFinite(offset) || offset < 0) offset = 0;
 		offset = offset % interval;
 		if (typeof fn !== 'function') { return false; }
-		opts = opts || {};
+		options = options || {};
 		var taskOpts = { internal: !!internal };
-		if (typeof opts.isDirty == 'function') taskOpts.isDirty = opts.isDirty;
-		if (typeof opts.onError == 'function') taskOpts.onError = opts.onError;
+		if (typeof options.isDirty == 'function') taskOpts.isDirty = options.isDirty;
+		if (typeof options.onError == 'function') taskOpts.onError = options.onError;
 		// Identity guard: skip tasks of a torn-down network.
 		var wrapped = function (scopeId, _info, controllerTile, blockSource) {
 			if (typeof RSNetworks === 'undefined' || !RSNetworks[scopeId] || RSNetworks[scopeId].info !== _info) return;
@@ -116,11 +116,14 @@ var NetworkTimer = {
 				}
 			});
 		}
-		if (!net.tasks.patternCheck) {
+		/* Periodic full pattern rebuild is intentionally disabled: crafters register/unregister
+		 * their patterns incrementally (addCraft/removeCraft) and post_update_network fills the
+		 * gaps, so the 6000-tick scan is redundant. Kept here for on-demand use. */
+		/* if (!net.tasks.patternCheck) {
 			NetworkTimer.register(info.net_id, 'patternCheck', 6000, info.net_id % 6000, function(netId, _info, tile, blockSource) {
 				if (_info) _info.rebuildPatternContainers(tile);
 			}, true);
-		}
+		} */
 		if (!net.tasks.incompleteRetry) {
 			NetworkTimer.register(info.net_id, 'incompleteRetry', 1, 0, function(netId, _info, tile, blockSource) {
 				if (_info && _info.incomplete) {

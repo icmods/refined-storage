@@ -51,7 +51,7 @@ function craftMatches(craft, coordsId, id, isProcessed){
 	return craft && craft.coordsId === coordsId && craft.id === id && craft.isProcessed === isProcessed;
 }
 RS_blocks.push(BlockID.RS_crafter);
-EnergyUse[BlockID['RS_crafter']] = Config.energy_uses.crafter || 4;
+EnergyUse[BlockID['RS_crafter']] = rsConfigNumber(Config.energy_uses.crafter, 4);
 
 for (var ibc = 0; ibc < 6; ibc++) {
 	var render = new ICRender.Model();
@@ -216,7 +216,7 @@ RefinedStorage.createTile(BlockID.RS_crafter, {
 			var parts = str.split(',');
 			if(parts.length < 3) continue;
 			var ingr = {id: parseInt(parts[0]), count: parseInt(parts[1]), data: parseInt(parts[2])};
-			if(ingr.id <= 0) continue;
+			if(ingr.id == 0) continue;
 			inputs.push(ingr);
 		}
 		var maxOut = isProcessed ? 9 : 1;
@@ -226,7 +226,7 @@ RefinedStorage.createTile(BlockID.RS_crafter, {
 			var parts = str.split(',');
 			if(parts.length < 3) continue;
 			var res = {id: parseInt(parts[0]), count: parseInt(parts[1] || 1), data: parseInt(parts[2] || 0)};
-			if(res.id <= 0) continue;
+			if(res.id == 0) continue;
 			outputs.push(res);
 		}
 		if(outputs.length === 0) return null;
@@ -271,7 +271,7 @@ RefinedStorage.createTile(BlockID.RS_crafter, {
 			var craft = this.data.crafts[s];
 			var exists = false;
 			for(var ri = 0; ri < craft.result.length; ri++){
-				var resultUid = craft.result[ri].id + '_' + craft.result[ri].data;
+				var resultUid = getItemUid(craft.result[ri]);
 				if(info.crafts[resultUid]){
 					for(var ci = 0; ci < info.crafts[resultUid].length; ci++){
 						if(craftMatches(info.crafts[resultUid][ci], cts(this), craft.id, craft.isProcessed)){
@@ -302,7 +302,7 @@ RefinedStorage.createTile(BlockID.RS_crafter, {
 			getSpeed: function(crafterTile) { return crafterTile.data.speed || 10; },
 			getUpdateInterval: function(crafterTile) { return Math.max(1, crafterTile.data.speed || 10); },
 			getMaximumSuccessfulCraftingUpdates: function(crafterTile) { return Math.max(1, Math.min(5, 1 + Math.floor((10 - Math.max(1, crafterTile.data.speed || 10)) / 2))); },
-			getUsage: function(crafterTile) { return (Config.energy_uses.crafterPerPattern || 1) * (crafterTile.data.patternsCount || 0); }
+			getUsage: function(crafterTile) { return rsConfigNumber(Config.energy_uses.crafterPerPattern, 1) * (crafterTile.data.patternsCount || 0); }
 		});
 	},
 	refreshRedstoneMode: function(){

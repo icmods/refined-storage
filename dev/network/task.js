@@ -7,6 +7,12 @@ var CraftingTask = {
 		task.id = CraftingTask._generateId();
 		task._info = info;
 		task.requestedUid = getItemUid(requestedItem);
+		task.requestedItem = requestedItem ? {
+			id: requestedItem.id,
+			data: requestedItem.data,
+			count: requestedCount || requestedItem.count || 1,
+			extra: requestedItem.extra || null
+		} : null;
 		task.startTime = World.getThreadTime();
 		for (var k in fullCrafts) {
 			if (k === "results" || k === "crafts") continue;
@@ -23,6 +29,7 @@ var CraftingTask = {
 		return {
 			id: task.id,
 			requestedUid: task.requestedUid,
+			requestedItem: task.requestedItem || null,
 			requestedCount: task.requestedCount,
 			totalSteps: task.totalSteps,
 			currentStep: task.currentStep || 0,
@@ -70,6 +77,15 @@ var CraftingTask = {
 		task._info = info;
 		task.startTime = data.startTime;
 		task.requestedUid = data.requestedUid || task.requestedUid;
+		if (data.requestedItem) {
+			task.requestedItem = data.requestedItem;
+			task.requestedUid = getItemUid(data.requestedItem);
+		} else {
+			task.requestedItem = null;
+			if (data.requestedUid && data.requestedUid.indexOf(":") !== -1) {
+				throw new Error('quarantine: requested extras cannot be rebuilt from uid');
+			}
+		}
 		task.flatSteps = data.flatSteps || [];
 		return task;
 	}

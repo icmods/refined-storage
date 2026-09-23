@@ -159,7 +159,7 @@ declare namespace CraftTreePlanner {
     const defaultPolicy: Required<Policy>;
 
     function stack(key: ResourceKey, amount: number): Stack;
-    function createInventory(opts?: InventoryOpts): Inventory;
+    function createInventory(options?: InventoryOpts): Inventory;
     function createCycleGuard(): CycleGuard;
     function plan(request: { key: ResourceKey; amount: number }, ctx: Context): PlanResult;
     function aggregate(nodes: PlanNode[], nodeKey?: (node: PlanNode) => string): AggregatedNode[];

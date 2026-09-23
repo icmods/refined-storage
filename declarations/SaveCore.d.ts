@@ -47,8 +47,8 @@ declare namespace SaveCore {
         data: T | null;
     }
 
-    function scope<T>(name: string, opts: ScopeOpts<T>): Store<T>;
+    function scope<T>(name: string, options: ScopeOpts<T>): Store<T>;
     function getScope(name: string): Store<any> | null;
-    /** LevelLeft cleanup for every registered scope. */
+    /** LevelLeft cleanup of every registered scope. */
     function resetAll(): void;
 }

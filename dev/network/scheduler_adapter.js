@@ -70,13 +70,25 @@ function buildSchedulerCtx(info, blockSource, networkTick) {
 	// Caches live for one network tick; the returned values are read-only live references.
 	var cacheLists = {}; // patternUid -> entries[]
 	var cacheTiles = {}; // coordsStr  -> { tile, container }
+	var cacheLoaded = {}; // coordsStr -> raw chunk test result (one native check per coords per tick)
 	var cachePatterns = Object.create(null); // patternUid -> craft | null (per tick)
+
+	/* One chunk test per unique coords per tick: resolveTile and the executor's
+	 * isChunkLoaded share the result. The value cannot change while this controller
+	 * tick runs (single-threaded; chunk events dispatch between ticks). */
+	function chunkLoadedRaw(coordsStr) {
+		if (Object.prototype.hasOwnProperty.call(cacheLoaded, coordsStr)) return cacheLoaded[coordsStr];
+		var parsed = rsSchedParseCoords(info, coordsStr);
+		return (cacheLoaded[coordsStr] = parsed
+			? isChunkLoadedAtSafe(blockSource, parsed.x, parsed.y, parsed.z)
+			: undefined);
+	}
 
 	function resolveTile(coordsStr) {
 		if (Object.prototype.hasOwnProperty.call(cacheTiles, coordsStr)) return cacheTiles[coordsStr];
 		var parsed = rsSchedParseCoords(info, coordsStr);
 		var tile = null, container = null;
-		if (parsed && isChunkLoadedAtSafe(blockSource, parsed.x, parsed.y, parsed.z)) {
+		if (parsed && chunkLoadedRaw(coordsStr)) {
 			tile = World.getTileEntity(parsed.x, parsed.y, parsed.z, blockSource);
 			container = tile ? PatternContainerRegistry.get(tile) : null;
 			// interval/budget callbacks only receive the container → keep the tile on it.
@@ -107,7 +119,7 @@ function buildSchedulerCtx(info, blockSource, networkTick) {
 		isChunkLoaded: function (coordsId) {
 			var parsed = info.patternContainersParsed ? info.patternContainersParsed[coordsId] : null;
 			if (!parsed) return true; // unknown → let getContainers decide
-			return isChunkLoadedAtSafe(blockSource, parsed.x, parsed.y, parsed.z) !== false;
+			return chunkLoadedRaw(coordsId) !== false;
 		},
 		getPattern: function (uid) {
 			if (uid in cachePatterns) return cachePatterns[uid];
@@ -129,7 +141,9 @@ function buildSchedulerCtx(info, blockSource, networkTick) {
 			var now = (typeof TickScheduler != "undefined" && TickScheduler && TickScheduler.global) ? TickScheduler.global.ticks : 0;
 			var every = (typeof Config != "undefined" && Config && Config.craftingProgressTicks > 0)
 				? Math.floor(Config.craftingProgressTicks) : CRAFT_PROGRESS_THROTTLE_TICKS;
-			if (task._lastProgressTick != null && now - task._lastProgressTick < every) return;
+			// reset-safe: a rewound tick counter (admin().resetAll) must not
+			// throttle forever (negative diff)
+			if (task._lastProgressTick != null && now >= task._lastProgressTick && now - task._lastProgressTick < every) return;
 			task._lastProgressTick = now;
 			_RS._emit("taskProgress", { netId: info.net_id, taskId: task.id, currentStep: task.currentStep, totalSteps: task.totalSteps || 0 });
 		},

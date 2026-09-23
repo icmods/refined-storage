@@ -139,7 +139,7 @@ function buildItemInfoPanel(ctx) {
 			if(descrWidth > frameWidth) frameWidth = descrWidth;
 		}
 		headerElements['itemInfoFrame'].width = 50 + frameWidth + 10;
-		headerWindow.forceRefresh();
+		UiCore.safeRun(function () { headerWindow.forceRefresh(); }, "RS-itemInfo");
 	}
 	ctx.gridData.setItemInfoSlot = setItemInfoSlot;
 }
@@ -201,34 +201,17 @@ function buildStorageSlots(ctx) {
 						}
 						var _count = StorageCore.Transfer.BUTTON(slotItem, 0, false);
 						var updateFull = false;
-						var window_ = getClientGuiWindow(itemContainer, 'main');
-						var elements_ = window_ && window_.getElements ? window_.getElements() : null;
 						if(slotItem.count == _count) {
-							itemContainer.setSlot(slot, 0, 0, 0);
-							ctx.gridData.slotsKeys.splice(_num, 1);
 							updateFull = true;
-							ctx.gridData.updateGui(true, true);
-						} else {
-							if(ctx.gridData.sort == 0){
-								if(_num > 0 && slotItem.count - _count <= itemContainer.slots[ctx.gridData.slotsKeys[_num - 1]].count){
-									itemContainer.setSlot(slot, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
-									updateFull = true;
-									ctx.gridData.updateGui(true, true);
-								} else {
-									itemContainer.markSlotDirty('slot' + this.num);
-									if(elements_ && elements_.get('slot' + this.num))elements_.get('slot' + this.num).setBinding('text', cutNumber(slotItem.count - _count, true) + "");
-									itemContainer.setSlot('slot' + this.num, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
-									itemContainer.setSlot(slot, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
-								}
-							} else {
-								itemContainer.markSlotDirty('slot' + this.num);
-								if(elements_ && elements_.get('slot' + this.num))elements_.get('slot' + this.num).setBinding('text', cutNumber(slotItem.count - _count, true) + "");
-								itemContainer.setSlot('slot' + this.num, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
-								itemContainer.setSlot(slot, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
+						} else if(ctx.gridData.sort == 0){
+							if(_num > 0 && slotItem.count - _count <= itemContainer.slots[ctx.gridData.slotsKeys[_num - 1]].count){
+								updateFull = true;
 							}
 						}
+						/* UI renders only the authoritative server state. */
 						ctx.gridData.setItemInfoSlot(slot, itemContainer);
-						ContainerSync.queueDelete(ctx.gridData.networkData, slot, _count, updateFull);
+						ContainerSync.queueDelete(ctx.gridData.networkData, slot, _count, updateFull, { id: slotItem.id, data: slotItem.data, uid: getItemUid(slotItem) });
+						if(ctx.gridData.clientTile && ctx.gridData.clientTile.flushPendingTransfer) ctx.gridData.clientTile.flushPendingTransfer();
 					},
 					onLongClick: function (itemContainerUiHandler, itemContainer, element) {
 						var itemContainer = itemContainer.slots ? itemContainer : element;
@@ -253,34 +236,17 @@ function buildStorageSlots(ctx) {
 						var _capacity = this_item && this_item.count < maxStack && this_item.extra === slotItem.extra ? maxStack - this_item.count : maxStack;
 						var _count = StorageCore.Transfer.BUTTON(slotItem, _capacity, true);
 						var updateFull = false;
-						var window_ = getClientGuiWindow(itemContainer, 'main');
-						var elements_ = window_ && window_.getElements ? window_.getElements() : null;
 						if(slotItem.count <= _count) {
-							itemContainer.setSlot(slot, 0, 0, 0);
-							ctx.gridData.slotsKeys.splice(_num, 1);
 							updateFull = true;
-							ctx.gridData.updateGui(true, true);
-						} else {
-							if(ctx.gridData.sort == 0){
-								if(_num > 0 && slotItem.count - _count <= itemContainer.slots[ctx.gridData.slotsKeys[_num - 1]].count){
-									itemContainer.setSlot(slot, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
-									updateFull = true;
-									ctx.gridData.updateGui(true, true);
-								} else {
-									itemContainer.markSlotDirty('slot' + this.num);
-									if(elements_ && elements_.get('slot' + this.num))elements_.get('slot' + this.num).setBinding('text', cutNumber(slotItem.count - _count, true) + "");
-									itemContainer.setSlot('slot' + this.num, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
-									itemContainer.setSlot(slot, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
-								}
-							} else {
-								itemContainer.markSlotDirty('slot' + this.num);
-								if(elements_ && elements_.get('slot' + this.num))elements_.get('slot' + this.num).setBinding('text', cutNumber(slotItem.count - _count, true) + "");
-								itemContainer.setSlot('slot' + this.num, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
-								itemContainer.setSlot(slot, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
+						} else if(ctx.gridData.sort == 0){
+							if(_num > 0 && slotItem.count - _count <= itemContainer.slots[ctx.gridData.slotsKeys[_num - 1]].count){
+								updateFull = true;
 							}
 						}
+						/* UI renders only the authoritative server state. */
 						ctx.gridData.setItemInfoSlot(slot, itemContainer);
-						ContainerSync.queueDelete(ctx.gridData.networkData, slot, _count, updateFull);
+						ContainerSync.queueDelete(ctx.gridData.networkData, slot, _count, updateFull, { id: slotItem.id, data: slotItem.data, uid: getItemUid(slotItem) });
+						if(ctx.gridData.clientTile && ctx.gridData.clientTile.flushPendingTransfer) ctx.gridData.clientTile.flushPendingTransfer();
 					}
 				},
 				size: ctx.cons + 1

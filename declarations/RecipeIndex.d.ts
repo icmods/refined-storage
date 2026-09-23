@@ -3,7 +3,7 @@
 /**
  * RecipeIndex — recipe discovery, inverse index, dedup, annotation, search.
  * Load with: IMPORT("RecipeIndex") → global `RecipeIndex`.
- * Engine access (recipe objects) is injected via opts — the same index serves
+ * Engine access (recipe objects) is injected via options — the same index serves
  * vanilla workbench recipes, custom recipe systems, and tests.
  */
 declare namespace RecipeIndex {
@@ -58,10 +58,10 @@ declare namespace RecipeIndex {
      * 2. fallback to the documented JS API
      *    Recipes.getWorkbenchRecipesByIngredient.
      * data defaults to -1 (wildcard). Results are memoized (fresh copies) —
-     * opts.cache: false disables it, opts.refresh: true bypasses it.
+     * options.cache: false disables it, options.refresh: true bypasses it.
      * Never throws.
      */
-    function loadRecipesByIngredient(id: number, data?: number, opts?: { cache?: boolean; refresh?: boolean }): Recipe[];
+    function loadRecipesByIngredient(id: number, data?: number, options?: { cache?: boolean; refresh?: boolean }): Recipe[];
     /**
      * Clear the ingredient lookup cache. Call after runtime recipe
      * registration (e.g. addShaped inside PostLoaded).
@@ -72,8 +72,8 @@ declare namespace RecipeIndex {
      * the given ingredients (no full workbench scan), then dedups them by uid
      * and builds the index (annotation stays on-demand via index.annotate).
      */
-    function buildFromIngredients(ingredients: { id: number; data?: number }[], opts?: AccessorOpts): Index;
-    function build(opts: BuildOpts): Index;
+    function buildFromIngredients(ingredients: { id: number; data?: number }[], options?: AccessorOpts): Index;
+    function build(options: BuildOpts): Index;
 
     interface SortAccessors {
         getId?(key: any): number;
@@ -91,7 +91,8 @@ declare namespace RecipeIndex {
     }
     /**
      * Sort opaque keys by accessor fields with an optional text filter.
-     * Returns a fresh array.
+     * Deterministic ties: equal primary keys are ordered by name, then id, then key
+     * (stable regardless of input order or sort stability). Returns a fresh array.
      */
     function sortKeys(keys: any[], accessors: SortAccessors, spec: SortSpec): any[];
 
@@ -102,7 +103,7 @@ declare namespace RecipeIndex {
      * non-darkened before darkened items, with an optional filter and a
      * per-item classification sink.
      */
-    function partition<T>(items: T[], isFirstGroup: (item: T) => boolean, opts?: {
+    function partition<T>(items: T[], isFirstGroup: (item: T) => boolean, options?: {
         filter?(item: T): boolean;
         onClassify?(item: T, isFirstGroup: boolean): void;
     }): PartitionResult<T>;
@@ -129,7 +130,28 @@ declare namespace RecipeIndex {
      * runs the callback, caches the result per recipe uid. Returns true when
      * the callback ran without throwing.
      */
-    function simulateWorkbench(recipe: Recipe, opts?: SimulateOpts): boolean;
+    function simulateWorkbench(recipe: Recipe, options?: SimulateOpts): boolean;
     /** Clear the simulation cache (call after runtime recipe registration). */
     function clearCraftSimulationCache(): void;
+
+    interface ExecuteOpts {
+        getCallback?(recipe: Recipe): Function | null;
+        getResult?(recipe: Recipe): { id: number; data: number; count?: number };
+        /** Scratch container constructor (default: engine ItemContainer). */
+        ItemContainer?: new () => any;
+        /** WorkbenchFieldAPI constructor (default: WRAP_JAVA lookup). */
+        WorkbenchFieldAPI?: new (container: any) => any;
+    }
+    interface ExecuteResult {
+        ok: boolean;
+        prevented: boolean;
+        result: { id: number; data: number; count?: number } | null;
+        slots: Array<{ id: number; count: number; data: number; extra: any } | null>;
+    }
+    /**
+     * Execute a workbench recipe callback on a scratch field and capture the
+     * mutated slots + result. ok=false when the callback throws or calls
+     * prevent(); slots are captured regardless so the caller can refund.
+     */
+    function executeWorkbenchRecipe(recipe: Recipe, fieldItems: Array<{ id: number; count?: number; data?: number; extra?: any } | null>, options?: ExecuteOpts): ExecuteResult;
 }

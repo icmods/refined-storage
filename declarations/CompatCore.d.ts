@@ -41,7 +41,7 @@ declare namespace CompatCore {
      * ModAPI is unavailable or the hostId+apiName pair was already registered.
      * Callback errors are logged (Logger) and never propagate.
      */
-    function whenAvailable(apiName: string, callback: (api: any) => void, opts?: WhenAvailableOpts): WhenAvailableHandle | null;
+    function whenAvailable(apiName: string, callback: (api: any) => void, options?: WhenAvailableOpts): WhenAvailableHandle | null;
     /** Get-or-create a shared energy type by name; null without EnergyNet. */
     function energyType(name: string, value: number): { name: string; value: number } | null;
     /**

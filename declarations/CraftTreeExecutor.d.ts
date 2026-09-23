@@ -65,7 +65,7 @@ declare namespace CraftTreeExecutor {
     }
     interface Task {
         id: string;
-        /** Host-owned clock value (unix ms); set via createTask opts. */
+        /** Host-owned clock value (unix ms); set via createTask options. */
         startTime?: number;
         requestedUid: string;
         requestedCount: number;
@@ -188,7 +188,7 @@ declare namespace CraftTreeExecutor {
         validatePattern(pattern: any): NormalizedPattern | null;
     }
 
-    function createTask(fullCrafts: FullCrafts, host: TaskHost, requestedItem: ItemInstance, requestedCount?: number, opts?: { id?: string; startTime?: number }): Task | null;
+    function createTask(fullCrafts: FullCrafts, host: TaskHost, requestedItem: ItemInstance, requestedCount?: number, options?: { id?: string; startTime?: number }): Task | null;
     function serialize(task: Task): any;
     function restore(data: any, host: TaskHost): Task;
     namespace scheduler {

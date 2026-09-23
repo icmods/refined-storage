@@ -80,9 +80,9 @@ function set_is_active_for_blocks_net(net_id, _state, isController, _blockSource
 	for(var i in RSNetworks[net_id]){
 		if(i != 'info' && RSNetworks[net_id][i].id != BlockID.RS_controller){
 			var tile = World.getTileEntity(RSNetworks[net_id][i].coords.x, RSNetworks[net_id][i].coords.y, RSNetworks[net_id][i].coords.z, _blockSource);
-			if (tile && tile.networkEntity) {
+			if (tile) {
 				if(isController) tile.data.controllerOff = !_state;
-				tile.setActive(_state);
+				try { tile.setActive(_state); } catch (e) {}
 			}
 		}
 	}
@@ -112,6 +112,7 @@ var pistonsPoss = [
 	[-1, 0, 0]
 ]
 var pistonsMove__ = {};
+var pistonsMoveTicks__ = {};
 var pistonsMoveKey = function(coords, blockSource){
 	return blockSource.getDimension() + ':' + cts(coords);
 }
@@ -135,7 +136,15 @@ Callback.addCallback('BlockChanged', function(coords, oldBlock, newBlock, _block
 		} : coords;
 		var __tile = World.getTileEntity(from_coords.x, from_coords.y, from_coords.z, _blockSource);
 		if(__tile){
-			pistonsMove__[pistonsMoveKey(to_coords, _blockSource)] = __tile;
+			var _pmKey = pistonsMoveKey(to_coords, _blockSource);
+			pistonsMove__[_pmKey] = __tile;
+			pistonsMoveTicks__[_pmKey] = Date.now();
+			for (var _pmk in pistonsMoveTicks__) {
+				if (Date.now() - pistonsMoveTicks__[_pmk] > 5000) {
+					delete pistonsMoveTicks__[_pmk];
+					delete pistonsMove__[_pmk];
+				}
+			}
 		}
 	}
 	if(oldBlock.id == 250) {
@@ -146,15 +155,20 @@ Callback.addCallback('BlockChanged', function(coords, oldBlock, newBlock, _block
 					newTileData.data[i] = oldTileData.data[i];
 				}
 			}
-			var unsaveableSlotsArray = Array.isArray(oldTileData.unsaveableSlots) ? oldTileData.unsaveableSlots : [];
-			if(!oldTileData.unsaveableSlots || unsaveableSlotsArray.length > 0)for(var i in oldTileData.container.slots){
-				if(unsaveableSlotsArray.length > 0 && unsaveableSlotsArray.indexOf(i) != -1) continue;
-				var _slot = oldTileData.container.slots[i];
-				newTileData.container.setSlot(i, _slot.id, _slot.count, _slot.data, _slot.extra);
-				oldTileData.container.setSlot(i, 0,0,0,null);
+			/* Pure carry helper (ContainerSync); the host keeps the piston detection,
+			 * tile.data copy and destroy. `unsaveableSlots === true` or an EMPTY array
+			 * means "carry nothing". */
+			var unsaveable = oldTileData.unsaveableSlots;
+			var unsaveableList = Array.isArray(unsaveable) ? unsaveable : [];
+			if(!unsaveable || unsaveableList.length > 0){
+				ContainerSync.transferContainer(oldTileData.container, newTileData.container, {
+					filter: function (name) { return unsaveableList.indexOf(name) == -1; },
+					clearSource: true
+				});
 			}
 			TileEntity.destroyTileEntity(oldTileData, false, false);
 			delete pistonsMove__[pistonsMoveKey(coords, _blockSource)];
+			delete pistonsMoveTicks__[pistonsMoveKey(coords, _blockSource)];
 		}
 	}
 	if (RS_blocks.indexOf(oldBlock.id) != -1 || RS_blocks.indexOf(newBlock.id) != -1) {

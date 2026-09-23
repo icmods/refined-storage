@@ -53,7 +53,7 @@ declare namespace CoreKit {
         /** Decode a Base64 string to a Java string (engine only); null without Java. */
         function base64Decode(encoded: string): string | null;
         /** GitHub contents API client over the blocking `sendHttp`; null on failure. */
-        function github(user: string, repo: string, opts?: { ref?: string }): {
+        function github(user: string, repo: string, options?: { ref?: string }): {
             getJson(path: string): any;
             getFile(path: string): string | null;
             /** Raw Base64 for image registration (e.g. UiCore.registerTexture). */
@@ -80,43 +80,63 @@ declare namespace CoreKit {
     }
 
     namespace Items {
-        /**
-         * Canonical key of an ItemExtraData, unifying the known conventions:
-         * getValue FIRST and AUTHORITATIVE when present (a falsy getValue →
-         * ""). When getValue is absent, asJson is TERMINAL: raw non-empty JSON
-         * (no field stripping) is the key, falsy/throwing asJson → "".
-         * Without asJson: isEmpty(), then getAllCustomData, `.json`, String,
-         * JSON.stringify. Returns "" for an empty extra.
-         */
+        /** Canonical content projection (ItemContent.content); "" for an empty extra. */
         function extraKey(extra: ItemExtraData | any): string;
-        /** Canonical item UID "id_data[_extraKey]". */
+        /** Canonical item UID: "id:data:content" (ItemContent.keyOf). */
         function uidOf(item: ItemInstance): string;
+        /**
+         * Split a uid into { id, data, content }; accepts canonical
+         * "id:data:content" and legacy "id_data[_rest]". Never throws.
+         */
+        function parseUid(uid: string): { id: number; data: number; content: string };
         /**
          * Structured identity (computed once, no string re-splitting):
          * uid, extraKey and the original extra BY REFERENCE (read-only for the
          * caller). Use uidOf() when only the string key is needed.
          */
         function uidInfo(item: ItemInstance): { uid: string; extraKey: string; extra: ItemExtraData | null };
-        /**
-         * Extra key for MATCHING when merging: like extraKey for asJson extras,
-         * but STRIPS empty data/name fields (mutates the JSON object). Returns
-         * "" for falsy extras.
-         */
+        /** Alias of the canonical content projection (non-mutating). */
         function fullExtraToString(extra: ItemExtraData | any): string;
         function isExtraEmpty(extra: ItemExtraData | any): boolean;
         /**
-         * Unified item match: same id, data with `-1` wildcard (opts.wildcardData),
-         * extra compared via extraKey (opts.matchExtra), or via
-         * fullExtraToString when opts.stripEmptyExtra (empty data/name fields
-         * don't prevent a match).
+         * Unified item match: same id, data with `-1` wildcard (options.wildcardData),
+         * extra compared via ItemContent.sameExtra (options.matchExtra).
+         * options.stripEmptyExtra is reserved (currently ignored).
          */
-        function match(a: ItemInstance, b: ItemInstance, opts?: {
+        function match(a: ItemInstance, b: ItemInstance, options?: {
             wildcardData?: boolean;
             matchExtra?: boolean;
             stripEmptyExtra?: boolean;
         }): boolean;
         /** Stack-mergeable items: exact id+data (no wildcard) + identical extra. */
         function mergeable(a: ItemInstance, b: ItemInstance): boolean;
+    }
+
+    /**
+     * Canonical projection of an extra to a deterministic string: enchants,
+     * $mod custom data, $rs.nbt or a readable compound tag, and the custom
+     * name. Control keys ($rs*, rsDiskUuid) are excluded; byte/int array
+     * compounds are unsupported.
+     */
+    namespace ItemContent {
+        /** "" for a missing extra, null for unsupported content, "v1|..." otherwise. */
+        function content(extra: ItemExtraData | any): string | null;
+        /** "id:data:content"; ":!unsupported" marker for unsupported content. */
+        function keyOf(item: ItemInstance): string;
+        /** keyOf equality. */
+        function same(a: ItemInstance, b: ItemInstance): boolean;
+        /** Content equality for two extras; unsupported content never matches. */
+        function sameExtra(a: ItemExtraData | any, b: ItemExtraData | any): boolean;
+        /** Copies a readable compound tag into $rs.nbt; false when unsupported. */
+        function fold(extra: ItemExtraData | any): boolean;
+        /** Canonical typed JSON of a NativeCompoundTag; null when unsupported/empty. */
+        function nbtCanonical(tag: any): string | null;
+        function isSupported(extra: ItemExtraData | any): boolean;
+        function isReservedKey(key: string): boolean;
+        namespace DISPLAY {
+            /** Display grouping key (one entry per variant). */
+            function groupKey(item: ItemInstance): string;
+        }
     }
 
     namespace Inventory {

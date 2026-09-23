@@ -68,7 +68,7 @@ declare namespace Adapters {
      * + per-slot maxStack. Slot names/capacity are re-discovered on every
      * sync/plan (container topology can change).
      */
-    function container(storage: any, opts?: ContainerOpts): Entry;
+    function container(storage: any, options?: ContainerOpts): Entry;
     /** Neighbour container entry; null when absent. */
     function neighbour(region: BlockSource, coords: Vector, side: number): Entry | null;
     /** All six container neighbours: [{ side, entry }]. */
@@ -91,7 +91,7 @@ declare namespace Adapters {
      * syncTo is counted as failed, reported via onError, and its token is
      * NOT marked (so the next call retries it).
      */
-    function syncAll(entries: Entry[], opts?: SyncAllOpts): SyncAllResult;
+    function syncAll(entries: Entry[], options?: SyncAllOpts): SyncAllResult;
 
     type CapabilityKind = "drawer" | "container" | "neighbour";
     interface Capabilities {

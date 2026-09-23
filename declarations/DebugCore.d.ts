@@ -33,8 +33,8 @@ declare namespace DebugCore {
     function isEnabled(): boolean;
     /** Prefixed [TAG] channel, gated by setEnabled. */
     function channel(tag: string): Channel;
-    /** In-memory ring buffer of the last N lines; opts.onFlush for crash-safe persistence. */
-    function ring(capacity: number, opts?: { onFlush?(lines: string[]): void }): RingBuffer;
+    /** In-memory ring buffer of the last N lines; options.onFlush for crash-safe persistence. */
+    function ring(capacity: number, options?: { onFlush?(lines: string[]): void }): RingBuffer;
     /** Route channel logs into a ring buffer. */
     function setRing(ring: RingBuffer): void;
     function counter(name: string): Counter;
@@ -50,7 +50,7 @@ declare namespace DebugCore {
      * Report an unexpected error: always logs (bypassing the enabled gate),
      * feeds the ring buffer and optionally opens the engine formatted dialog.
      */
-    function report(error: any, opts?: { tag?: string; title?: string; dialog?: boolean }): string;
+    function report(error: any, options?: { tag?: string; title?: string; dialog?: boolean }): string;
     /** Engine DialogHelper formatted dialog; returns false when unavailable. */
     function showReport(message: string, title?: string): boolean;
 }
