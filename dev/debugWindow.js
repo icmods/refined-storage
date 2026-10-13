@@ -58,10 +58,18 @@ if(Config.dev)(function(){
                 shadow: 0.5
             }
         };
+        var _ramText = null;
         jSetInterval(function(){
             memoryInfo = activityManager.getProcessMemoryInfo([android.os.Process.myPid()]);
-            MainGUIElements['ram'].text = 'RAM Used: ' + (memoryInfo[0].getTotalPss()/1024).toFixed(2) + ' mb';
+            // jSetInterval runs on a Timer thread: compute here, apply UI on the mod thread.
+            _ramText = 'RAM Used: ' + (memoryInfo[0].getTotalPss()/1024).toFixed(2) + ' mb';
         }, 300);
+        setIntervalLocal(function(){
+            if (_ramText !== null) {
+                MainGUIElements['ram'].text = _ramText;
+                _ramText = null;
+            }
+        }, 1);
         var lasttime = -1;
         var frame = 0;
         var lasttps = 0
@@ -88,14 +96,21 @@ if(Config.dev)(function(){
         Network.addServerPacket("RefinedStoragePE.ping", function(client, packetData) {
             client.send('RefinedStoragePE.pingResponse', {startTime: packetData.startTime});
         });
+        var _pingText = null;
         jSetInterval(function(){
             if(responseGetted && _LevelDisplayed){
                 Network.sendToServer("RefinedStoragePE.ping", {startTime: Debug.sysTime()});
                 responseGetted = false;
             } else {
-                MainGUIElements['ping'].text = 'Ping: Infinity';
+                _pingText = 'Ping: Infinity';
             }
         }, 1500);
+        setIntervalLocal(function(){
+            if (_pingText !== null) {
+                MainGUIElements['ping'].text = _pingText;
+                _pingText = null;
+            }
+        }, 1);
         var lasttime1 = -1;
         var frame1 = 0;
         setIntervalLocal(function(){
@@ -116,7 +131,7 @@ if(Config.dev)(function(){
             width: 300, 
             height: 60
         }, 
-        drawing: [{type: 'color', color: android.graphics.Color.argb(76, 76, 76, 100)}/* , {type: "line", x1: 500, y1: 0, x2: 500, y2: 200, width: 2.5, color: android.graphics.Color.WHITE} */],
+        drawing: [{type: 'color', color: android.graphics.Color.argb(76, 76, 76, 100)}],
         elements: MainGUIElements
     });
     Callback.addCallback("LevelLeft", function () {

@@ -16,6 +16,33 @@ var Config = {
 }
 Config.reload();
 
+/* Disk persistence mode (set once at load): false = default, the content list lives in the
+ * world-scope array (RSDiskData) and crafting tasks are saved as before; true = opt-in for
+ * packs that cannot save outside containers and item extras: the list lives in the disk item's
+ * extra ($rs.diskData) and crafting tasks are NOT saved (buffers return to the network). */
+var RS_DISK_DATA_IN_EXTRA = false;
+
+/* User + log notification for item/tile messages (Game.message needs a loaded level). */
+var rsLevelLoaded = false;
+Callback.addCallback("LevelLoaded", function () { rsLevelLoaded = true; });
+Callback.addCallback("LevelLeft", function () { rsLevelLoaded = false; });
+
+function rsNotify(text) {
+	if (rsLevelLoaded) { try { Game.message(text); } catch (e) {} }
+	try { Logger.Log(text, "RS"); } catch (e2) {}
+}
+
+/* Count coercion: only a finite number is an explicit value; anything else uses the fallback. */
+function rsTakeCount(count, itemCount) {
+	if (typeof count == 'number' && isFinite(count)) return count;
+	return (typeof itemCount == 'number' && isFinite(itemCount)) ? itemCount : 0;
+}
+
+/* Config number: 0 is a valid value, unlike the `||` pattern. */
+function rsConfigNumber(value, fallback) {
+	return (typeof value == 'number' && isFinite(value)) ? value : fallback;
+}
+
 const FE = EnergyTypeRegistry.assureEnergyType("FE", 0.25);
 const EU = EnergyTypeRegistry.assureEnergyType("Eu", 1);
 const RF = EnergyTypeRegistry.assureEnergyType("RF", 0.25);
@@ -23,6 +50,57 @@ const RF = EnergyTypeRegistry.assureEnergyType("RF", 0.25);
 const RSgroup = ICRender.getGroup("RefinedStoragePECable");
 
 const GUIs = [];
+
+
+
+function rsGetLiveElement(container, name){
+	if (typeof UiCore != 'undefined' && UiCore && typeof UiCore.liveElement == 'function') {
+		/* UiCore.liveElement owns the lookup (window map -> adapter -> getElement)
+		 * plus the release guard; the cache is disabled to keep the old
+		 * "resolve every call" semantics across window rebuilds. */
+		var win = null;
+		try { win = getClientGuiWindow(container, 'main'); } catch(e) { win = null; }
+		var live = win ? UiCore.liveElement(win, name, { cache: false }) : null;
+		if (!live) live = UiCore.liveElement(container, name, { cache: false });
+		return live || null;
+	}
+	var el = null;
+	try {
+		var window_ = getClientGuiWindow(container, 'main');
+		if (window_ && window_.getElements) {
+			var map = window_.getElements();
+			if (map) el = (map.get ? map.get(name) : map[name]);
+		}
+	} catch(e) { el = null; }
+	if (!el) {
+		try {
+			if (container && container.getUiAdapter) {
+				var adapter = container.getUiAdapter();
+				if (adapter && adapter.getElement) el = adapter.getElement(name);
+			} else if (container && container.getElement) {
+				el = container.getElement(name);
+			}
+		} catch(e) { el = null; }
+	}
+	return el || null;
+}
+
+function rsSetSliderDescriptor(container, name, y){
+	try {
+		var window_ = getClientGuiWindow(container, 'main');
+		if (!window_ || typeof window_.getContent != 'function') return;
+		var content = window_.getContent();
+		if (content && content.elements && content.elements[name]) content.elements[name].y = y;
+	} catch(e) {}
+}
+
+// Null-safe setPosition: getElement() may return null after the window closes.
+function rsSetSliderElement(handler, name, x, y){
+	if(!handler) return;
+	var el = rsGetLiveElement(handler, name);
+	if(!el && handler.getElement) el = handler.getElement(name);
+	if(el && el.setPosition) el.setPosition(x, y);
+}
 
 
 var itemsNamesMap = {};
@@ -90,18 +168,14 @@ const RefinedStorage = {
 				this.networkData.putInt('block_data', this.data.block_data);
 				this.networkData.putBoolean('isActive', this.data.isActive || false);
 				var tile = this;
-				this.container.addServerOpenListener({
-					onOpen: function(container, client){
-						if(tile.onWindowOpen){
-							tile.onWindowOpen(container, client);
-						}
-					}
-				});
-				this.container.addServerCloseListener({
-					onClose: function(container, client){
-						if(tile.onWindowClose){
-							tile.onWindowClose(container, client);
-						}
+				MpCore.connectivity(tile, {
+					onOpen: function(container, client, owner){
+						var t = owner || tile;
+						if(t.onWindowOpen)t.onWindowOpen(container, client);
+					},
+					onClose: function(uid, container, client, owner){
+						var t = owner || tile;
+						if(t.onWindowClose)t.onWindowClose(container, client);
 					}
 				});
 				if(this.unsaveableSlots && InnerCore_pack.packVersionCode >= 120){
@@ -150,9 +224,20 @@ const RefinedStorage = {
 				var leftNetId = null;
 				var lastNetId = this.data.NETWORK_ID;
 				if(lastNetId != 'f' && RSNetworks[lastNetId] && (netElement = RSNetworks[lastNetId][cts(this)]) && netElement.id == this.blockInfo.id) {
-					delete RSNetworks[lastNetId][cts(this)];
-					leftNetId = lastNetId;
+				if(lastNetId == net_id){
+					this.data.LAST_NETWORK_ID = lastNetId;
+					if(!_first)this.setActive(net_id != "f");
+					if(!_first && this.refreshModel && this.networkEntity){
+						var _hasClients = this.container.getNetworkEntity().getClients().iterator().hasNext();
+						if(_hasClients && !this.data._hadClients) rsSafeServerRefresh(this, 'update_network');
+						this.data._hadClients = _hasClients;
+					}
+					if (this.post_update_network) this.post_update_network(net_id);
+					return;
 				}
+				delete RSNetworks[lastNetId][cts(this)];
+				leftNetId = lastNetId;
+			}
 				this.data.LAST_NETWORK_ID = lastNetId;
 				this.data.NETWORK_ID = net_id;
 				this.networkData.putInt('NETWORK_ID', net_id != 'f' ? net_id : -1);
@@ -162,13 +247,13 @@ const RefinedStorage = {
 						y: this.y,
 						z: this.z
 					}
-					RSNetworks[net_id][cts(this)] = {
-						id: this.blockInfo.id,
-						coords: coords_this,
-						upgrades: this.data.upgrades,
-						isActive: this.data.isActive || false
-					}
-					if (this.data.LAST_NETWORK_ID != net_id) _RS._emit("networkTileJoined", {netId: net_id, blockId: this.blockInfo.id, coords: coords_this, dimension: this.dimension});
+				RSNetworks[net_id][cts(this)] = {
+					id: this.blockInfo.id,
+					coords: coords_this,
+					upgrades: this.data.upgrades,
+					isActive: this.data.isActive || false
+				}
+				if (this.data.LAST_NETWORK_ID != net_id) _RS._emit("networkTileJoined", {netId: net_id, blockId: this.blockInfo.id, coords: coords_this, dimension: this.dimension});
 				} else if (leftNetId != null) {
 					_RS._emit("networkTileLeft", {netId: leftNetId, blockId: this.blockInfo.id, coords: {x: this.x, y: this.y, z: this.z}, dimension: this.dimension});
 				}
@@ -187,7 +272,6 @@ const RefinedStorage = {
 		}
 		if (!params.setActive) {
 			params.setActive = function (state, forced, preventRefreshModel) {
-				if(!this.networkEntity) return false;
 				state = this.data.NETWORK_ID != "f" ? !!state : false;
 				if(this.data.isActive == state) return false;
 				if (this.pre_setActive) if(this.pre_setActive(state)) return false;
@@ -197,7 +281,7 @@ const RefinedStorage = {
 					this.networkData.putBoolean('isActive', state);
 					if(this.data.NETWORK_ID != "f" && RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID][this.coords_id()])RSNetworks[this.data.NETWORK_ID][this.coords_id()].isActive = state
 					this.networkData.sendChanges();
-					if(this.refreshModel && !preventRefreshModel)this.refreshModel();
+					if(this.refreshModel && !preventRefreshModel) rsSafeServerRefresh(this, 'setActive');
 					if (this.post_setActive) this.post_setActive(state);
 					if(this.refreshGui && !this.setActiveNotUpdateGui)this.refreshGui();
 					return true;
@@ -280,6 +364,10 @@ const RefinedStorage = {
 			}
 		}
 		this.paramsMap[id] = params;
+		if(params.getScreenByName && typeof MpCore != "undefined" && MpCore && MpCore.attachScreens){
+			var _rsScreens = params.getScreenByName;
+			MpCore.attachScreens(params, function(screenName){ return _rsScreens.call(params, screenName); });
+		}
 		TileEntity.registerPrototype(id, params);
 	},
 	copy: function(id1, id2, params){
@@ -287,6 +375,7 @@ const RefinedStorage = {
 		if(!this.paramsMap[id1]) throw '[RefinedStorageError - RefinedStorage.copy] TileEntity with this id is not registered';
 		var params1 = Object.assign({}, this.paramsMap[id1]);
 		delete params1.tick;
+		if (params1.defaultValues) params1.defaultValues = Object.assign({}, params1.defaultValues);
 		for(var key in params){
 			if(key === 'defaultValues' && params1.defaultValues){
 				Object.assign(params1.defaultValues, params.defaultValues);
@@ -295,6 +384,10 @@ const RefinedStorage = {
 			}
 		}
 		this.paramsMap[id2] = params1;
+		if(params1.getScreenByName && typeof MpCore != "undefined" && MpCore && MpCore.attachScreens){
+			var _rsScreens1 = params1.getScreenByName;
+			MpCore.attachScreens(params1, function(screenName){ return _rsScreens1.call(params1, screenName); });
+		}
 		TileEntity.registerPrototype(id2, params1);
 	},
 	mapTexture: function (coords, texture, meta) {
@@ -321,55 +414,31 @@ const RefinedStorage = {
 		}
 	},
 	sortItems: function (type, reverse, textSearch, container, keys) {
-		if (RSJava && !RSJava.isCompatRequired)
-			return ScriptableObjectHelper.createArray(RSJava.sortItems(type, reverse, textSearch || null, container, keys));
-
-		var slots = container.slots;
-		var result = textSearch ? keys.filter(function(key) {
-			var slot = slots[key];
-			return slot && slot.id !== 0 && getItemName(slot.id, slot.data, slot.extra).toLowerCase().indexOf(textSearch.toLowerCase()) !== -1;
-		}) : keys.slice();
-
-		var comparator;
-		if (reverse) {
-			if (type == 2) {
-				comparator = function(a, b) { return slots[b].id - slots[a].id; };
-			} else if (type == 0) {
-				comparator = function(a, b) {
-					var slot1 = slots[a], slot2 = slots[b];
-					return slot1.count == 0 || slot2.count == 0 ? slot2.count - slot1.count : slot1.count - slot2.count;
-				};
-			} else if (type == 1) {
-				comparator = function(a, b) {
-					var slot1 = slots[a], slot2 = slots[b];
-					if (slot1.id == 0 || slot2.id == 0) return slot2.id - slot1.id;
-					var name1 = getItemName(slot1.id, slot1.data, slot1.extra), name2 = getItemName(slot2.id, slot2.data, slot2.extra);
-					return name1 > name2 ? 1 : name1 < name2 ? -1 : 0;
-				};
-			}
-		} else {
-			if (type == 2) {
-				comparator = function(a, b) {
-					var slot1 = slots[a], slot2 = slots[b];
-					return slot1.id == 0 || slot2.id == 0 ? slot2.id - slot1.id : slot1.id - slot2.id;
-				};
-			} else if (type == 0) {
-				comparator = function(a, b) { return slots[b].count - slots[a].count; };
-			} else if (type == 1) {
-				comparator = function(a, b) {
-					var slot1 = slots[a], slot2 = slots[b];
-					if (slot1.id == 0 || slot2.id == 0) return slot2.id - slot1.id;
-					var name1 = getItemName(slot1.id, slot1.data, slot1.extra), name2 = getItemName(slot2.id, slot2.data, slot2.extra);
-					return name2 > name1 ? 1 : name2 < name1 ? -1 : 0;
-				};
+		if (RSJava && !RSJava.isCompatRequired) {
+			try {
+				return ScriptableObjectHelper.createArray(RSJava.sortItems(type, reverse, textSearch || null, container, keys));
+			} catch (e) {
+				Logger.Log('[RefinedStorage] native sortItems failed, using JS fallback: ' + e, 'RefinedStorageError');
 			}
 		}
-		if (comparator) result.sort(comparator);
-		return result;
+
+		var slots = container.slots;
+		return RecipeIndex.sortKeys(keys, {
+			getId: function(key) { var slot = slots[key]; return slot ? slot.id : 0; },
+			getCount: function(key) { var slot = slots[key]; return slot ? slot.count : 0; },
+			getName: function(key) { var slot = slots[key]; if (!slot) return ""; return getItemName(slot.id, slot.data, slot.extra); },
+			hasItem: function(key) { var slot = slots[key]; return !!slot && slot.id !== 0; }
+		}, { by: type, reverse: reverse === true, textSearch: textSearch || null });
+
 	},
 	sortCrafts: function (items, textSearch, onlyItemsMap, slots, inventoryItems, isDarkenMap) {
-		if (RSJava && !RSJava.isCompatRequired)
-			return ScriptableObjectHelper.createArray(RSJava.sortCrafts(items, textSearch || null, onlyItemsMap, slots, inventoryItems, isDarkenMap));
+		if (RSJava && !RSJava.isCompatRequired) {
+			try {
+				return ScriptableObjectHelper.createArray(RSJava.sortCrafts(items, textSearch || null, onlyItemsMap, slots, inventoryItems, isDarkenMap));
+			} catch (e) {
+				Logger.Log('[RefinedStorage] native sortCrafts failed, using JS fallback: ' + e, 'RefinedStorageError');
+			}
+		}
 
 		var recipes = new java.util.HashSet();
 		if (!RSJava || !RSJava.isRecipeCompatRequired) {
@@ -396,37 +465,38 @@ const RefinedStorage = {
 			}
 		}
 
-		var darkenRecipes = [], sortedRecipes = [];
+		var list = [];
 		var it = recipes.iterator();
-		while (it.hasNext()) {
-			var recipe = it.next();
-			if (textSearch) {
-				var result = recipe.getResult();
-				if (getItemName(result.id, result.data != -1 ? result.data : 0, null).toLowerCase().indexOf(textSearch.toLowerCase()) == -1) continue;
-			}
+		while (it.hasNext()) list.push(it.next());
+		var needle = textSearch ? CoreKit.locale.normalizeSearch(textSearch) : null;
+		var partitioned = RecipeIndex.partition(list, function(recipe) {
 			var isDarken = false;
 			var entries = recipe.getEntryCollection().iterator();
 			while (entries.hasNext()) {
 				var entry = entries.next();
 				if (!entry || entry.id == 0) continue;
 				var dataList = onlyItemsMap[entry.id];
-				if (!dataList || (entry.data != -1 && dataList.indexOf(entry.data) == -1)) {
-					isDarken = true;
-					break;
-				}
+				if (!dataList || (entry.data != -1 && dataList.indexOf(entry.data) == -1)) { isDarken = true; break; }
 			}
-			isDarkenMap['e' + recipe.getRecipeUid()] = isDarken;
-			if (isDarken) darkenRecipes.push(recipe); else sortedRecipes.push(recipe);
-		}
-		return sortedRecipes.concat(darkenRecipes);
+			return !isDarken;
+		}, {
+			filter: needle ? function(recipe) {
+				var result = recipe.getResult();
+				return CoreKit.locale.normalizeSearch(getItemName(result.id, result.data != -1 ? result.data : 0, null)).indexOf(needle) != -1;
+			} : null,
+			onClassify: function(recipe, isPreferred) {
+				isDarkenMap['e' + recipe.getRecipeUid()] = !isPreferred;
+			}
+		});
+		return partitioned.ordered;
 	}
 }
 
 function testButtons(elementsS_, initFunc_){
 	if(!Config.dev) return;
 	var UIHeight = Number(UI.getScreenHeight());
-	var y = 20;//562-80-50;
-	var start_x = 630;//400 + 200;
+	var y = 20;
+	var start_x = 630;
 	elementsS_['fps'] = {
 		type: "fps", 
 		x: 10,

@@ -34,12 +34,15 @@ Callback.addCallback("PostLoaded", function () {
 	}
 });
 
-function rsFindNetworkByBinding(binding) {
+function rsFindNetworkByBinding(binding, dimension) {
 	for (var netId = 0; netId < RSNetworks.length; netId++) {
 		var net = RSNetworks[netId];
 		if (!net) continue;
 		var entry = net[cts(binding)];
-		if (entry && entry.id == BlockID.RS_controller) return netId;
+		if (!entry || entry.id != BlockID.RS_controller) continue;
+		/* Same coords can exist in several dimensions: never resolve another dimension's network. */
+		if (dimension != null && net.info && net.info.dimension != null && net.info.dimension != dimension) continue;
+		return netId;
 	}
 	return -1;
 }
@@ -128,34 +131,53 @@ function rsBindWirelessItem(itemId, capacity, coords, playerUid, blockSource) {
 	if (extra.getInt('energy', -1) < 0) extra.putInt('energy', capacity);
 	if (RSChargeRegistry) slotItem.data = RSChargeRegistry.getDisplayData(extra.getInt('energy'), capacity);
 	new PlayerActor(playerUid).setInventorySlot(slotItem.slot, slotItem.id, slotItem.count, slotItem.data, extra);
-	log(Translation.translate('Linked to') + ' ' + controllerCoords.x + ', ' + controllerCoords.y + ', ' + controllerCoords.z);
+	rsNotify(Translation.translate('Linked to') + ' ' + controllerCoords.x + ', ' + controllerCoords.y + ', ' + controllerCoords.z);
 }
 
 function rsOpenWirelessTerminal(cfg) {
 	var playerUid = cfg.playerUid;
-	var now = World.getThreadTime();
-	if (cfg.throttle[playerUid] && now - cfg.throttle[playerUid] < 10) return;
+	var now = TickScheduler.global.ticks;
+	if (cfg.throttle[playerUid] && now >= cfg.throttle[playerUid] && now - cfg.throttle[playerUid] < 10) return;
 	cfg.throttle[playerUid] = now;
 	var slotItem = searchItem(cfg.itemId, -1, -1, false, false, playerUid);
-	if (!slotItem || !slotItem.extra) return log(Translation.translate(cfg.noBindMsg));
+	if (!slotItem || !slotItem.extra) return rsNotify(Translation.translate(cfg.noBindMsg));
 	var extra = slotItem.extra;
 	var binding = { x: extra.getInt('controllerX', -1), y: extra.getInt('controllerY', -1), z: extra.getInt('controllerZ', -1) };
-	if (binding.x == -1) return log(Translation.translate(cfg.noBindMsg));
+	if (binding.x == -1) return rsNotify(Translation.translate(cfg.noBindMsg));
 	var bindingDimension = extra.getInt('dimension', -1);
 	var crossDimension = Entity.getDimension(playerUid) != bindingDimension;
-	var netId = rsFindNetworkByBinding(binding);
-	if (netId == -1 || !RSNetworks[netId] || !RSNetworks[netId].info) return log(Translation.translate(cfg.noBindMsg));
+	var netId = rsFindNetworkByBinding(binding, bindingDimension);
+	if (netId == -1 || !RSNetworks[netId] || !RSNetworks[netId].info) return rsNotify(Translation.translate(cfg.noBindMsg));
 	var best = rsFindNearestTransmitter(playerUid, netId, crossDimension);
-	if (!best) return log(Translation.translate(cfg.noRangeMsg));
+	if (!best) {
+		var transmitterEntries = searchBlocksInNetwork(netId, BlockID.RS_wireless_transmitter);
+		if (transmitterEntries.length === 0) return rsNotify(Translation.translate(cfg.noTransmitterMsg));
+		var checkSource = crossDimension ? BlockSource.getDefaultForDimension(bindingDimension) : BlockSource.getDefaultForActor(playerUid);
+		var hasLoadedActive = false;
+		for (var ti = 0; ti < transmitterEntries.length; ti++) {
+			var _t = transmitterEntries[ti];
+			if (!_t.isActive) continue;
+			var _tile = World.getTileEntity(_t.coords.x, _t.coords.y, _t.coords.z, checkSource);
+			if (_tile) { hasLoadedActive = true; break; }
+		}
+		if (!hasLoadedActive) return rsNotify(Translation.translate(cfg.transmitterUnloadedMsg));
+		return rsNotify(Translation.translate(cfg.noRangeMsg));
+	}
 	var energy = extra.getInt('energy', 0);
-	if (energy <= cfg.config.openUsage) return log(Translation.translate(cfg.noEnergyMsg));
+	if (energy <= cfg.config.openUsage) return rsNotify(Translation.translate(cfg.noEnergyMsg));
 	var client = Network.getClientForPlayer(playerUid);
 	if (!client) return;
 	var phantom = null;
 	var session = PhantomSessions.get(playerUid);
 	if (session && session.tile && !session.tile.data.removed && session.netId == netId && TileEntity.isTileEntityLoaded(session.tile)) {
 		phantom = session.tile;
-		if (phantom.data.screen != cfg.screen) phantom.data.screen = cfg.screen;
+		if (phantom.data.screen != cfg.screen) {
+			if (phantom.data.screen == 'monitor' && phantom._monitorListener) {
+				var oldNet = phantom.data.NETWORK_ID != 'f' ? RSNetworks[phantom.data.NETWORK_ID] : null;
+				if (oldNet && oldNet.info) oldNet.info.removeMonitorListener(phantom._monitorListener);
+			}
+			phantom.data.screen = cfg.screen;
+		}
 	} else {
 		if (session) PhantomSessions.remove(playerUid, session.tile);
 		phantom = spawnPhantom(playerUid, netId, cfg.screen, BlockSource.getDefaultForActor(playerUid));
@@ -183,7 +205,7 @@ function rsOpenWirelessTerminal(cfg) {
 	}
 	var blockSource = crossDimension ? BlockSource.getDefaultForDimension(bindingDimension) : BlockSource.getDefaultForActor(playerUid);
 	var tile = World.getTileEntity(best.coords.x, best.coords.y, best.coords.z, blockSource);
-	if (!tile || !tile.container) return log(Translation.translate(cfg.noRangeMsg));
+	if (!tile || !tile.container) return rsNotify(Translation.translate(cfg.noRangeMsg));
 	if (!tile.data.openedScreens) tile.data.openedScreens = {};
 	tile.data.openedScreens[playerUid] = cfg.screen;
 	if (tile.data[cfg.otherSessionMap]) delete tile.data[cfg.otherSessionMap][playerUid];
@@ -208,6 +230,8 @@ function rsOpenWirelessGrid(playerUid) {
 		throttle: rsWirelessGridLastOpen,
 		noBindMsg: 'Wireless Grid is not bound to a network.',
 		noRangeMsg: 'There is no Wireless Transmitter in range.',
+		noTransmitterMsg: 'There is no Wireless Transmitter in the network.',
+		transmitterUnloadedMsg: 'The Wireless Transmitter is not loaded.',
 		noEnergyMsg: 'Wireless Grid is out of energy.'
 	});
 }

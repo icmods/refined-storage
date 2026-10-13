@@ -1,5 +1,16 @@
 IDRegistry.genBlockID("RS_craftingMonitor");
 
+var __rsMonSwipeState = null;
+
+function rsResetMonitorSwipe() {
+	if (__rsMonSwipeState) {
+		__rsMonSwipeState.swipeY = false;
+		__rsMonSwipeState.swipeSum = 0;
+		__rsMonSwipeState.moving = false;
+		__rsMonSwipeState.swipeDir = 0;
+	}
+}
+
 var _monitorTexture = [
 	["disk_drive_bottom", 0],
 	["grid_top", 0],
@@ -17,7 +28,7 @@ Block.createBlockWithRotation("RS_craftingMonitor", [
 	}
 ])
 RS_blocks.push(BlockID['RS_craftingMonitor']);
-EnergyUse[BlockID['RS_craftingMonitor']] = Config.energy_uses.craftingMonitor || 8;
+EnergyUse[BlockID['RS_craftingMonitor']] = rsConfigNumber(Config.energy_uses.craftingMonitor, 8);
 
 function getCraftingMonitorTexture(variation, _active){
 	return getRotatableTexture(_monitorTexture, variation, _active);
@@ -69,36 +80,75 @@ function createProvidedCraftPostData(taskData){
 		else if (el.scheduled > 0) statusColor = 1;
 		else if (el.crafting > 0) statusColor = 2;
 		else if (el.stored > 0) statusColor = 0;
-		newData.push([{ id: el.item.id, data: el.item.data }, lines[0] || '', lines[1] || '', statusColor]);
+		newData.push([{ id: el.item.id || 0, data: el.item.data || 0 }, lines[0] || '', lines[1] || '', statusColor]);
 	}
 	return newData;
 }
 
 var craftingMonitorData = {
-	page: 0,
+	elementPage: 0,
 	providingCrafts: [],
-	slots: 0
+	slots: 0,
+	viewTask: null,
+	swipeDir: 0
 };
+/* openGui can arrive before the window is opened: keep the payload and retry from the tick. */
+var craftingMonitorPending = null;
 
-function craftingMonitorSwitchPage(page){
+// Flat list of every process across all tasks (12 per page).
+function craftingMonitorAllEntries() {
+	var flat = [];
+	for (var ti = 0; ti < craftingMonitorData.providingCrafts.length; ti++) {
+		var task = craftingMonitorData.providingCrafts[ti];
+		if (!task) continue;
+		if (!task.postData) task.postData = createProvidedCraftPostData(task);
+		for (var pi = 0; pi < task.postData.length; pi++) {
+			flat.push({ task: task, item: task.postData[pi] });
+		}
+	}
+	return flat;
+}
+
+function craftingMonitorSwitchElementPage(epage, force){
+	if (craftingMonitorData._switchUpdating) {
+		craftingMonitorData._pendingSwitch = { epage: epage, force: force };
+		return;
+	}
+	craftingMonitorData._switchUpdating = true;
+	try {
+		craftingMonitorSwitchElementPageInner(epage, force);
+	} finally {
+		craftingMonitorData._switchUpdating = false;
+		var pendingSwitch = craftingMonitorData._pendingSwitch;
+		if (pendingSwitch) {
+			craftingMonitorData._pendingSwitch = null;
+			craftingMonitorSwitchElementPage(pendingSwitch.epage, pendingSwitch.force);
+		}
+	}
+}
+
+function craftingMonitorSwitchElementPageInner(epage, force){
 	var mainWindow = craftingMonitorGUI.getWindow('main');
 	if(!mainWindow || !mainWindow.isOpened()) return;
 	var content_ = mainWindow.getContent();
-	page = Math.max(0, Math.min(page - 1, craftingMonitorData.providingCrafts.length - 1));
-	craftingMonitorData.page = page;
-	var _data = page != -1 && craftingMonitorData.providingCrafts[page] ? 
-		(craftingMonitorData.providingCrafts[page].postData = createProvidedCraftPostData(craftingMonitorData.providingCrafts[page])) 
-		: [];
+	var entries = craftingMonitorAllEntries();
+	var totalEpages = Math.max(1, Math.ceil(entries.length / Math.max(1, craftingMonitorData.slots)));
+	epage = Math.max(0, Math.min(epage, totalEpages - 1));
+	// Re-render only on a real page change unless force=true (live refresh).
+	if (!force && epage === craftingMonitorData.elementPage) return;
+	craftingMonitorData.elementPage = epage;
 	var elements_ = craftingMonitorGUI.getElements();
-		for (var i = 0; i < craftingMonitorData.slots; i++) {
+	for (var i = 0; i < craftingMonitorData.slots; i++) {
 		var a = i;
-		var item = _data[i] || [{ id: 0, data: 0}, '', '', null];
+		var entry = entries[epage * craftingMonitorData.slots + i];
+		var item = entry ? entry.item : [{ id: 0, data: 0}, '', '', null];
+		if (i === 0) craftingMonitorData.viewTask = entry ? entry.task : null;
 		elements_.get("mitemCount" + a).setBinding('text', item[1]);
 		elements_.get("aitemCount" + a).setBinding('text', item[2] || '');
 		var slot = elements_.get("slot" + a);
-		slot.curId = item[0].id;
-		slot.curData = item[0].data;
-		slot.curCount = item[0].id ? 1 : 0;
+		slot.curId = (item[0] && item[0].id) || 0;
+		slot.curData = (item[0] && item[0].data) || 0;
+		slot.curCount = item[0] && item[0].id ? 1 : 0;
 		if (content_ && content_.elements) {
 			var sd = content_.elements["slot" + a];
 			if (sd) {
@@ -111,26 +161,68 @@ function craftingMonitorSwitchPage(page){
 			}
 		}
 	}
-	var totalPages = craftingMonitorData.providingCrafts.length || 1;
-	if (totalPages > 1) {
-		var sliderEl = elements_.get("slider_button");
-		var sf = _elementsGUI_craftingMonitor["slider_frame"];
-		var range = sf.y + sf.height - sf.scale - sf.y - sf.scale - 15 * (_elementsGUI_craftingMonitor["slider_frame"].width - 2*sf.scale)/12;
-		var ratio = totalPages > 1 ? page / (totalPages - 1) : 0;
-		sliderEl.y = sf.y + sf.scale + ratio * range;
-	} else {
-		elements_.get("slider_button").y = _elementsGUI_craftingMonitor["slider_button"].start_y;
-	}
+	// Descriptor mutations need forceRefresh.
+	if (mainWindow.forceRefresh) mainWindow.forceRefresh();
+	var sliderEl = elements_.get("slider_button");
+	var sf = _elementsGUI_craftingMonitor["slider_frame"];
+	var range = sf.y + sf.height - sf.scale - sf.y - sf.scale - 15 * (_elementsGUI_craftingMonitor["slider_frame"].width - 2*sf.scale)/12;
+	var ratio = totalEpages > 1 ? epage / (totalEpages - 1) : 0;
+	if (sliderEl && sliderEl.setPosition) sliderEl.setPosition(_elementsGUI_craftingMonitor["slider_button"].x, sf.y + sf.scale + ratio * range);
+	else if (sliderEl) sliderEl.y = sf.y + sf.scale + ratio * range;
 }
 
 var _elementsGUI_craftingMonitor = {};
-function makeMonitorListener(tile, refreshFlag, changedTaskFlag) {
+function makeMonitorListener(tile, refreshFlag, changedTaskFlag, directRefresh) {
 	refreshFlag = refreshFlag || 'refreshCurPage';
 	changedTaskFlag = changedTaskFlag || '_changedTaskId';
 	return function (info, task) {
 		if (task) tile.data[changedTaskFlag] = task.id;
-		tile.data[refreshFlag] = true;
+		if (!directRefresh) {
+			tile.data[refreshFlag] = true;
+			return;
+		}
+		// Send directly from the listener; the tick fallback is gone after cancel-all.
+		var _now = TickScheduler.global.ticks;
+		if (tile.data.lastMonitorRefresh === undefined || _now < tile.data.lastMonitorRefresh || _now - tile.data.lastMonitorRefresh >= 5) {
+			tile.data.lastMonitorRefresh = _now;
+			tile.data[refreshFlag] = false;
+			directRefresh();
+		} else {
+			tile.data[refreshFlag] = true;
+			// Throttled: retry on the next engine tick instead of relying on tile.tick.
+			TickScheduler.global.defer(function () {
+				tile.data.lastMonitorRefresh = TickScheduler.global.ticks;
+				tile.data[refreshFlag] = false;
+				directRefresh();
+			}, { ticks: 6 });
+		}
 	};
+}
+
+/* Full sync: derives the listener state from the live container client list. Only for the
+ * rare moments when clients can change (init, open, close, reconnect). */
+function rsMonitorEnsureListener(tile) {
+	if (!tile || !tile._monitorListener) return;
+	if (tile.data.NETWORK_ID == 'f' || !RSNetworks[tile.data.NETWORK_ID]) return;
+	var info = RSNetworks[tile.data.NETWORK_ID].info;
+	if (!info) return;
+	var hasClients = false;
+	try { hasClients = tile.container.getNetworkEntity().getClients().iterator().hasNext(); } catch (e) { hasClients = false; }
+	if (hasClients && !tile._monitorListenerOn) {
+		if (info.addMonitorListener) info.addMonitorListener(tile._monitorListener);
+		tile._monitorListenerOn = true;
+	} else if (!hasClients && tile._monitorListenerOn) {
+		if (info.removeMonitorListener) info.removeMonitorListener(tile._monitorListener);
+		tile._monitorListenerOn = false;
+	}
+}
+
+/* Cheap re-attach after a network switch: no client query (state is already known). */
+function rsMonitorAttachListener(tile) {
+	if (!tile || !tile._monitorListener || !tile._monitorListenerOn) return;
+	if (tile.data.NETWORK_ID == 'f' || !RSNetworks[tile.data.NETWORK_ID]) return;
+	var info = RSNetworks[tile.data.NETWORK_ID].info;
+	if (info && info.addMonitorListener) info.addMonitorListener(tile._monitorListener);
 }
 
 function buildCraftingMonitorPayload(tile, tasks, first, providingCraft, changedTaskFlag) {
@@ -144,8 +236,10 @@ function buildCraftingMonitorPayload(tile, tasks, first, providingCraft, changed
 		tile.data[changedTaskFlag] = null;
 	}
 	var tasksToSend = tasks;
+	var fullList = false;
 	if (providingCraft) tasksToSend = [providingCraft];
 	else if (changedTask) tasksToSend = [changedTask];
+	else fullList = true;
 	var mapped = [];
 	for (var mti = 0; mti < tasksToSend.length; mti++) {
 		var mt = tasksToSend[mti];
@@ -165,15 +259,14 @@ function buildCraftingMonitorPayload(tile, tasks, first, providingCraft, changed
 		redstone_mode: tile.data.redstone_mode,
 		providingCrafts: tile.isWorkAllowed() ? mapped : [],
 		refresh: !first,
-		first: first
+		first: first,
+		fullList: fullList
 	};
 }
 
-function craftingMonitorOpenGui(container, window, content, eventData){
-	if(!content || !window || !window.isOpened()) return;
-	craftingMonitorData.container = container;
+function applyCraftingMonitorPayload(eventData){
 	var incoming = eventData.providingCrafts;
-	if (eventData.refresh && craftingMonitorData.providingCrafts && incoming.length === 1 && incoming[0].id) {
+	if (eventData.refresh && !eventData.fullList && craftingMonitorData.providingCrafts && incoming.length === 1 && incoming[0].id) {
 		var found = false;
 		for (var i = 0; i < craftingMonitorData.providingCrafts.length; i++) {
 			if (craftingMonitorData.providingCrafts[i].id === incoming[0].id) {
@@ -186,8 +279,27 @@ function craftingMonitorOpenGui(container, window, content, eventData){
 	} else {
 		craftingMonitorData.providingCrafts = incoming;
 	}
-	var page = eventData.refresh ? craftingMonitorData.page : 1;
-	craftingMonitorSwitchPage(page);
+}
+
+function craftingMonitorOpenGui(container, window, content, eventData){
+	if(!content || !window) return;
+	craftingMonitorData.container = container;
+	/* Bind this window to the monitor tile that opened it: only its payloads may drive the
+	 * client state (other loaded monitors tick too and used to overwrite it). The binding is
+	 * set before the open check so a payload arriving early is not lost. */
+	craftingMonitorData.name = eventData.name;
+	craftingMonitorData.isUiLive = function(){
+		try { return !!(window && typeof window.isOpened == 'function' && window.isOpened()); } catch(e) { return false; }
+	};
+	if(!window.isOpened()){
+		craftingMonitorPending = { container: container, window: window, content: content, eventData: eventData, ticks: 0 };
+		return;
+	}
+	craftingMonitorPending = null;
+	if (!eventData.refresh) craftingMonitorData.viewTask = null;
+	applyCraftingMonitorPayload(eventData);
+	var page = eventData.refresh ? craftingMonitorData.elementPage : 0;
+	craftingMonitorSwitchElementPage(page, true);
 }
 
 var craftingMonitorGUI = new UI.StandartWindow({
@@ -285,31 +397,48 @@ GUIs.push(craftingMonitorGUI);
 
 	var sliderFrameHeight = _elementsGUI_craftingMonitor['craftsFrame'].scale*frameBitmapHeight;
 	var sliderFrameBorder = 3.8;
+	// Slider = item scrollbar of the current task, not task paging (RS Java parity).
+	function monitorElementPageFromY(y) {
+		var totalPages = Math.max(1, Math.ceil(craftingMonitorAllEntries().length / Math.max(1, craftingMonitorData.slots)));
+		var sliderTop = _elementsGUI_craftingMonitor["slider_frame"].y + sliderFrameBorder;
+		var sliderBottom = _elementsGUI_craftingMonitor["slider_frame"].y + sliderFrameHeight - sliderFrameBorder;
+		var btnH = (_elementsGUI_craftingMonitor["slider_frame"].width - 2*sliderFrameBorder)/12 * 15;
+		var range = sliderBottom - sliderTop - btnH;
+		var ratio = range > 0 ? (y - sliderTop) / range : 0;
+		ratio = Math.max(0, Math.min(1, ratio));
+		return Math.round(ratio * (totalPages - 1));
+	}
+	function monitorTrackTouch(element, event) {
+		if (event.type == 'DOWN') {
+			craftingMonitorData.moving = true;
+			return;
+		}
+		if (event.type == 'CLICK') {
+			craftingMonitorData.moving = false;
+			craftingMonitorSwitchElementPage(monitorElementPageFromY(event.y));
+			return;
+		}
+		if (!craftingMonitorData.moving) return;
+		if (event.type == 'MOVE') {
+			craftingMonitorSwitchElementPage(monitorElementPageFromY(event.y));
+			return;
+		}
+		if (event.type == 'UP') {
+			craftingMonitorData.moving = false;
+			craftingMonitorSwitchElementPage(monitorElementPageFromY(event.y));
+		}
+	}
 	_elementsGUI_craftingMonitor["slider_frame"] = {
 		type: "frame",
 		x: _elementsGUI_craftingMonitor['craftsFrame'].x + _elementsGUI_craftingMonitor['craftsFrame'].scale*frameBitmapWidth + 10,
 		y: _elementsGUI_craftingMonitor['craftsFrame'].y,
-		z: -100,
+		// z:100 is above the touch layer; the track+thumb receive DRAG.
+		z: 100,
 		width: 45,
 		height: sliderFrameHeight,
 		bitmap: "slider4",
 		scale: sliderFrameBorder,
-		onTouchEvent: function(element, event) {
-			if (event.type == 'DOWN') {
-				craftingMonitorData.moving = true;
-			}
-			if (event.type == 'CLICK') {
-				var totalPages = craftingMonitorData.providingCrafts.length || 1;
-				var sliderTop = _elementsGUI_craftingMonitor["slider_frame"].y + sliderFrameBorder;
-				var sliderBottom = _elementsGUI_craftingMonitor["slider_frame"].y + sliderFrameHeight - sliderFrameBorder;
-				var btnH = (_elementsGUI_craftingMonitor["slider_frame"].width - 2*sliderFrameBorder)/12 * 15;
-				var range = sliderBottom - sliderTop - btnH;
-				var ratio = range > 0 ? (event.y - sliderTop) / range : 0;
-				ratio = Math.max(0, Math.min(1, ratio));
-				var page = Math.round(ratio * (totalPages - 1)) + 1;
-				craftingMonitorSwitchPage(page);
-			}
-		}
+		onTouchEvent: monitorTrackTouch
 	};
 	var sliderBtnScale = (_elementsGUI_craftingMonitor["slider_frame"].width - 2*sliderFrameBorder)/12;
 	_elementsGUI_craftingMonitor["slider_button"] = {
@@ -319,35 +448,30 @@ GUIs.push(craftingMonitorGUI);
 		y: _elementsGUI_craftingMonitor["slider_frame"].y + sliderFrameBorder,
 		z: 200,
 		bitmap: 'slider_buttonOff',
-		scale: sliderBtnScale
+		scale: sliderBtnScale,
+		onTouchEvent: monitorTrackTouch
 	}
+	var __uiMonSwipeState = { swipeY: false, swipeSum: 0, moving: false, swipeDir: 0 };
+	__rsMonSwipeState = __uiMonSwipeState;
+	var __uiMonSwipeHandler = UiCore.attachSwipe({
+		variant: "anchor",
+		drag: false,
+		thresholds: { move: 30, accumulate: 70 },
+		getLastPage: function () { return craftingMonitorData.elementPage; },
+		switchPage: function (page) { craftingMonitorSwitchElementPage(page); },
+		state: __uiMonSwipeState
+	});
 	_elementsGUI_craftingMonitor["monitor_swipe"] = {
 		type: "frame",
 		x: _elementsGUI_craftingMonitor['craftsFrame'].x,
 		y: _elementsGUI_craftingMonitor['craftsFrame'].y,
-		z: -200,
+		// z:100 is above the touch layer; slots are visual so they are not blocked.
+		z: 100,
 		width: _elementsGUI_craftingMonitor['craftsFrame'].scale*frameBitmapWidth,
 		height: sliderFrameHeight,
 		bitmap: "empty1",
 		onTouchEvent: function(element, event) {
-			if (event.type == 'DOWN') {
-				craftingMonitorData.swipeY = event.y;
-				craftingMonitorData.swipeSum = 0;
-			}
-			if (craftingMonitorData.swipeY && event.type == 'MOVE') {
-				var d = event.y - craftingMonitorData.swipeY;
-				craftingMonitorData.swipeSum += Math.abs(d);
-				if (Math.abs(d) > 7 || craftingMonitorData.swipeSum > 15) {
-					var inc = d > 0 ? -1 : 1;
-					craftingMonitorSwitchPage(craftingMonitorData.page + inc + 1);
-					craftingMonitorData.swipeY = event.y;
-					craftingMonitorData.swipeSum = 0;
-				}
-			}
-			if (event.type == 'UP' || event.type == 'CLICK') {
-				craftingMonitorData.swipeY = null;
-				craftingMonitorData.swipeSum = 0;
-			}
+			__uiMonSwipeHandler(element, event);
 		}
 	};
 	_elementsGUI_craftingMonitor['buttonCancelAll'] = {
@@ -396,9 +520,7 @@ GUIs.push(craftingMonitorGUI);
 		scale: _elementsGUI_craftingMonitor['buttonCancelAll'].scale,
 		clicker: {
 			onClick: function(itemContainerUiHandler, itemContainer, element){
-				var tasks = craftingMonitorData.providingCrafts;
-				if (!tasks || !tasks.length) return;
-				var task = tasks[craftingMonitorData.page];
+				var task = craftingMonitorData.viewTask;
 				if (task && task.id) itemContainer.sendEvent("cancelTask", { taskId: task.id });
 			}
 		}
@@ -440,21 +562,30 @@ RefinedStorage.createTile(BlockID.RS_craftingMonitor, {
 		return craftingMonitorGUI;
 	},
 	pre_init: function(){
-		this._monitorListener = makeMonitorListener(this, 'refreshCurPage', '_changedTaskId');
+		var tile = this;
+		rsDetachMonitorListener(this);
+		this._monitorListener = makeMonitorListener(this, 'refreshCurPage', '_changedTaskId', function(){
+			if (!tile._monitorListenerOn) return;
+			// Resolve the tile live: the closure tile may be a re-created dead instance.
+			var cur = tile.blockSource ? World.getTileEntity(tile.x, tile.y, tile.z, tile.blockSource) : null;
+			var target = (cur && cur.refreshGui) ? cur : (tile.refreshGui ? tile : null);
+			if (!target) return;
+			if (target.container && target.container.getNetworkEntity && !target.container.getNetworkEntity().getClients().iterator().hasNext()) return;
+			target.refreshGui(false);
+		});
+		this._monitorListenerOn = false;
+	},
+	post_init: function(){
+		rsMonitorEnsureListener(this);
 	},
 	onWindowOpen: function(container, client){
 		if(this.data.NETWORK_ID == 'f' || !RSNetworks[this.data.NETWORK_ID]) return;
-		var info = RSNetworks[this.data.NETWORK_ID].info;
-		if (info && info.addMonitorListener) {
-			info.addMonitorListener(this._monitorListener);
-		}
+		rsMonitorEnsureListener(this);
 	},
 	onWindowClose: function(){
-		if(this.data.NETWORK_ID == 'f' || !RSNetworks[this.data.NETWORK_ID]) return;
-		var info = RSNetworks[this.data.NETWORK_ID].info;
-		if (info && info.removeMonitorListener) {
-			info.removeMonitorListener(this._monitorListener);
-		}
+		rsResetMonitorSwipe();
+		this.data.refreshCurPage = false;
+		rsMonitorEnsureListener(this);
 	},
 	post_update_network: function(net_id){
 		if (this.data.LAST_NETWORK_ID != 'f' && RSNetworks[this.data.LAST_NETWORK_ID]) {
@@ -463,6 +594,7 @@ RefinedStorage.createTile(BlockID.RS_craftingMonitor, {
 				oldInfo.removeMonitorListener(this._monitorListener);
 			}
 		}
+		rsMonitorAttachListener(this);
 	},
 	post_destroy: function(){
 		if (this.data.LAST_NETWORK_ID != 'f' && RSNetworks[this.data.LAST_NETWORK_ID]) {
@@ -473,9 +605,23 @@ RefinedStorage.createTile(BlockID.RS_craftingMonitor, {
 		}
 	},
 	refreshGui: function(first, client, providingCraft){
-		if(this.data.NETWORK_ID == 'f' || !RSNetworks[this.data.NETWORK_ID] || !RSNetworks[this.data.NETWORK_ID].info) return;
+		if(this.data.NETWORK_ID == 'f' || !RSNetworks[this.data.NETWORK_ID] || !RSNetworks[this.data.NETWORK_ID].info) {
+			return;
+		}
 		var info = RSNetworks[this.data.NETWORK_ID].info;
 		var _data = buildCraftingMonitorPayload(this, info.providingCrafts, first, providingCraft);
+		var _nd = this.networkData;
+		var _id = this.coords_id();
+		if (RS_NETSTATE && rsMonitorNs) {
+			/* Publish the monitor state (json payload + full flag + version + sendChanges). */
+			rsMonitorNs.publish(_nd, _id, { monitorTasks: _data.providingCrafts, monitorFull: !!_data.fullList });
+		} else {
+			_nd.putString('monitorTasks@' + _id, JSON.stringify(_data.providingCrafts));
+			_nd.putBoolean('monitorFull@' + _id, !!_data.fullList);
+			_nd.putInt('monitorVersion@' + _id, (_nd.getInt('monitorVersion@' + _id, 0) + 1) & 0x7FFFFFFF);
+			_nd.sendChanges();
+		}
+		if(!first) return;
 		if(client){
 			this.container.sendEvent(client, "openGui", _data);
 		} else {
@@ -488,20 +634,34 @@ RefinedStorage.createTile(BlockID.RS_craftingMonitor, {
 	},
 	containerEvents: {
 		cancelTask: function(eventData, connectedClient) {
+			if(!MpCore.isWatching(this, connectedClient)) return;
+			var _uid = connectedClient.getPlayerUid();
+			var _guard = MpCore.requestGuard(this, CRAFT_THROTTLE_TICKS);
+			if(_guard.isThrottled(_uid)) return;
+			_guard.mark(_uid);
 			var info = RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID].info;
 			if (info && eventData && eventData.taskId) {
 				info.cancelTask(eventData.taskId);
 			}
 		},
 		cancelAllTasks: function(eventData, connectedClient) {
+			if(!MpCore.isWatching(this, connectedClient)) return;
+			var _uid = connectedClient.getPlayerUid();
+			var _guard = MpCore.requestGuard(this, CRAFT_THROTTLE_TICKS);
+			if(_guard.isThrottled(_uid)) return;
+			_guard.mark(_uid);
 			var info = RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID].info;
 			if (info) info.cancelAllTasks();
 		}
 	},
 	tick: function(){
 		if(this.data.refreshCurPage){
-			var _now = World.getThreadTime();
-			if (this.data.lastMonitorRefresh === undefined || _now - this.data.lastMonitorRefresh >= 5) {
+			if(!this.container.getNetworkEntity().getClients().iterator().hasNext()){
+				this.data.refreshCurPage = false;
+				return;
+			}
+			var _now = TickScheduler.global.ticks;
+			if (this.data.lastMonitorRefresh === undefined || _now < this.data.lastMonitorRefresh || _now - this.data.lastMonitorRefresh >= 5) {
 				this.data.lastMonitorRefresh = _now;
 				this.data.refreshCurPage = false;
 				this.refreshGui(false);
@@ -509,11 +669,75 @@ RefinedStorage.createTile(BlockID.RS_craftingMonitor, {
 		}
 	},
 	client: {
+		load: function(){
+			this.refreshModel();
+		},
 		refreshModel: function(){
 			var render = new ICRender.Model();
 			var model = BlockRenderer.createTexturedBlock(getCraftingMonitorTexture(this.networkData.getInt('block_data'), this.networkData.getBoolean('isActive')));
 			render.addEntry(model);
 			BlockRenderer.mapAtCoords(this.x, this.y, this.z, render);
+		},
+		tick: function(){
+			var _id = (typeof this.coords_id == 'function') ? this.coords_id() : (this.x + ',' + this.y + ',' + this.z);
+			var tile = this;
+			var _pending = craftingMonitorPending;
+			if (_pending) {
+				_pending.ticks = (_pending.ticks || 0) + 1;
+				if (_pending.window && _pending.window.isOpened() && _pending.content) {
+					craftingMonitorPending = null;
+					craftingMonitorOpenGui(_pending.container, _pending.window, _pending.content, _pending.eventData);
+				} else if (_pending.ticks > 200) {
+					craftingMonitorPending = null;
+				}
+			}
+			if (RS_NETSTATE && rsMonitorNs) {
+				/* Consume the published state; applies only while this tile's window is the
+				 * open one (same gate as the grids). */
+				var _nd = this.networkData;
+				if (!this._monState) this._monState = rsMonitorNs.createState();
+				rsMonitorNs.consume(_nd, _id, this._monState, {
+					isLive: function () { return !!(craftingMonitorData.isUiLive && craftingMonitorData.isUiLive()); },
+					nameMatches: function () { return craftingMonitorData.name == tile.networkData.getName(); },
+					isGestureActive: rsIsUiGestureActive,
+					onApply: function () {
+						try {
+							var _p = rsMonitorNs.read(_nd, _id, {});
+							if (!_p.monitorTasks) return;
+							applyCraftingMonitorPayload({
+								providingCrafts: _p.monitorTasks,
+								refresh: true,
+								fullList: _p.monitorFull,
+								first: false
+							});
+							craftingMonitorSwitchElementPage(craftingMonitorData.elementPage, true);
+						} catch(e) {
+							rsRefreshError(e);
+						}
+					},
+					onError: function (e) { rsRefreshError(e); }
+				});
+				return;
+			}
+			var _ver = this.networkData.getInt('monitorVersion@' + _id, 0);
+			if(this._dataVersion === undefined) this._dataVersion = _ver;
+			if(_ver === this._dataVersion) return;
+			this._dataVersion = _ver;
+			var _open = !!(craftingMonitorData.isUiLive && craftingMonitorData.isUiLive());
+			if (!_open || craftingMonitorData.name != this.networkData.getName()) return;
+			try {
+				var raw = this.networkData.getString('monitorTasks@' + _id, 'null');
+				if(!raw || raw === 'null') return;
+				applyCraftingMonitorPayload({
+					providingCrafts: JSON.parse(raw),
+					refresh: true,
+					fullList: this.networkData.getBoolean('monitorFull@' + _id, false),
+					first: false
+				});
+				craftingMonitorSwitchElementPage(craftingMonitorData.elementPage, true);
+			} catch(e) {
+				rsRefreshError(e);
+			}
 		},
 		events: {
 			refreshModel: function(eventData, packetExtra) {

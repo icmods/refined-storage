@@ -24,6 +24,13 @@ function openControllerGui(tile, container, window, windowContent, eventData) {
 	windowContent.elements["slider_button"].y = windowContent.elements["slider_button"].start_y;
 	windowContent.elements["image_redstone"].bitmap = 'redstone_GUI_' + (eventData.redstone_mode || 0);
 	controllerSwitchPage(1, container, controller_other_data, true);
+	// A descriptor mutation without forceRefresh is not applied to the live slider element.
+	var __sliderEl = windowContent.elements["slider_button"];
+	var __pages = Math.max(1, controllerFuncs.getPages(Object.keys(controller_other_data.net_map || {}).length));
+	var __sliderY = controllerFuncs.getCoordsFromPage(1, __pages);
+	var __sliderAdapter = container && container.getUiAdapter ? container.getUiAdapter() : null;
+	var __liveSlider = __sliderAdapter && __sliderAdapter.getElement ? __sliderAdapter.getElement("slider_button") : null;
+	if (__liveSlider && __liveSlider.setPosition) __liveSlider.setPosition(__sliderEl.x, __sliderY);
 }
 
 function refreshControllerGui(tile, container, window, windowContent, eventData) {
@@ -31,5 +38,5 @@ function refreshControllerGui(tile, container, window, windowContent, eventData)
 	controller_other_data.net_map = eventData.net_map;
 	controller_other_data.isActive = eventData.isActive;
 	windowContent.elements["image_redstone"].bitmap = 'redstone_GUI_' + (eventData.redstone_mode || 0);
-	controllerSwitchPage(controller_other_data.lastPage, container, controller_other_data, true);
+	controllerSwitchPage(controller_other_data.lastPage + 1, container, controller_other_data, true);
 }

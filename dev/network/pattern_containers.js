@@ -94,7 +94,7 @@ var PatternContainerRegistry = {
 		var result = [];
 		for (var ri = 0; ri < rawOut.length; ri++) {
 			var r = rawOut[ri];
-			if (!r || !r.id || r.id <= 0) continue;
+			if (!r || r.id == 0) continue;
 			result.push({ id: r.id, data: r.data || 0, count: r.count || 1 });
 		}
 		if (result.length === 0) return null;
@@ -103,7 +103,7 @@ var PatternContainerRegistry = {
 		var ingridients = [];
 		for (var ii = 0; ii < rawIn.length; ii++) {
 			var ing = rawIn[ii];
-			if (!ing || !ing.id || ing.id <= 0) continue;
+			if (!ing || ing.id == 0) continue;
 			ingridients.push({ id: ing.id, data: ing.data || 0, count: ing.count || 1 });
 		}
 		return {

@@ -1,3 +1,13 @@
+var __rsStorageTouch = null;
+
+function rsResetStorageTouch() {
+	if (__rsStorageTouch) {
+		__rsStorageTouch.swipeY = false;
+		__rsStorageTouch.swipeSum = 0;
+		__rsStorageTouch.moving = false;
+	}
+}
+
 function createStorageContext(config) {
 	var ctx = {
 		x: config.x,
@@ -107,8 +117,11 @@ function buildItemInfoPanel(ctx) {
 	ctx.fontDescr = new JavaFONT(headerElements['itemInfoDescription'].font);
 
 	function setItemInfoSlot(_item, container){
-		ctx.gridData.selectedItemInfoSlot = _item;
 		var item = container.getSlot(_item);
+		var infoSignature = _item + '|' + item.id + '|' + item.data + '|' + item.count + '|' + (item.extra ? getExtraUidSuffix(item.extra) : '');
+		if (ctx.gridData._lastInfoSignature === infoSignature) return;
+		ctx.gridData._lastInfoSignature = infoSignature;
+		ctx.gridData.selectedItemInfoSlot = _item;
 		container.setSlot('itemInfoSlot', item.id, 1, item.data, item.extra);
 		var fullName = Item.getName(item.id, item.data, item.extra).replace(/§./g, '');
 		var splitedName = fullName.split('\n');
@@ -126,58 +139,24 @@ function buildItemInfoPanel(ctx) {
 			if(descrWidth > frameWidth) frameWidth = descrWidth;
 		}
 		headerElements['itemInfoFrame'].width = 50 + frameWidth + 10;
-		headerWindow.forceRefresh();
+		UiCore.safeRun(function () { headerWindow.forceRefresh(); }, "RS-itemInfo");
 	}
 	ctx.gridData.setItemInfoSlot = setItemInfoSlot;
 }
 
 function buildStorageSearch(ctx) {
-	ctx.elements["search_frame"] = {
-		type: "frame",
-		x: ctx.x,
-		y: 30,
-		width: ctx.x_count * ctx.cons,
-		height: 30,
-		bitmap: "search_bar",
-		scale: 0.8,
-		clicker: {
-			onClick: function (itemContainerUiHandler, itemContainer, element) {
-				UI.getContext().runOnUiThread(new java.lang.Runnable({
-					run: function () {
-						try {
-							var editText = new android.widget.EditText(UI.getContext());
-							new android.app.AlertDialog.Builder(UI.getContext())
-								.setTitle(Translation.translate("Please type the keywords"))
-								.setView(editText)
-								.setPositiveButton(Translation.translate("Search"), {
-									onClick: function () {
-										if (!itemContainerUiHandler.getWindow().isOpened()) return;
-										var keyword = editText.getText() + "";
-										ctx.gridData.textSearch = keyword.length ? keyword : false;
-										ctx.gridData.updateGui(true, true, ctx.gridData.isCrafting);
-									}
-								}).show();
-						} catch (e) {
-							alert(e);
-						}
-					}
-				}));
-			}
+	var searchBox = UiCore.searchBox(ctx.x, 30, ctx.x_count * ctx.cons, {
+		title: Translation.translate("Please type the keywords"),
+		textLabel: Translation.translate('Search'),
+		positiveLabel: Translation.translate("Search"),
+		fontSize: 20,
+		onSearch: function (keyword, uiHandler, container) {
+			ctx.gridData.textSearch = keyword.length ? keyword : false;
+			ctx.gridData.updateGui(true, true, ctx.gridData.isCrafting);
 		}
-	}
-
-	ctx.elements["search_text"] = {
-		type: "text",
-		x: ctx.x + 10,
-		y: 30 + 1,
-		z: 100,
-		text: Translation.translate('Search'),
-		font: {
-			color: android.graphics.Color.WHITE,
-			shadow: 0.5,
-			size: 20
-		}
-	}
+	});
+	ctx.elements["search_frame"] = searchBox.frame;
+	ctx.elements["search_text"] = searchBox.text;
 }
 
 function buildStorageSlots(ctx) {
@@ -220,44 +199,19 @@ function buildStorageSlots(ctx) {
 							}
 							return;
 						}
-						var _count = 1;
+						var _count = StorageCore.Transfer.BUTTON(slotItem, 0, false);
 						var updateFull = false;
-						var elements_ = itemContainer.getUiAdapter().getWindow().getWindow('main').getElements();
 						if(slotItem.count == _count) {
-							itemContainer.setSlot(slot, 0, 0, 0);
-							ctx.gridData.slotsKeys.splice(_num, 1);
 							updateFull = true;
-							ctx.gridData.updateGui(true, true);
-						} else {
-							if(ctx.gridData.sort == 0){
-								if(_num > 0 && slotItem.count - _count <= itemContainer.slots[ctx.gridData.slotsKeys[_num - 1]].count){
-									itemContainer.setSlot(slot, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
-									updateFull = true;
-									ctx.gridData.updateGui(true, true);
-								} else {
-									itemContainer.markSlotDirty('slot' + this.num);
-									elements_.get('slot' + this.num).setBinding('text', cutNumber(slotItem.count - _count, true) + "");
-									itemContainer.setSlot('slot' + this.num, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
-									itemContainer.setSlot(slot, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
-								}
-							} else {
-								itemContainer.markSlotDirty('slot' + this.num);
-								elements_.get('slot' + this.num).setBinding('text', cutNumber(slotItem.count - _count, true) + "");
-								itemContainer.setSlot('slot' + this.num, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
-								itemContainer.setSlot(slot, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
+						} else if(ctx.gridData.sort == 0){
+							if(_num > 0 && slotItem.count - _count <= itemContainer.slots[ctx.gridData.slotsKeys[_num - 1]].count){
+								updateFull = true;
 							}
 						}
+						/* UI renders only the authoritative server state. */
 						ctx.gridData.setItemInfoSlot(slot, itemContainer);
-						var map = (jsonMap_ = ctx.gridData.networkData.getString('deleteItemsMap', 'null')) != 'null' ? JSON.parse(jsonMap_) : [];
-						if(map.indexOf(slot) == -1){
-							map.push(slot);
-							ctx.gridData.networkData.putString('deleteItemsMap', JSON.stringify(map));
-						}
-						ctx.gridData.lowPriority = true;
-						var currentCount = ctx.gridData.networkData.getInt(slot, 0);
-						ctx.gridData.networkData.putInt(slot, currentCount + _count);
-						ctx.gridData.networkData.putBoolean('update', true);
-						ctx.gridData.networkData.putBoolean('updateFull'+slot, updateFull);
+						ContainerSync.queueDelete(ctx.gridData.networkData, slot, _count, updateFull, { id: slotItem.id, data: slotItem.data, uid: getItemUid(slotItem) });
+						if(ctx.gridData.clientTile && ctx.gridData.clientTile.flushPendingTransfer) ctx.gridData.clientTile.flushPendingTransfer();
 					},
 					onLongClick: function (itemContainerUiHandler, itemContainer, element) {
 						var itemContainer = itemContainer.slots ? itemContainer : element;
@@ -279,44 +233,20 @@ function buildStorageSlots(ctx) {
 						}
 						var maxStack = Item.getMaxStack(slotItem.id);
 						var this_item = searchInventory(Player, slotItem.id, slotItem.data, -1, false, true);
-						var _count = this_item && this_item.count < maxStack && this_item.extra == slotItem.extra ? Math.min(slotItem.count, maxStack - this_item.count) : Math.min(slotItem.count, maxStack);
+						var _capacity = this_item && this_item.count < maxStack && this_item.extra === slotItem.extra ? maxStack - this_item.count : maxStack;
+						var _count = StorageCore.Transfer.BUTTON(slotItem, _capacity, true);
 						var updateFull = false;
-						var elements_ = itemContainer.getUiAdapter().getWindow().getWindow('main').getElements();
 						if(slotItem.count <= _count) {
-							itemContainer.setSlot(slot, 0, 0, 0);
-							ctx.gridData.slotsKeys.splice(_num, 1);
 							updateFull = true;
-							ctx.gridData.updateGui(true, true);
-						} else {
-							if(ctx.gridData.sort == 0){
-								if(_num > 0 && slotItem.count - _count <= itemContainer.slots[ctx.gridData.slotsKeys[_num - 1]].count){
-									itemContainer.setSlot(slot, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
-									updateFull = true;
-									ctx.gridData.updateGui(true, true);
-								} else {
-									itemContainer.markSlotDirty('slot' + this.num);
-									elements_.get('slot' + this.num).setBinding('text', cutNumber(slotItem.count - _count, true) + "");
-									itemContainer.setSlot('slot' + this.num, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
-									itemContainer.setSlot(slot, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
-								}
-							} else {
-								itemContainer.markSlotDirty('slot' + this.num);
-								elements_.get('slot' + this.num).setBinding('text', cutNumber(slotItem.count - _count, true) + "");
-								itemContainer.setSlot('slot' + this.num, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
-								itemContainer.setSlot(slot, slotItem.id, slotItem.count - _count, slotItem.data, slotItem.extra);
+						} else if(ctx.gridData.sort == 0){
+							if(_num > 0 && slotItem.count - _count <= itemContainer.slots[ctx.gridData.slotsKeys[_num - 1]].count){
+								updateFull = true;
 							}
 						}
+						/* UI renders only the authoritative server state. */
 						ctx.gridData.setItemInfoSlot(slot, itemContainer);
-						ctx.gridData.lowPriority = true;
-						var map = (jsonMap_ = ctx.gridData.networkData.getString('deleteItemsMap', 'null')) != 'null' ? JSON.parse(jsonMap_) : [];
-						if(map.indexOf(slot) == -1){
-							map.push(slot);
-							ctx.gridData.networkData.putString('deleteItemsMap', JSON.stringify(map));
-						}
-						var currentCount = ctx.gridData.networkData.getInt(slot, 0);
-						ctx.gridData.networkData.putInt(slot, currentCount + _count);
-						ctx.gridData.networkData.putBoolean('update', true);
-						ctx.gridData.networkData.putBoolean('updateFull'+slot, updateFull);
+						ContainerSync.queueDelete(ctx.gridData.networkData, slot, _count, updateFull, { id: slotItem.id, data: slotItem.data, uid: getItemUid(slotItem) });
+						if(ctx.gridData.clientTile && ctx.gridData.clientTile.flushPendingTransfer) ctx.gridData.clientTile.flushPendingTransfer();
 					}
 				},
 				size: ctx.cons + 1
@@ -348,6 +278,16 @@ function buildStorageSlots(ctx) {
 function buildStorageSlider(ctx) {
 	var slider_frame_cons = 20;
 	var slider_frame_border = 7;
+	var __uiTouch = ctx.__uiTouch || (ctx.__uiTouch = { swipeY: false, swipeSum: 0, moving: false });
+	__rsStorageTouch = __uiTouch;
+	var __uiItemContainerUiHandler = null;
+	var __uiItemContainer = null;
+	var __uiSliderHandler = UiCore.attachSlider({
+		itemCount: function () { return ctx.gridData.slotsKeys.length; },
+		pagination: ctx.gridFuncs,
+		switchPage: function (page) { ctx.gridSwitchPage(page, __uiItemContainer); },
+		state: __uiTouch
+	});
 	ctx.elements["slider_frame"] = {
 		type: "frame",
 		x: 0,
@@ -357,16 +297,9 @@ function buildStorageSlider(ctx) {
 		bitmap: "slider",
 		scale: 1,
 		onTouchEvent: function (element, event) {
-			if (event.type == 'DOWN') {
-				ctx.moving = true;
-			}
-			if (event.type == 'CLICK') {
-				var itemContainerUiHandler = element.window.getContainer();
-				var itemContainer = itemContainerUiHandler.getParent();
-				var pages = ctx.gridFuncs.getPages(ctx.gridData.slotsKeys.length);
-				var page = ctx.gridFuncs.getPageFromCoords(event, pages);
-				ctx.gridSwitchPage(page, itemContainer);
-			}
+			__uiItemContainerUiHandler = element.window.getContainer();
+			__uiItemContainer = __uiItemContainerUiHandler.getParent();
+			__uiSliderHandler(element, event);
 		}
 	}
 	ctx.elements["slider_frame"].x = ctx.grid_end_x + ctx.cons / 3;
@@ -418,49 +351,41 @@ function buildStorageSlider(ctx) {
 }
 
 function buildStorageSwipeHandler(ctx) {
+	var __uiTouch = ctx.__uiTouch || (ctx.__uiTouch = { swipeY: false, swipeSum: 0, moving: false });
+	__rsStorageTouch = __uiTouch;
+	var __uiItemContainerUiHandler = null;
+	var __uiItemContainer = null;
+	var __uiAdapter = {
+		bounds: { xStart: 0, xEnd: 0, yStart: 0, yEnd: 0 },	// refreshed on every event (the x_* elements are set after this builder)
+		itemCount: function () { return ctx.gridData.slotsKeys.length; },
+		pagination: ctx.gridFuncs,
+		getLastPage: function () { return ctx.gridData.lastPage; },
+		switchPage: function (page, fromSwipe, dontMoveSlider) { ctx.gridSwitchPage(page, __uiItemContainer, fromSwipe, dontMoveSlider); },
+		state: __uiTouch,
+		maxY: 0,
+		sliderStartY: 0,
+		sliderScale: 0,
+		sliderX: 0,
+		sliderElementName: "slider_button",
+		getElement: function (name) { return rsGetLiveElement(__uiItemContainer, name); },
+		snapSliderOnRelease: false
+	};
+	var __uiSwipeHandler = UiCore.attachSwipe(__uiAdapter);
 	ctx.elements.clickFrameTouchEvents.push(function (element, event) {
-		var content = {elements: ctx.elements};
-		var itemContainerUiHandler = element.window.getContainer();
-		var itemContainer = itemContainerUiHandler.getParent();
-		if (event.type == "DOWN" && !ctx.swipe.y && event.x > ctx.elements["x_start"] && event.x < ctx.elements["x_end"] && event.y > ctx.elements["y_start"] && event.y < ctx.elements["y_end"]) {
-			ctx.swipe.y = event.y;
-		} else if (ctx.swipe.y && event.type == "MOVE") {
-			var distance = Math.abs(event.y - ctx.swipe.y);
-			function moveSwitchPage_(_n){
-				_n = (_n ? 1 : -1);
-				ctx.gridSwitchPage(ctx.gridData.lastPage + _n, itemContainer);
-			}
-			if (distance > 7) {
-				if (event.y > ctx.swipe.y) moveSwitchPage_(false);
-				if (event.y < ctx.swipe.y) moveSwitchPage_(true);
-				ctx.swipe.sum = 0;
-			} else {
-				ctx.swipe.sum += distance;
-				if (ctx.swipe.sum > 15) {
-					if (event.y > ctx.swipe.y) moveSwitchPage_(false);
-					if (event.y < ctx.swipe.y) moveSwitchPage_(true);
-					ctx.swipe.sum = 0;
-				}
-			}
-			ctx.swipe.y = event.y;
-		} else if (ctx.swipe.y && (event.type == "UP" || event.type == "CLICK")) {
-			ctx.swipe.y = false;
+		__uiItemContainerUiHandler = element.window.getContainer();
+		__uiItemContainer = __uiItemContainerUiHandler.getParent();
+		__uiAdapter.maxY = ctx.max_y;
+		__uiAdapter.bounds = { xStart: ctx.elements["x_start"], xEnd: ctx.elements["x_end"], yStart: ctx.elements["y_start"], yEnd: ctx.elements["y_end"] };
+		var __slider = ctx.elements["slider_button"];
+		if (__slider) {
+			__uiAdapter.sliderStartY = __slider.start_y;
+			__uiAdapter.sliderScale = __slider.scale;
+			__uiAdapter.sliderX = __slider.x;
 		}
-		if (!ctx.moving) return;
-		event.y -= content.elements["slider_button"].scale * 15 / 2;
-		if (event.type != 'UP' && event.type != "CLICK") {
-			var page = ctx.gridFuncs.getPageFromCoords(event, ctx.gridFuncs.getPages(ctx.gridData.slotsKeys.length));
-			itemContainerUiHandler.getElement("slider_button").setPosition(content.elements['slider_button'].x, Math.max(Math.min(event.y, ctx.max_y), content.elements["slider_button"].start_y));
-			ctx.gridSwitchPage(page, itemContainer, false, true);
-		}
-		if (event.type == "UP" || event.type == "CLICK") {
-			ctx.moving = false;
-			var pages = ctx.gridFuncs.getPages(ctx.gridData.slotsKeys.length);
-			var page = ctx.gridFuncs.getPageFromCoords(event, pages);
-			ctx.gridSwitchPage(page, itemContainer);
-		}
-	})
+		__uiSwipeHandler(element, event);
+	});
 }
+
 
 function buildSettingsButtons(ctx) {
 	var settings_cons = 10;

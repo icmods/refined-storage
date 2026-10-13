@@ -224,6 +224,7 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 		upgrades: {},
 		speed: 9,
 		count: 1,
+		guiDirty: false,
 		importItems: [{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null}]
 	},
 	upgradesSlots: ["slot_upgrades0", "slot_upgrades1", "slot_upgrades2", "slot_upgrades3"],
@@ -243,11 +244,13 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 			if(importItem.id == 0) continue;
 			var slotItem = this.container.getSlot('slot_output' + k);
 			var item = {id: importItem.id, count: importItem.count - slotItem.count, data: this.data.useDamage ? importItem.data : -1, extra: this.data.useNbt ? importItem.extra : -1};
-			if(item.count <= 0 || (slotItem.id != importItem.id && slotItem.id != 0) || (slotItem.data != importItem.data && this.data.useDamage) || (slotItem.extra != importItem.extra && this.data.useNbt)) continue;
+			if(item.count <= 0) continue;
+			if(slotItem.id != 0 && ((slotItem.id != importItem.id) || (slotItem.data != importItem.data && this.data.useDamage) || (this.data.useNbt && rsExtraDiffers(slotItem.extra, importItem.extra)))) continue;
 			var deleted = this.deleteItem(item);
 			if(deleted < item.count){
 				var count = item.count - deleted;
 				this.container.setSlot('slot_output' + k, item.id, slotItem.count + count, item.data, item.extra);
+				this.data.guiDirty = true;
 			}
 		}
 		this.data.ticks++
@@ -259,40 +262,43 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 			} else {
 				slot = slot.asScriptable();
 				var count = Math.min(slot.count, this.data.count);
-				var pushed = this.itemCanBePushed(slot, count, true);
-				if(pushed == 0){
-					this.container.setSlot('slot_input' + this.data.currentSlot, slot.id, slot.count - count, slot.data, slot.extra);
-				} else if(pushed < count){
-					this.container.setSlot('slot_input' + this.data.currentSlot, slot.id, slot.count - (count - pushed), slot.data, slot.extra);
-				} else {
-					this.data.currentSlot++;
-					if(this.data.currentSlot > 8) this.data.currentSlot = 0;
-					return;
+				/* Push first and keep whatever the network did not accept: no storage mutation
+				 * happens before the accepted amount is known. */
+				var remainder = this.pushItem(slot, count);
+				var pushed = count - (typeof remainder == 'number' && isFinite(remainder) ? remainder : count);
+				if (pushed > 0) {
+					var left = slot.count - pushed;
+					if (left <= 0) this.container.clearSlot('slot_input' + this.data.currentSlot);
+					else this.container.setSlot('slot_input' + this.data.currentSlot, slot.id, left, slot.data, slot.extra);
+					this.data.guiDirty = true;
 				}
-				if(slot.count <= (count - pushed)) this.container.clearSlot('slot_input' + this.data.currentSlot);
-				this.pushItem(slot, count);
+				this.data.currentSlot++;
+				if(this.data.currentSlot > 8) this.data.currentSlot = 0;
 			}
 		}
-		this.container.sendChanges();
+		if(this.data.guiDirty){
+			if(this.container.getNetworkEntity().getClients().iterator().hasNext())this.container.sendChanges();
+			this.data.guiDirty = false;
+		}
 	},
 	pre_created: function(){
 		this.data.importItems = [{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null},{id:0,data:0,extra:null}];
 	},
 	itemCanBePushed: function(item, count, _inverted){
-		count = count || item.count;
+		count = rsTakeCount(count, item.count);
 		if (!this.isWorkAllowed()) return _inverted ? count : 0;
 		var res = RSNetworks[this.data.NETWORK_ID].info.itemCanBePushed(item, count);
 		return _inverted ? count - res : res;
 	},
 	pushItem: function (item, count) {
-		count = count || item.count;
+		count = rsTakeCount(count, item.count);
 		if (!this.isWorkAllowed()) return count;
 		var res = RSNetworks[this.data.NETWORK_ID].info.pushItem(item, count);
 		if(this.post_pushItem)this.post_pushItem(item, count, res);
 		return res;
 	},
 	deleteItem: function (item, count) {
-		count = count || item.count;
+		count = rsTakeCount(count, item.count);
 		if (!this.isWorkAllowed()) return count;
 		var res = RSNetworks[this.data.NETWORK_ID].info.deleteItem(item, count);
 		if(this.post_deleteItem)this.post_deleteItem(item, count, res);
@@ -304,6 +310,10 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 	},
 	destroy: function(){
 		for(var i = 0; i < 9; i++)this.container.clearSlot('slot_import' + i);
+		if(this.data.NETWORK_ID != 'f' && RSNetworks[this.data.NETWORK_ID]) delete RSNetworks[this.data.NETWORK_ID][cts(this)];
+		this.data.LAST_NETWORK_ID = this.data.NETWORK_ID;
+		this.data.NETWORK_ID = 'f';
+		_RS._emit("tileDestroyed", {blockId: this.blockInfo.id, coords: {x: this.x, y: this.y, z: this.z}, dimension: this.dimension, netId: this.data.LAST_NETWORK_ID});
 	},
 	refreshGui: function(first, client){
 		var _data = {
@@ -334,6 +344,7 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 					var thisSlot = itemContainer.getSlot(slot);
 					ths.data.importItems[importSlotsMap[slot]] = {id: id, count: thisSlot.count + count, data: data, extra: extra};
 					itemContainer.setSlot(slot, id, Math.min(thisSlot.count + count, Item.getMaxStack(id)), data, extra);
+					ths.data.guiDirty = true;
 					return 0;
 				}
 			})
@@ -341,6 +352,7 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 				transfer: function(itemContainer, slot, id, count, data, extra, player){
 					ths.data.importItems[importSlotsMap[slot]] = {id:0, count:0, data: 0, extra: null};
 					itemContainer.setSlot(slot, 0, 0, 0, null);
+					ths.data.guiDirty = true;
 					return 0;
 				}
 			})
@@ -352,6 +364,9 @@ RefinedStorage.createTile(BlockID.RS_interface, {
 		}
 	},
 	client:{
+		load: function(){
+			this.refreshModel();
+		},
 		refreshModel: function(eventData, packetExtra) {
 			RefinedStorage.mapTexture(this, this.networkData.getBoolean('isActive') ? 'interface_on' : 'interface_off');
 		},

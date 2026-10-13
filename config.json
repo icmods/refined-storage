@@ -1,10 +1,10 @@
 {
   "enabled": true,
-  "dev": false,
-  "parallelCrafting (Java like)": false,
+  "dev": true,
+  "parallelCrafting (Java like)": true,
   "controller": {
     "usesEnergy": true,
-    "energyCapacity": 32000,
+    "energyCapacity": 64000,
     "controllerMaxReceive": 2147483647
   },
   "energy_uses": {
@@ -26,7 +26,9 @@
       "silkTouch": 15,
       "range": 8,
       "fortune": 10,
-      "crafting": 5
+      "crafting": 5,
+      "infinityRange": 2048,
+      "dimension": 4096
     }
   },
   "wirelessTransmitter": {

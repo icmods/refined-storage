@@ -67,16 +67,14 @@ Block.registerPlaceFunction("RS_controller", function (coords, item, block, play
 	}
 	blockSource.setBlock(coords.x, coords.y, coords.z, item.id, item.data);
 	var tile = World.addTileEntity(coords.x, coords.y, coords.z, blockSource) || World.getTileEntity(coords.x, coords.y, coords.z, blockSource);
-	var energy = 0;
 	if(item.data == 3 && tile && tile.data){
 		tile.data.isCreative = true;
 		tile.data.energy = Config.controller.energyCapacity;
-		//tile.setActive(true);
 		return;
 	}
-	if (item.extra && item.extra.getInt('energy') && tile && tile.data) {
-		energy = item.extra.getInt('energy');
-		tile.data.energy = energy;
+	if (item.extra && typeof item.extra.getInt == 'function' && item.extra.getInt('energy') && tile && tile.data) {
+		var _placeEnergy = item.extra.getInt('energy');
+		if (isFinite(_placeEnergy) && _placeEnergy >= 0) tile.data.energy = Math.min(_placeEnergy, Config.controller.energyCapacity);
 	}
 	Entity.setCarriedItem(player, item.id, item.count - 1, item.data, item.extra);
 });
@@ -85,7 +83,9 @@ var controller_other_data = {
 	net_map:{},
 	isActive: false,
 	max_y: 0,
-	lastPage: -1
+	lastPage: -1,
+	countX: 4,
+	countY: 1
 };
 var controllerSwitchPage = function(num, container, data, ignore){
 	if(!data.isActive){
@@ -100,7 +100,7 @@ var controllerSwitchPage = function(num, container, data, ignore){
 	num = num || 1;
 	var aray_net_map = Object.keys(data.net_map);
 	var pages1 = controllerFuncs.getPages(aray_net_map.length);
-	var pages = Math.max(1, pages1 - 1);
+	var pages = Math.max(1, pages1);
 	num = Math.max(1, Math.min(num, pages)) - 1;
 	if(num == data.lastPage && !ignore) return false;
 	data.lastPage = num;
@@ -112,8 +112,8 @@ var controllerSwitchPage = function(num, container, data, ignore){
 			container.setText('block_energy_use' + i, '');
 		}
 	} else {
-		for (var i = num * 2; i < num * 2 + 4; i++) {
-			var a = i - (num * 2);
+		for (var i = num * 4; i < num * 4 + 4; i++) {
+			var a = i - (num * 4);
 			var item = aray_net_map[i] ? data.net_map[aray_net_map[i]] : {};
 			var _id = item.id ? Network.serverToLocalId(item.id) : 0;
 			container.setSlot("slot" + a, _id, 1, item.data || 0, item.extra || null);
@@ -126,6 +126,7 @@ var controllerSwitchPage = function(num, container, data, ignore){
 	}
 	return true;
 }
+var controllerFuncs = UiCore.pagination(controller_other_data, {countX: "countX", countY: "countY", maxY: "max_y", slider: "slider"});
 buildControllerElements(elementsGUI_controller, controller_other_data, controllerFuncs, controllerSwitchPage);
 
 const CONTROLLER_GUI = new UI.StandartWindow({
@@ -149,44 +150,6 @@ testButtons(CONTROLLER_GUI.getWindow('header').getContent().elements, function()
 	buildControllerElements(elementsGUI_controller, controller_other_data, controllerFuncs, controllerSwitchPage);
 });
 
-var controllerFuncs = {
-	getPages: function(_length){
-		if(_length == 0) return 1;
-		_length = Math.ceil(_length / 2);
-		return _length;//Math.max(_length - Math.min(_length, 4) + 1, 0) || 1;
-	},
-	getPageFromCoords: function(_coords, pages){
-		pages -= 1;
-		var max_y = controller_other_data.max_y;
-		var interval = (pages - 1) > 0 ? (max_y - elementsGUI_controller["slider_button"].start_y) / (pages - 1) : 0;
-		function __getY(i) {
-			return ((interval * i) + elementsGUI_controller["slider_button"].start_y);
-		}
-		var least_dec = 10001;
-		var finish_i = 0;
-		for (var i = 0; i < pages; i++) {
-			var dec = Math.abs(Math.round(_coords.y - __getY(i)));
-			if (dec < least_dec) {
-				least_dec = dec;
-				finish_i = i;
-			}
-		};
-		var page = finish_i;
-		return page + 1;
-	},
-	getCoordsFromPage: function(page, pages){
-		pages -= 1;
-		var max_y = controller_other_data.max_y;
-		var interval = (pages - 1) > 0 ? (max_y - elementsGUI_controller["slider_button"].start_y) / (pages - 1) : 0;
-		function __getY(i) {
-			return ((interval * i) + elementsGUI_controller["slider_button"].start_y);
-		}
-		if (page > pages) page = pages;
-		if (page < 1) page = 1;
-		return __getY(page - 1);
-	}
-}
-
 RefinedStorage.createTile(BlockID.RS_controller, {
 	defaultValues: {
 		NETWORK_ID: "f",
@@ -200,7 +163,6 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		containerUpdate: false,
 		ticks: 0,
 		networkTick: 0,
-		patternCheckTimer: 6000,
 		updateControllerNetwork: false,
 		updateModel: false
 	},
@@ -208,8 +170,10 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 	useNetworkItemContainer: true,
 	created: function () {
         if(!this.blockSource)this.blockSource = BlockSource.getDefaultForDimension(this.dimension);
-		var controller;
-		while (controller = searchController(this, false, this.blockSource)) {
+		delete this.data.controller_coords;
+		var _cleanupPasses = 0;
+		for (var _cc = 0; _cc < 64 && searchController(this, false, this.blockSource); _cc++) {
+			_cleanupPasses++;
 			for (var i in sides) {
 				var coordss = {};
 				coordss.x = this.x + sides[i][0];
@@ -239,6 +203,10 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 					}
 				}
 			}
+			delete this.data.controller_coords;
+		}
+		if (_cleanupPasses >= 64) {
+			Logger.Log('controller conflict cleanup stopped after 64 passes', 'RefinedStorageError');
 		}
 	},
 	setActive: function(state, forced, preventRefreshModel){
@@ -250,11 +218,14 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		if(state == false || (forced || this.data.allowSetIsActive != false)){
 			this.data.isActive = state;
 			this.networkData.putBoolean('isActive', state);
-			if(this.data.NETWORK_ID != "f")RSNetworks[this.data.NETWORK_ID][this.coords_id()].isActive = state;
+			if(this.data.NETWORK_ID != "f"){
+				var ownNetworkEntry = RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID][this.coords_id()];
+				if(ownNetworkEntry) ownNetworkEntry.isActive = state;
+			}
 			if(this.data.NETWORK_ID != "f")_RS._emit("networkStateChanged", {netId: this.data.NETWORK_ID, isActive: state});
 		}
 		this.networkData.sendChanges();
-		if(!preventRefreshModel)this.refreshModel();
+		if(!preventRefreshModel) rsSafeServerRefresh(this, 'controllerSetActive');
 		if (this.post_setActive) this.post_setActive(state);
 		return true;
 	},
@@ -267,7 +238,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			var probeEntry = probeNet[ownKey];
 			if (probeEntry && probeEntry.id == BlockID.RS_controller) { existingNetId = nid; break; }
 		}
-		var netId = existingNetId != -1 ? existingNetId : RSNetworks.length;
+		var netId = existingNetId != -1 ? existingNetId : rsAllocNetId();
 		this.data.NETWORK_ID = netId;
 		var controllerTile = this;
 		this.networkData.putInt('energy', this.data.energy);
@@ -289,8 +260,12 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 				isActive: false
 			}
 			_data['info'] = NetworkInfo.create(_data, controllerTile, netId);
-			RSNetworks.push(_data);
+			RSNetworks[netId] = _data;
 			_RS._emit("networkCreated", {netId: netId, tile: this});
+			// Restore immediately so early processing outputs can be credited (savecore mode).
+			restoreCraftingTasks(this);
+			this.data.ticks = 0;
+			this.data.timer = 20;
 		} else {
 			var existingNet = RSNetworks[netId];
 			existingNet[ownKey] = {
@@ -304,14 +279,34 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 				existingNet.info.netMapDirty = true;
 				existingNet.info.incomplete = true;
 			}
+			this.data.updateControllerNetwork = true;
+			restoreCraftingTasks(this);
 		}
+		var _info = RSNetworks[netId] && RSNetworks[netId].info;
+		if (_info) {
+			_info.dimension = this.dimension;
+			_info.controllerCoords = { x: this.x, y: this.y, z: this.z };
+		}
+		var _timerNet = NetworkTimer.networks[netId];
+		if(!_timerNet) _timerNet = NetworkTimer.networks[netId] = { heartbeat: 0, tasks: {} };
+		if(_info) NetworkTimer.ensureInternalTasks(_timerNet, _info);
+		var _ctrlTile = this;
+		MpCore.connectivity(_ctrlTile, {
+			onOpen: function(container, client, owner){
+				var t = owner || _ctrlTile;
+				if(t.onWindowOpen) t.onWindowOpen(container, client);
+			},
+			onClose: function(uid, container, client, owner){
+				var t = owner || _ctrlTile;
+				if(t.onWindowClose) t.onWindowClose(container, client);
+			}
+		});
 		this.networkData.sendChanges();
-		this.data.ticks = 0;
-		this.data.timer = 20;
 	},
 	updateItems: function(){
 		if(this.data.NETWORK_ID != 'f'){
-			RSNetworks[this.data.NETWORK_ID].info.updateItems();
+			var _net = RSNetworks[this.data.NETWORK_ID];
+			if (_net && _net.info) _net.info.updateItems();
 		}
 	},
 	updateControllerNetwork: function(_first){
@@ -320,6 +315,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			var info = RSNetworks[this.data.NETWORK_ID].info;
 			info.netMapDirty = true;
 			info.incomplete = !!incomplete;
+			info.controllerCoords = {x: this.x, y: this.y, z: this.z};
 		}
 	},
 	click: function (id, count, data, coords, player, extra) {
@@ -328,6 +324,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		if(!client) return true;
 		if (this.container.getNetworkEntity().getClients().contains(client)) return true;
 		this.container.openFor(client, "main");
+		if (this._guiBinder) this._guiBinder.invalidate();
 		var _data = {
 			name: this.networkData.getName() + '', 
 			isActive: this.data.isActive, 
@@ -374,8 +371,9 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 		this.data.usage = result.usage;
 	},
 	energyReceive: function (type, amount, voltage) {
+		if (typeof amount !== 'number' || !isFinite(amount) || amount <= 0) return 0;
 		amount = Math.min(amount * EnergyTypeRegistry.getValueRatio(type, 'FE'), Config.controller.controllerMaxReceive);
-		var add = Math.min(amount, this.getCapacity() - this.data.energy);
+		var add = Math.max(0, Math.min(amount, this.getCapacity() - this.data.energy));
 		if(!this.data.isActive && this.data.allowSetIsActive != false)this.setActive(true);
 		this.data.energy += add;
 		this.networkData.putInt('energy', this.data.energy);
@@ -394,22 +392,56 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 				this.updateItems();
 				this.updateNetMap(true);
 				this.setActive(this.data.energy > this.data.usage, true, true);
-				this.refreshModel();
+				rsSafeServerRefresh(this, 'controllerTimer');
 				restoreCraftingTasks(this);
 				this.data.timer = false;
 				this.data.ticks = 0;
 			}
 		}
+		// Self-heal a controller moved by a piston (destroy ran without clearing NETWORK_ID).
+		if (this.data.NETWORK_ID != 'f') {
+			var _orphanNet = RSNetworks[this.data.NETWORK_ID];
+			if (!_orphanNet || !_orphanNet.info || !_orphanNet[cts(this)]) {
+			if (_orphanNet && _orphanNet.info) {
+				for (var _k in _orphanNet) {
+					if (_k != 'info' && _orphanNet[_k] && _orphanNet[_k].id == BlockID.RS_controller) {
+						if (typeof _savedCraftingTasks !== 'undefined') {
+							delete _savedCraftingTasks[_k];
+							delete _savedCraftingTasks[CoreKit.coords.key(this.dimension, _k)];
+						}
+						delete _orphanNet[_k];
+					}
+				}
+				_orphanNet[cts(this)] = {
+					id: BlockID.RS_controller,
+					coords: {x: this.x, y: this.y, z: this.z},
+					upgrades: this.data.upgrades,
+					isActive: this.data.isActive || false
+				};
+				_orphanNet.info.updateControllerTile(this);
+				_orphanNet.info.controllerCoords = {x: this.x, y: this.y, z: this.z};
+				_orphanNet.info.netMapDirty = true;
+				_orphanNet.info.incomplete = true;
+				this.data.ticks = 0;
+				this.data.timer = 20;
+			} else {
+					if (_orphanNet && !_orphanNet.info) delete RSNetworks[this.data.NETWORK_ID];
+					this.init();
+				}
+			}
+		} else if (this.data.timer === undefined) {
+			// Tile created without init (piston-placed fresh tile): initialize.
+			this.init();
+		}
 		if (this.container.getNetworkEntity().getClients().iterator().hasNext()) {
-			this.container.setScale('scale', this.data.energy / this.getCapacity());
-			this.container.setText('storage', this.data.energy + '/' + this.getCapacity() + ' FE');
-			this.data.containerUpdate = true;
+			if (!this._guiBinder) this._guiBinder = UiCore.DeltaBinder.wrap(this.container);
+			var _scale = this.data.energy / this.getCapacity();
+			var _storageText = this.data.energy + '/' + this.getCapacity() + ' FE';
+			this._guiBinder.setScale('scale', _scale);
+			this._guiBinder.setText('storage', _storageText);
 		}
 		if(!this.isWorkAllowed()) {
-			if(this.data.containerUpdate){
-				this.container.sendChanges();
-				this.data.containerUpdate = false;
-			}
+			if (this._guiBinder) this._guiBinder.flush();
 			return;
 		}
 		if(this.data.updateControllerNetwork){
@@ -417,25 +449,7 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			this.data.updateControllerNetwork = false;
 		}
 		var _info0 = (this.data.NETWORK_ID != 'f' && RSNetworks[this.data.NETWORK_ID]) ? RSNetworks[this.data.NETWORK_ID].info : null;
-		if (_info0 && _info0.incomplete) {
-			this.data.incompleteRetry = (this.data.incompleteRetry === undefined ? 0 : this.data.incompleteRetry) + 1;
-			if (this.data.incompleteRetry >= 100) {
-				this.data.incompleteRetry = 0;
-				this.data.updateControllerNetwork = true;
-			}
-		} else if (this.data.incompleteRetry) {
-			this.data.incompleteRetry = 0;
-		}
-		this.data.netMapTimer = (this.data.netMapTimer === undefined ? 0 : this.data.netMapTimer) - 1;
-		if ((_info0 && _info0.netMapDirty) || this.data.netMapTimer <= 0) {
-			this.updateNetMap();
-			this.data.netMapTimer = 20;
-			if (_info0) _info0.netMapDirty = false;
-			if (this.container.getNetworkEntity().getClients().iterator().hasNext() || this.data.containerUpdate) {
-				this.container.setText('usage', Translation.translate('Usage')+": " + this.data.usage + " FE/t");
-				this.data.containerUpdate = true;
-			}
-		}
+		if (_info0) NetworkTimer.heartbeat(_info0, this, this.blockSource);
 		if (this.data.energy >= this.data.usage && this.data.energy != 0){
 			this.setActive(true);
 			if(Config.controller.usesEnergy && !this.data.isCreative){
@@ -451,27 +465,18 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			this.networkData.sendChanges();
 			this.data.networkDataUpdate = false;
 		}
-		if(this.data.containerUpdate){
-			this.container.sendChanges();
-			this.data.containerUpdate = false;
-		}
+		if (this._guiBinder) this._guiBinder.flush();
 		if(this.data.updateModel){
 			var texture = getControllerTexture(getEnergyScaled(this.data.energy), this.data.isActive);
-			if(this.data.lastTexture != (this.data.lastTexture = texture)) this.refreshModel();
+			if(this.data.lastTexture != (this.data.lastTexture = texture)) rsSafeServerRefresh(this, 'controllerTexture');
 			this.data.updateModel = false;
 		}
 		if (this.data.NETWORK_ID != 'f' && RSNetworks[this.data.NETWORK_ID]) {
 			var info = RSNetworks[this.data.NETWORK_ID].info;
 			if (info && info.craftingTasks && info.craftingTasks.length > 0) {
 				this.data.networkTick++;
-				CraftingScheduler.processTick(info, this.blockSource, this.data.networkTick);
-			}
-			if (info) {
-				this.data.patternCheckTimer--;
-				if (this.data.patternCheckTimer <= 0) {
-					info.rebuildPatternContainers(this);
-					this.data.patternCheckTimer = 6000;
-				}
+				var _schedCtx = buildSchedulerCtx(info, this.blockSource, this.data.networkTick);
+				rsProcessCraftingTasks(info, _schedCtx);
 			}
 		}
 	},
@@ -485,14 +490,26 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			if (info && info.craftingTasks) {
 				for (var ti = 0; ti < info.craftingTasks.length; ti++) {
 					var task = info.craftingTasks[ti];
-					if (task.flushBuffer) task.flushBuffer(info);
+					if (!task) continue;
+					_RS._emit("taskCancelled", {netId: this.data.NETWORK_ID, taskId: task.id});
+					if (task.flushBuffer) {
+						try { task.flushBuffer(info); }
+						catch (e) { Logger.Log('task buffer flush failed on destroy: ' + e, 'RefinedStorageError'); }
+					}
 				}
 			}
 			_RS._emit("networkDestroyed", {netId: this.data.NETWORK_ID, tile: this});
 			set_net_for_blocks(this, 'f');
 			delete RSNetworks[this.data.NETWORK_ID];
+			NetworkTimer.destroyNetwork(this.data.NETWORK_ID);
 		}
-		if(!isDropAllowed && isDropAllowed !== undefined) return;
+		if(!isDropAllowed && isDropAllowed !== undefined){
+			if (typeof _savedCraftingTasks !== 'undefined') {
+				delete _savedCraftingTasks[cts(this)];
+				delete _savedCraftingTasks[CoreKit.coords.key(this.dimension, cts(this))];
+			}
+			return;
+		}
 		this.data.LAST_NETWORK_ID = this.data.NETWORK_ID;
 		this.data.NETWORK_ID = "f";
 		if(this.data.isCreative){
@@ -531,6 +548,9 @@ RefinedStorage.createTile(BlockID.RS_controller, {
 			openGui: function(container, window, windowContent, eventData){ openControllerGui(this, container, window, windowContent, eventData); },
 			refreshGui:function(container, window, windowContent, eventData){ refreshControllerGui(this, container, window, windowContent, eventData); }
 		}
+	},
+	onWindowClose: function () {
+		rsResetControllerSwipe();
 	},
 	containerEvents: {
 		craftPreview: function(eventData, connectedClient) {

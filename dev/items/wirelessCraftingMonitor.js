@@ -45,6 +45,8 @@ function rsOpenWirelessCraftingMonitor(playerUid) {
 		throttle: rsWirelessMonitorLastOpen,
 		noBindMsg: 'Wireless Crafting Monitor is not bound to a network.',
 		noRangeMsg: 'There is no Wireless Transmitter in range.',
+		noTransmitterMsg: 'There is no Wireless Transmitter in the network.',
+		transmitterUnloadedMsg: 'The Wireless Transmitter is not loaded.',
 		noEnergyMsg: 'Wireless Crafting Monitor is out of energy.'
 	});
 }

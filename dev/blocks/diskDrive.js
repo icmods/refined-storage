@@ -3,12 +3,12 @@ Block.createBlockWithRotation("diskDrive", [
 	{
 		name: "Disk Drive",
 		texture: [
-			["disk_drive_bottom", 0], // bottom
-			["disk_drive_top", 0], // top
-			["disk_drive_side", 0], // back
-			["disk_drive", 0], // front
-			["disk_drive_side", 0], // left
-			["disk_drive_side", 0]  // right
+			["disk_drive_bottom", 0],
+			["disk_drive_top", 0],
+			["disk_drive_side", 0],
+			["disk_drive", 0],
+			["disk_drive_side", 0],
+			["disk_drive_side", 0]
 		],
 		inCreative: true
 	}
@@ -17,12 +17,12 @@ RS_blocks.push(BlockID.diskDrive);
 EnergyUse[BlockID['diskDrive']] = Config.energy_uses.diskDrive;
 
 const diskDriveTexture = [
-	["disk_drive_bottom", 0], // bottom
-	["disk_drive_top", 0], // top
-	["disk_drive_side", 0], // back
-	["disk_drive", 0], // front
-	["disk_drive_side", 0], // left
-	["disk_drive_side", 0]  // right
+	["disk_drive_bottom", 0],
+	["disk_drive_top", 0],
+	["disk_drive_side", 0],
+	["disk_drive", 0],
+	["disk_drive_side", 0],
+	["disk_drive_side", 0]
 ];
 const diskDriveTextures = [[diskDriveTexture[0], [diskDriveTexture[1][0], 0], diskDriveTexture[2], diskDriveTexture[3], diskDriveTexture[4], diskDriveTexture[5]], [diskDriveTexture[0], [diskDriveTexture[1][0], 1], diskDriveTexture[3], diskDriveTexture[2], diskDriveTexture[5], diskDriveTexture[4]], [diskDriveTexture[0], [diskDriveTexture[1][0], 2], diskDriveTexture[5], diskDriveTexture[4], diskDriveTexture[2], diskDriveTexture[3]], [diskDriveTexture[0], [diskDriveTexture[1][0], 3], diskDriveTexture[4], diskDriveTexture[5], diskDriveTexture[3], diskDriveTexture[2]]];
 
@@ -31,12 +31,12 @@ const diskDriveLedTextures = function(index, block_data){
 	var sideTexture = "disk_drive_disks";
 	if(block_data == 1 || block_data == 3)sideTexture = "reverse_disk_drive_disks";
 	return [
-		["disk_drive_disks_top", 0], // bottom
-		["disk_drive_disks_top", 0], // top
-		[sideTexture, index], // back
-		[sideTexture, index], // front
-		[sideTexture, index], // left
-		[sideTexture, index]  // right
+		["disk_drive_disks_top", 0],
+		["disk_drive_disks_top", 0],
+		[sideTexture, index],
+		[sideTexture, index],
+		[sideTexture, index],
+		[sideTexture, index]
 	]
 }
 
@@ -138,7 +138,7 @@ function initDDelements() {
 	elementsGUI_dd["scale"].overlayScale = elementsGUI_dd["scale"].scale;
 
 	var asd = 0;
-	var cons = UI.getScreenHeight()*0.576/5;//60;
+	var cons = UI.getScreenHeight()*0.576/5;
 	y += cons/2;
 	for (var k = 0; k < 4; k++) {
 		x = 650;
@@ -285,7 +285,7 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 	},
 	useNetworkItemContainer: true,
 	post_init: function(){
-		if(!this.data.disks_percents)this.data.disks_percents = [];
+		this.data.disks_percents = [];
 		this.data.iinit = true;
 		this.networkData.putString('slots', JSON.stringify(this.getDiskDatas()));
 		this.container.setGlobalAddTransferPolicy({
@@ -294,9 +294,22 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 				return count;
 			}
 		});
+		for (var ds = 0; ds < 8; ds++) {
+			this.container.setSlotGetTransferPolicy('slot' + ds, {
+				transfer: function(itemContainer, slot, id, count, data, extra, player){
+					if (!RS_DISK_DATA_IN_EXTRA || !Disk.items[id]) return count;
+					var diskItem = null;
+					try { diskItem = itemContainer.getSlot(slot); } catch (e) { diskItem = null; }
+					if (!diskItem || diskItem.id != id) return count;
+					/* Never let a disk leave the drive while its payload write fails. */
+					if (!Disk.flushItem(diskItem, slot, itemContainer)) return 0;
+					return count;
+				}
+			});
+		}
 	},
 	post_setActive: function(state){
-		if(this.data.NETWORK_ID != "f")RSNetworks[this.data.NETWORK_ID].info.updateItems();
+		if(this.data.NETWORK_ID != "f")requestNetworkUpdateItems(RSNetworks[this.data.NETWORK_ID].info);
 	},
 	click: function (id, count, data, coords, player, extra) {
 		if (Entity.getSneaking(player)) return false;
@@ -304,6 +317,7 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 		if(!client) return true;
 		if (this.container.getNetworkEntity().getClients().contains(client)) return true;
 		this.container.openFor(client, "main");
+		if (this._guiBinder) this._guiBinder.invalidate();
 		var _data = {
 			name: this.networkData.getName() + '', 
 			isActive: this.data.isActive, 
@@ -318,13 +332,21 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 	},
 	getDiskDatas: function(){
 		var diskDatas = [];
+		if(!this.container) return diskDatas;
 		for (var i = 0; i < 8; i++) {
 			var item = this.container.getSlot('slot' + i);
+			if (!item) {
+				diskDatas.push({id: 0, data: 0, storage: 0, items_stored: 0});
+				continue;
+			}
 			if (!Disk.items[item.id]) {
 				diskDatas.push({id: 0, data: 0, storage: 0, items_stored: 0});
 				continue;
 			}
-			if (item.data == 0) item.data = DiskData.length;
+			if (item.data == 0) {
+				diskDatas.push({id: 0, data: 0, storage: 0, items_stored: 0});
+				continue;
+			}
 			var disk_data = Disk.getDiskData(item);
 			diskDatas.push({id: item.id, data: item.data, storage: disk_data.storage + "", items_stored: disk_data.items_stored});
 		}
@@ -340,8 +362,13 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 		var disks = 0;
 		var stored = 0;
 		var diskDatas = [];
+		if(!this.container) return;
 		for (var i = 0; i < 8; i++) {
 			var item = this.container.getSlot('slot' + i);
+			if (!item) {
+				diskDatas.push({id: 0, data: 0, storage: 0, items_stored: 0});
+				continue;
+			}
 			var lastDiskPercent = this.data.disks_percents[i];
 			if (!Disk.items[item.id]) {
 				if(lastDiskPercent != undefined)this.data.refreshModel = true;
@@ -349,7 +376,17 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 				diskDatas.push({id: 0, data: 0, storage: 0, items_stored: 0});
 				continue;
 			}
-			if (item.data == 0) item.data = DiskData.length;
+			if (typeof DiskRegistry != 'undefined' && item.extra) {
+				DiskRegistry.repairAnchors(item);
+				if (this.container.getSlot('slot' + i).data != item.data) {
+					this.container.setSlot('slot' + i, item.id, item.count, item.data, item.extra);
+				}
+			}
+			if (typeof Disk.syncMode == 'function') Disk.syncMode(item, 'slot' + i, this.container);
+			if (item.data == 0) {
+				item.data = (typeof DiskRegistry != 'undefined' && DiskRegistry.allocateNumericId) ? DiskRegistry.allocateNumericId() : DiskData.length;
+				this.container.setSlot('slot' + i, item.id, item.count, item.data, item.extra);
+			}
 			var disk_data = Disk.getDiskData(item);
 			diskDatas.push({id: item.id, data: item.data, storage: disk_data.storage + "", items_stored: disk_data.items_stored});
 			var diskPercent = disk_data.items_stored/disk_data.storage;
@@ -361,7 +398,7 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 		}
 		if(this.data.disks != disks || this.data.storage != storage || this.data.stored != stored) {
 			if(this.data.disks != disks){
-				if(this.isWorkAllowed() && RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID].info)RSNetworks[this.data.NETWORK_ID].info.updateItems();
+				if(this.isWorkAllowed() && RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID].info)requestNetworkUpdateItems(RSNetworks[this.data.NETWORK_ID].info);
 				if(RSNetworks[this.data.NETWORK_ID] && RSNetworks[this.data.NETWORK_ID].info)RSNetworks[this.data.NETWORK_ID].info.netMapDirty = true;
 			}
 			this.networkData.putString('slots', JSON.stringify(diskDatas));
@@ -371,17 +408,21 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 		this.data.storage = String(storage);
 		this.data.stored = stored;
 		if (this.container.getNetworkEntity().getClients().iterator().hasNext()) {
-			this.container.setScale('scale', stored == 0 ? 0 : stored / storage);
-			this.container.setText('percents', stored == 0 ? '0%' : Math.ceil(stored / (storage / 100)) + '%');
-			this.container.setText('items', cutNumber(stored) + (storage != Infinity ? '/' + cutNumber(storage) : ''));
-			this.container.sendChanges();
+			if (!this._guiBinder) this._guiBinder = UiCore.DeltaBinder.wrap(this.container);
+			var _scale = stored == 0 ? 0 : stored / storage;
+			var _percents = stored == 0 ? '0%' : Math.ceil(stored / (storage / 100)) + '%';
+			var _items = cutNumber(stored) + (storage != Infinity ? '/' + cutNumber(storage) : '');
+			this._guiBinder.setScale('scale', _scale);
+			this._guiBinder.setText('percents', _percents);
+			this._guiBinder.setText('items', _items);
+			this._guiBinder.flush();
 		}
 		return;
 	},
 	post_update_network: function(net_id){
-		if(RSNetworks && RSNetworks[this.data.LAST_NETWORK_ID] && RSNetworks[this.data.LAST_NETWORK_ID].info)RSNetworks[this.data.LAST_NETWORK_ID].info.updateItems();
+		if(RSNetworks && RSNetworks[this.data.LAST_NETWORK_ID] && RSNetworks[this.data.LAST_NETWORK_ID].info)requestNetworkUpdateItems(RSNetworks[this.data.LAST_NETWORK_ID].info);
 		if(this.data.iinit && this.isWorkAllowed()){
-			RSNetworks[this.data.NETWORK_ID].info.updateItems();
+			requestNetworkUpdateItems(RSNetworks[this.data.NETWORK_ID].info);
 			this.data.iinit = false;
 		}
 	},
@@ -398,10 +439,21 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 		};
 		this.container.sendEvent("refreshGui", _data);
 	},
+	pre_destroy: function(){
+		if (!RS_DISK_DATA_IN_EXTRA || !this.container) return;
+		for (var s = 0; s < 8; s++) {
+			var item = null;
+			try { item = this.container.getSlot('slot' + s); } catch (e) { item = null; }
+			if (item && Disk.items[item.id]) Disk.flushItem(item, 'slot' + s, this.container);
+		}
+	},
 	post_destroy: function(){
 		if(RSNetworks && RSNetworks[this.data.LAST_NETWORK_ID] && RSNetworks[this.data.LAST_NETWORK_ID].info)RSNetworks[this.data.LAST_NETWORK_ID].info.updateItems();
 	},
 	client: {
+		load: function(){
+			this.refreshModel();
+		},
 		refreshModel: function(){
 			var disks_data = (_data = this.networkData.getString('slots', 'null')) != 'null' ? JSON.parse(_data).map(function(elem){
 				if(elem)elem.storage = Number(elem.storage);
@@ -436,8 +488,8 @@ RefinedStorage.createTile(BlockID.diskDrive, {
 	}
 });
 
-Callback.addCallback('LocalTick', function(){
-	if(!diskDriveGUI.isOpened()) return;
+TickScheduler.local.ensureInterval("rs:diskDriveText", 1, function () {
+	if (!diskDriveGUI.isOpened()) return;
 	var element = diskDriveGUI.getWindow('main').getElements().get('items');
 	element.setPosition(Math.max(elementsGUI_dd['items'].start_x - getDiskDriveTextItemsWidth()/2, elementsGUI_dd['scale'].x), elementsGUI_dd['items'].y);
 });

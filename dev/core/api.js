@@ -1,18 +1,19 @@
+// on() returns an unsubscribe closure; listener exceptions are isolated and logged.
+var _RS_bus = EventBus.ns("rs");
 var _RS = {
-	_listeners: {},
-
 	on: function(event, callback) {
-		if (!this._listeners[event]) this._listeners[event] = [];
-		this._listeners[event].push(callback);
-		return function() {
-			var list = _RS._listeners[event];
-			if (list) _RS._listeners[event] = list.filter(function(h) { return h !== callback; });
+		var wrapped = function(data) {
+			try {
+				callback(data);
+			} catch (e) {
+				Logger.Log('Event listener for "' + event + '" failed: ' + e, 'RefinedStorageError');
+			}
 		};
+		_RS_bus.on(event, wrapped);
+		return function() { _RS_bus.off(event, wrapped); };
 	},
-
 	_emit: function(event, data) {
-		var list = this._listeners[event];
-		if (list) for (var i in list) list[i](data);
+		_RS_bus.emit(event, data);
 	},
 
 	networks: {
@@ -27,25 +28,26 @@ var _RS = {
 		refreshItems: function(netId) { var info = RSNetworks[netId] && RSNetworks[netId].info; if (info) info.updateItems(); },
 		constructCraft: function(netId, item, count) { return RSNetworks[netId] && RSNetworks[netId].info.constructCraft(item, count || 1); },
 		provideCraft: function(netId, tree) { var info = RSNetworks[netId] && RSNetworks[netId].info; if (info) info.provideCraft(tree); },
-		requestCraft: function(netId, item, count) {
+		requestCraft: function(netId, item, count, callerKey) {
 			var info = RSNetworks[netId] && RSNetworks[netId].info;
 			if (!info) return false;
-			var now = World.getThreadTime();
-			if (info.isRequestThrottled('api:' + netId, now)) return false;
+			var now = TickScheduler.global.ticks;
+			var sourceKey = 'api:' + netId + (callerKey ? ':' + callerKey : '');
+			if (info.isRequestThrottled(sourceKey, now)) return false;
 			var result = info.constructCraft(item, count || 1);
 			if (result && result.deduped) return true;
 			if (result && result.craftable) {
 				info.provideCraft(result);
 				return true;
 			}
-			info.markRequestFailed('api:' + netId, now);
+			info.markRequestFailed(sourceKey, now);
 			return false;
 		},
-		keepStock: function(netId, item, minimum) {
+		keepStock: function(netId, item, minimum, callerKey) {
 			var result = { have: 0, requested: 0, status: 'noNetwork' };
 			var info = RSNetworks[netId] && RSNetworks[netId].info;
 			if (!info) return result;
-			minimum = minimum || 1;
+			minimum = (typeof minimum == 'number' && isFinite(minimum)) ? Math.max(0, Math.floor(minimum)) : 1;
 			var targetId = item.id;
 			var targetData = item.data || 0;
 			var have = 0;
@@ -62,8 +64,8 @@ var _RS = {
 				return result;
 			}
 			var needed = minimum - have;
-			var sourceKey = 'keepStock:' + netId + ':' + targetId + '_' + targetData;
-			var now = World.getThreadTime();
+			var sourceKey = 'keepStock:' + netId + (callerKey ? ':' + callerKey : '') + ':' + targetId + '_' + targetData;
+			var now = TickScheduler.global.ticks;
 			if (info.isRequestThrottled(sourceKey, now)) {
 				result.status = 'throttled';
 				return result;
@@ -168,49 +170,19 @@ var _RS = {
 				ingridients: normalized.ingridients,
 				result: normalized.result
 			};
-			for (var ri = 0; ri < craft.result.length; ri++) {
-				var resultUid = craft.result[ri].id + '_' + craft.result[ri].data;
-				if (!info.crafts[resultUid]) info.crafts[resultUid] = [];
-				var exists = false;
-				for (var ci = 0; ci < info.crafts[resultUid].length; ci++) {
-					var existing = info.crafts[resultUid][ci];
-					if (existing.coordsId === coordsId && existing.id === craft.id && existing.isProcessed === craft.isProcessed) {
-						exists = true;
-						break;
-					}
-				}
-				if (!exists) info.crafts[resultUid].push(craft);
-				if (!info.craftsIDS[craft.result[ri].id]) info.craftsIDS[craft.result[ri].id] = [];
-				if (info.craftsIDS[craft.result[ri].id].indexOf(craft.result[ri].data) == -1) info.craftsIDS[craft.result[ri].id].push(craft.result[ri].data);
-				info.addPatternContainer(resultUid, coordsId);
-			}
-			info.netMapDirty = true;
-			info.refreshOpenedGrids(true);
+			if (!info.apiPatterns) info.apiPatterns = {};
+			info.apiPatterns[coordsId + '|' + craft.id + '|' + craft.isProcessed] = craft;
+			rsRegisterCraftInInfo(info, craft, coordsId);
 			return craft;
 		},
 		unregisterPattern: function(netId, coordsId, craft) {
 			var info = RSNetworks[netId] && RSNetworks[netId].info;
 			if (!info || !craft) return;
-			for (var ri = 0; ri < craft.result.length; ri++) {
-				var resultUid = craft.result[ri].id + '_' + craft.result[ri].data;
-				if (info.crafts[resultUid]) {
-					for (var ci = info.crafts[resultUid].length - 1; ci >= 0; ci--) {
-						var existing = info.crafts[resultUid][ci];
-						if (existing.coordsId === coordsId && existing.id === craft.id && existing.isProcessed === craft.isProcessed) {
-							info.crafts[resultUid].splice(ci, 1);
-						}
-					}
-					if (info.crafts[resultUid].length == 0) delete info.crafts[resultUid];
-				}
-				if (!info.crafts[resultUid] && info.craftsIDS[craft.result[ri].id]) {
-					var idIdx = info.craftsIDS[craft.result[ri].id].indexOf(craft.result[ri].data);
-					if (idIdx != -1) info.craftsIDS[craft.result[ri].id].splice(idIdx, 1);
-					if (info.craftsIDS[craft.result[ri].id].length == 0) delete info.craftsIDS[craft.result[ri].id];
-				}
-				info.removePatternContainer(resultUid, coordsId);
+			if (info.apiPatterns) {
+				var _apiKey = coordsId + '|' + craft.id + '|' + craft.isProcessed;
+				delete info.apiPatterns[_apiKey];
 			}
-			info.netMapDirty = true;
-			info.refreshOpenedGrids(true);
+			rsUnregisterCraftFromInfo(info, craft, coordsId);
 		}
 	},
 
@@ -252,6 +224,41 @@ var _RS = {
 	},
 
 	registerStorageProvider: function(blockId, provider) { return registerStorageProvider(blockId, provider); },
+
+	// Addon-facing network timer API: runtime-only tasks, cleared on LevelLeft / networkDestroyed.
+	timer: {
+		register: function(netId, name, interval, offset, fn) {
+			if (typeof NetworkTimer === 'undefined') return false;
+			if (typeof fn !== 'function' || typeof name !== 'string' || !name) return false;
+			if (NetworkTimer.RESERVED[name]) return false;
+			var net = NetworkTimer.networks[netId];
+			var existing = net && net.tasks[name];
+			if (existing && existing.internal) return false;
+			return NetworkTimer.register(netId, name, interval, offset, function(_netId) {
+				fn(_netId);
+			}, false);
+		},
+		unregister: function(netId, name) {
+			if (typeof NetworkTimer === 'undefined') return false;
+			var net = NetworkTimer.networks[netId];
+			var t = net && net.tasks[name];
+			if (!t) return false;
+			if (t.internal) return false;
+			return NetworkTimer.unregister(netId, name);
+		},
+		get: function(netId, name) {
+			if (typeof NetworkTimer === 'undefined') return null;
+			return NetworkTimer.get(netId, name);
+		},
+		list: function(netId) {
+			if (typeof NetworkTimer === 'undefined') return null;
+			return NetworkTimer.list(netId);
+		},
+		listAll: function() {
+			if (typeof NetworkTimer === 'undefined') return {};
+			return NetworkTimer.listAll();
+		}
+	},
 
 	wireless: {
 		open: function(cfg) { return rsOpenWirelessTerminal(cfg); },

@@ -1,12 +1,12 @@
 
 
 const _gridTexture = [
-	["disk_drive_bottom", 0], // bottom
-	["grid_top", 0], // top
-	["grid_back", 0], // back
-	["grid_front", 0], // front
-	["grid_left", 0], // left
-	["grid_right", 0]  // right
+	["disk_drive_bottom", 0],
+	["grid_top", 0],
+	["grid_back", 0],
+	["grid_front", 0],
+	["grid_left", 0],
+	["grid_right", 0]
 ];
 
 function getGridTexture(variation, _active){
@@ -31,21 +31,40 @@ for (var izxc = 0; izxc < 4; izxc++) {
 	BlockRenderer.enableCoordMapping(BlockID["RS_grid"], izxc, render);
 }
 
-var filter_size_map = [24, 36, 32];//6,9,8  *4
+var filter_size_map = [24, 36, 32];
 
 var gridData = {
 	maxY: 0,
 	lastPage: -1,
 	textSearch: false,
-	lowPriority: false,
 	slotsKeys: [],
+	_renderedUid: {},
 	updateGui: function(){}
 }
 
 function gridSwitchPage(page, container, ignore, dontMoveSlider){
-	if(!container.getUiAdapter() || !container.getUiAdapter().getWindow() || !container.getUiAdapter().getWindow().isOpened()) return false;
-	var mainContent = container.getUiAdapter().getWindow().getWindow('main') && container.getUiAdapter().getWindow().getWindow('main').getContent();
-	if(!mainContent || !mainContent.elements) return false;
+	if (gridData._switchUpdating) {
+		gridData._pendingSwitch = { page: page, container: container, ignore: ignore, dontMoveSlider: dontMoveSlider };
+		return;
+	}
+	gridData._switchUpdating = true;
+	try {
+		gridSwitchPageInner(page, container, ignore, dontMoveSlider);
+	} finally {
+		gridData._switchUpdating = false;
+		var pendingSwitch = gridData._pendingSwitch;
+		if (pendingSwitch) {
+			gridData._pendingSwitch = null;
+			gridSwitchPage(pendingSwitch.page, pendingSwitch.container, pendingSwitch.ignore, pendingSwitch.dontMoveSlider);
+		}
+	}
+}
+
+function gridSwitchPageInner(page, container, ignore, dontMoveSlider){
+	var window_ = getClientGuiWindow(container, 'main');
+	if(!window_ || typeof window_.isOpened != 'function' || !window_.isOpened()) return false;
+	var content = typeof window_.getContent == 'function' ? window_.getContent() : null;
+	if(!content || !content.elements) return false;
 	var slots = container.slots;
 	var slotsKeys = gridData.slotsKeys;
 	var slots_count = gridData.slots_count;
@@ -57,7 +76,10 @@ function gridSwitchPage(page, container, ignore, dontMoveSlider){
 	gridData.lastPage = page + 1;
 	var pages = gridFuncs.getPages(slotsKeys.length);
 	var ___y = gridFuncs.getCoordsFromPage(page + 1, pages);
-	if(!dontMoveSlider)container.getUiAdapter().getElement("slider_button").setPosition(_elementsGUI_grid['slider_button'].x, ___y);
+	if(!dontMoveSlider){
+		rsSetSliderElement(container, "slider_button", _elementsGUI_grid['slider_button'].x, ___y);
+		rsSetSliderDescriptor(container, "slider_button", ___y);
+	}
 	if (!gridData.isWorkAllowed) {
 		for (var i = 0; i < slots_count; i++) {
 			container.setSlot("slot" + i, 0, 0, 0, null);
@@ -65,19 +87,33 @@ function gridSwitchPage(page, container, ignore, dontMoveSlider){
 		}
 		return false;
 	}
-	var elements_ = container.getUiAdapter().getWindow().getWindow('main').getElements();
+	var elements_ = window_.getElements ? window_.getElements() : content.elements;
 	for (var i = page * x_count; i < page * x_count + slots_count; i++) {
 		var a = i - (page * x_count);
 		var item = slots[slotsKeys[i]] || { id: 0, data: 0, count: 0, extra: null };
-		container.markSlotDirty("slot" + a);
-		elements_.get("slot" + a).setBinding('text', (!item.count ? 'Craft' : cutNumber(item.count, true) + ""));
+		if(slotsKeys[i]) gridData._renderedUid[slotsKeys[i]] = item.id ? getItemUid(item) : '';
+		if(elements_.get) elements_.get("slot" + a).setBinding('text', (!item.count ? 'Craft' : cutNumber(item.count, true) + ""));
+		else if(elements_["slot" + a] && elements_["slot" + a].setBinding) elements_["slot" + a].setBinding('text', (!item.count ? 'Craft' : cutNumber(item.count, true) + ""));
 		container.setSlot("slot" + a, item.id, item.count, item.data, item.extra || null);
 	}
 	return true;
 }
+gridSwitchPage = rsExclusive("grid.ui", gridSwitchPage, "switchPage");
 var _gridSwitchPage__ = gridSwitchPage;
 
 var _elementsGUI_grid = {};
+
+/* Claims at most one pending craft entry for an item, in the same check order as
+ * the former craftsPush.indexOf+splice sequence. */
+function rsClaimCraftPush(crafts, craftsPending, itemUid, id, data){
+	var pushKey = null;
+	if (crafts[itemUid]) pushKey = itemUid;
+	else if (crafts[id + '_' + data]) pushKey = id + '_' + data;
+	else if (crafts[id + '_-1']) pushKey = id + '_-1';
+	else if (crafts[id + ':-1:']) pushKey = id + ':-1:';
+	if (pushKey !== null && craftsPending[pushKey]) { delete craftsPending[pushKey]; return true; }
+	return false;
+}
 
 var gridGUI = new UI.StandartWindow({
 	standart: {
@@ -102,12 +138,13 @@ var gridGUI = new UI.StandartWindow({
 GUIs.push(gridGUI);
 
 var gridConsPercents = 50/(575.5 - 60);
+var gridFuncs = makePageHelpers(_elementsGUI_grid, {countX: "x_count", countY: "y_count", maxY: "max_y", slider: "slider_button"});
 grid_set_elements(315, 70, gridConsPercents*(UI.getScreenHeight() - 60), 0, _elementsGUI_grid, gridData, gridGUI, null, gridFuncs);
 gridGUI.getWindow('main').forceRefresh();
 
 testButtons(gridGUI.getWindow('header').getContent().elements, function(){
 	grid_set_elements(315, 70, gridConsPercents*(UI.getScreenHeight() - 60), 0, _elementsGUI_grid, gridData, null, null, gridFuncs);
-});
+	});
 
 var inv_elements = gridGUI.getWindow('inventory').getContent();
 inv_elements.elements["_CLICKFRAME_"] = {
@@ -122,13 +159,14 @@ inv_elements.elements["_CLICKFRAME_"] = {
 	onTouchEvent: createInventoryPushHandler(gridData)
 }
 
-var gridFuncs = makePageHelpers(_elementsGUI_grid, {countX: "x_count", countY: "y_count", maxY: "max_y", slider: "slider_button"});
 
 function gridOpenGui(container, window, content, eventData){
 	if(!content || !window || !window.isOpened()) return;
 	eventData.disksStorage = Number(eventData.disksStorage);
 	Object.assign(gridData, eventData);
-	gridData.updateGui = function(refresh, updateFilters, nonlocal){
+	gridData.container = container;
+	if(!eventData.refresh) gridData._lastInfoSignature = null;
+	gridData.updateGui = rsExclusive("grid.ui", function(refresh, updateFilters, nonlocal){
 		delete container.slots.bindings;
 		delete container.slots.slots;
 		var synced = SyncedNetworkData.getClientSyncedData(eventData.name);
@@ -136,7 +174,7 @@ function gridOpenGui(container, window, content, eventData){
 		gridData.networkData = synced;
 		if(updateFilters || refresh){
 			var _slotKeys = [];
-			for(var i in container.slots)if(i[0] >= 0 && container.slots[i].id != 0)_slotKeys.push(i);
+			for(var i in container.slots)if(i[0] >= 0 && container.slots[i] && container.slots[i].id != 0)_slotKeys.push(i);
 			gridData.slotsKeys = _slotKeys;
 			if(!refresh)gridData.textSearch = false;
 			var millis = 0;
@@ -166,15 +204,15 @@ function gridOpenGui(container, window, content, eventData){
 			}
 		}
 		gridSwitchPage(refresh ? gridData.lastPage : 1, container, true);
-	}
-	if(gridData.lowPriority){
-		gridData.lowPriority = false;
-		scheduleLowPrioritySort(function(){
-			gridData.updateGui(eventData.refresh, eventData.updateFilters, true);
-		});
-	} else {
-		gridData.updateGui(eventData.refresh, eventData.updateFilters, true);
-	}
+	}, "updateGui");
+	/* Apply the state published by the server into the eventData closure so the local refresh renders identically. */
+	gridData.applyServerState = function(nd, id){
+		rsApplyUiState(nd, id, eventData, gridData);
+	};
+	gridData.isUiLive = function(){
+		try { return !!(window && typeof window.isOpened == 'function' && window.isOpened()); } catch(e) { return false; }
+	};
+	gridData.updateGui(eventData.refresh, eventData.updateFilters, true);
 }
 
 function buildGridPayload(tile, first, updateFilters){
@@ -221,18 +259,25 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		return true;
 	},
 	onWindowClose: function(){
-		if(this.data.NETWORK_ID == 'f') return;
-		var coords_id = this.coords_id();
-		RSNetworks[this.data.NETWORK_ID][coords_id].isOpenedGrid = false;
-		var iIndex;
-		if((iIndex = RSNetworks[this.data.NETWORK_ID].info.openedGrids.findIndex(function(element){return cts(element) == coords_id})) != -1) RSNetworks[this.data.NETWORK_ID].info.openedGrids.splice(iIndex, 1);
+		rsResetStorageTouch();
+		rsRemoveOpenedGrid(this);
+		rsDropPending("grid.ui");
+		this._hashRetry = 0;
+		if(this._nsState) this._nsState.retry = 0;
+	},
+	onDisconnectionPlayer: function(client){
+		if(client && this.data.pushDeleteEvents) delete this.data.pushDeleteEvents[client.getPlayerUid()];
+		if(client && this.data.transferRequests) delete this.data.transferRequests[client.getPlayerUid()];
 	},
 	onWindowOpen: function(container, client){
 		if(InnerCore_pack.packVersionCode >= 119)this.refreshGui(true, client); 
 		if(this.data.NETWORK_ID == 'f') return;
+		var net = RSNetworks[this.data.NETWORK_ID];
+		if(!net) return;
+		if(!net.info) return;
 		var coords_id = this.coords_id();
-		RSNetworks[this.data.NETWORK_ID][coords_id].isOpenedGrid = true;
-		if(RSNetworks[this.data.NETWORK_ID].info.openedGrids.findIndex(function(element){return cts(element) == coords_id}) == -1) RSNetworks[this.data.NETWORK_ID].info.openedGrids.push({x: this.x, y: this.y, z: this.z});
+		if(net[coords_id]) net[coords_id].isOpenedGrid = true;
+		if(net.info.openedGrids.findIndex(function(element){return cts(element) == coords_id}) == -1) net.info.openedGrids.push({x: this.x, y: this.y, z: this.z});
 	},
 	pre_init: function(){
 		this.container.setGlobalGetTransferPolicy({
@@ -249,6 +294,7 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 	},
 	post_init: function(){
 		this.data.pushDeleteEvents = {};
+		this.data.transferRequests = {};
 	},
 	tick: function () {
 		if (this.container.getNetworkEntity().getClients().iterator().hasNext()) {
@@ -274,45 +320,57 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		var info = RSNetworks[this.data.NETWORK_ID].info;
 		var items = this.originalItems();
 		var itemMap = {};
-		for(var i = 0; i < items.length; i++) itemMap[items[i].id + '_' + items[i].data] = true;
+		for(var i = 0; i < items.length; i++) {
+			itemMap[getItemUid(items[i])] = true;
+			itemMap[items[i].id + '_' + items[i].data] = true;
+		}
 		var crafts = {};
 		for(var uid in info.crafts){
 			if(!itemMap[uid]){
-				var parts = uid.split('_');
-				crafts[uid] = {id: parseInt(parts[0]), data: parseInt(parts[1]), count: 0};
+				var parsedCraft = CoreKit.Items.parseUid(uid);
+				crafts[uid] = {id: parsedCraft.id, data: parsedCraft.data, count: 0};
 			}
 		}
 		return crafts;
+	},
+	publishUiState: function () {
+		rsPublishUiState(this);
 	},
 	items: function (forced) {
 		if (!this.isWorkAllowed()) {
 			return [];
 		}
 		var items = this.originalItems().slice();
-		var allSlots = Object.keys(this.container.slots);
-		for (var ci = 0; ci < allSlots.length; ci++) {
-			if (allSlots[ci][0] >= '0' && allSlots[ci][0] <= '9') this.container.setSlot(allSlots[ci], 0, 0, 0);
-		}
 		var crafts = this.originalCrafts();
-		var craftsPush = Object.keys(crafts);
+		var craftsList = Object.keys(crafts);
+		var craftsPending = {};
+		for(var cp = 0; cp < craftsList.length; cp++) craftsPending[craftsList[cp]] = true;
 		var craftSlots = [];
+		var desired = {};
 		for(var i = 0; i < items.length; i++){
-			this.container.setSlot(i+'slot', items[i].id, items[i].count, items[i].data, items[i].extra || null);
-			var uid1 = items[i].id + '_' + items[i].data;
-			if(crafts[uid1]) craftsPush.splice(craftsPush.indexOf(uid1), 1);
-			else if(crafts[items[i].id + '_-1']) craftsPush.splice(craftsPush.indexOf(items[i].id + '_-1'), 1);
+			desired[i+'slot'] = { id: items[i].id, count: items[i].count, data: items[i].data, extra: items[i].extra || null };
+			var uid1 = getItemUid(items[i]);
+			/* Each item uid is unique, so at most one pending entry is claimed per item;
+			 * the claim order matches the old indexOf/splice checks. */
+			rsClaimCraftPush(crafts, craftsPending, uid1, items[i].id, items[i].data);
 			craftSlots.push(i+'slot');
+		}
+		var craftsPush = [];
+		for (var cp2 = 0; cp2 < craftsList.length; cp2++) {
+			if (craftsPending[craftsList[cp2]]) craftsPush.push(craftsList[cp2]);
 		}
 		for(var k in craftsPush){
 			var slotId = items.length + Number(k);
-			var splitedItem = craftsPush[k].split('_');
-			var item = {id: Number(splitedItem[0]), data: Number(splitedItem[1]), count: 0};
-			this.container.setSlot(slotId + 'slot', item.id, 0, item.data);
+			var parsedPush = CoreKit.Items.parseUid(craftsPush[k]);
+			var item = {id: parsedPush.id, data: parsedPush.data, count: 0};
+			desired[slotId + 'slot'] = { id: item.id, count: 0, data: item.data, extra: null };
 			items.push(item);
 			craftSlots.push(slotId + 'slot');
 		}
+		rsApplySlotDiff(this.container, desired);
 		this.data.craftSlots = craftSlots;
 		this.container.sendChanges();
+		this.publishUiState();
 		return items;
 	},
 	originalItems: function(){
@@ -352,14 +410,14 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		return RSNetworks[this.data.NETWORK_ID].info.stored;
 	},
 	pushItem: function (item, count, nonUpdate) {
-		count = count || item.count;
+		count = rsTakeCount(count, item.count);
 		if (!this.isWorkAllowed()) return count;
 		var res = RSNetworks[this.data.NETWORK_ID].info.pushItem(item, count, nonUpdate);
 		if(this.post_pushItem)this.post_pushItem(item, count, res);
 		return res;
 	},
 	deleteItem: function (item, count, nonUpdate) {
-		count = count || item.count;
+		count = rsTakeCount(count, item.count);
 		if (!this.isWorkAllowed()) return count;
 		var res = RSNetworks[this.data.NETWORK_ID].info.deleteItem(item, count, nonUpdate);
 		if(this.post_deleteItem)this.post_deleteItem(item, count, res);
@@ -369,12 +427,23 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		for(var i in this.container.slots){
 			this.container.clearSlot(i);
 		}
+		if (this.data.LAST_NETWORK_ID != 'f' && RSNetworks[this.data.LAST_NETWORK_ID]) {
+			var info = RSNetworks[this.data.LAST_NETWORK_ID].info;
+			var coords_id = this.coords_id();
+			if (info && info.openedGrids) {
+				var iIndex;
+				if((iIndex = info.openedGrids.findIndex(function(element){return cts(element) == coords_id})) != -1) info.openedGrids.splice(iIndex, 1);
+			}
+		}
 	},
 	refreshModel: function(){
 		if(!this.networkEntity) return Logger.Log(Item.getName(this.blockInfo.id, this.blockInfo.data) + ' model on: ' + cts(this) + ' cannot be displayed');
 		this.sendPacket("refreshModel", {block_data: this.data.block_data, isActive: this.data.isActive, coords: {x: this.x, y: this.y, z: this.z, dimension: this.dimension}});
 	},
 	refreshGui: function(first, client, updateFilters){
+		this.publishUiState();
+		/* The openGui payload is sent only on open; refreshes are applied locally from itemsVersion. */
+		if(!first) return;
 		var _data = buildGridPayload(this, first, updateFilters);
 		if(client){
 			this.container.sendEvent(client, "openGui", _data);
@@ -386,18 +455,30 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 		if(screenName == 'main')return gridGUI;
 	},
 	client: {
+		load: function(){
+			this.refreshModel();
+		},
 		refreshModel: function(){
 			var render = new ICRender.Model();
 			var model = BlockRenderer.createTexturedBlock(getGridTexture(this.networkData.getInt('block_data'), this.networkData.getBoolean('isActive')));
 			render.addEntry(model);
 			BlockRenderer.mapAtCoords(this.x, this.y, this.z, render);
 		},
+		flushPendingTransfer: function(){
+			if(!this.networkData.getBoolean('update', false)) return;
+			this.networkData.putBoolean('update', false);
+			var transferSpace = buildPushDeleteEvents(this.networkData);
+			this.sendPacket("pushDeleteEvents", {pushDeleteEvents: transferSpace.events, transferRequestNumber: transferSpace.requestNumber});
+		},
 		tick: function(){
-			if(this.networkData.getBoolean('update', false)){
-				this.networkData.putBoolean('update', false);
-				var pushDeleteEvents = buildPushDeleteEvents(this.networkData);
-				this.sendPacket("pushDeleteEvents", {pushDeleteEvents: pushDeleteEvents})
-			}
+			if(typeof gridData != 'undefined' && gridData) gridData.clientTile = this;
+			this.flushPendingTransfer();
+			/* The ack is consumed but never triggers updateGui: rendering has a single
+			 * trigger (itemsVersion), otherwise one transfer renders twice. */
+			ContainerSync.readRequestResult(this.networkData);
+			/* Local refresh on a new server version; only with an open window and no
+			 * active gesture (the version is marked inside the consumer). */
+			rsConsumeUiVersion(this, gridData, function () { gridData.updateGui(true, false, true); });
 		},
 		events: {
 			refreshModel: function(eventData, packetExtra) {
@@ -432,7 +513,15 @@ RefinedStorage.createTile(BlockID.RS_grid, {
 	},
 	events: {
 		pushDeleteEvents: function(packetData, packetExtra, connectedClient) {
-			this.data.pushDeleteEvents[connectedClient.getPlayerUid()] = packetData.pushDeleteEvents;
+			if(!packetData || !packetData.pushDeleteEvents) return;
+			if(!MpCore.isWatching(this, connectedClient)) return;
+			try {
+				var playerUid = connectedClient.getPlayerUid();
+				this.data.pushDeleteEvents[playerUid] = GridEvents.mergePushDeleteEvents(this.data.pushDeleteEvents[playerUid], packetData.pushDeleteEvents);
+				if(!this.data.transferRequests) this.data.transferRequests = {};
+				if(packetData.transferRequestNumber) this.data.transferRequests[playerUid] = packetData.transferRequestNumber;
+				GridEvents.processPushDeleteEvents(this);
+			} catch (e) { Logger.Log('pushDeleteEvents failed: ' + e, 'RefinedStorageError'); }
 		}
 	}
 })
