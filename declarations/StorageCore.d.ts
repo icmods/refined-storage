@@ -186,6 +186,11 @@ declare namespace StorageCore {
      * invalidate on their own.
      */
     function invalidate(entry: StorageEntry): boolean;
+    /**
+     * Drop the cached metadata of an entry that is no longer referenced
+     * (cache eviction). Safe to call again; returns false only for a null entry.
+     */
+    function forgetEntry(entry: StorageEntry): boolean;
     /** Drop every cached stacks index (e.g. on LevelLeft). */
     function resetIndex(): void;
     /**
