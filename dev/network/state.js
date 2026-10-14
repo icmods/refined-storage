@@ -12,6 +12,8 @@ const EnergyUse = {}
 var RSpendingReconnect = {};
 const RSPENDING_RECONNECT_EXPIRY = 30;
 
+var _savedCraftingTasks = {};
+
 function rsAddReconnectPending(tile) {
 	RSpendingReconnect[tile.dimension + ':' + tile.coords_id()] = { x: tile.x, y: tile.y, z: tile.z, dimension: tile.dimension, blockSource: tile.blockSource, pendingPasses: 0 };
 }
